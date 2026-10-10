@@ -13,13 +13,14 @@ import { connect, getSync, useProgress } from "./store";
 import { SKILL_BY_ID } from "../latin/skills";
 import { setSpeechPrefs } from "../audio/speech";
 
-const TABS: { route: Route; label: string; icon: () => preact.JSX.Element }[] = [
-  { route: { page: "home" }, label: "Home", icon: Icon.home },
-  { route: { page: "lessons" }, label: "Lessons", icon: Icon.scroll },
-  { route: { page: "train" }, label: "Train", icon: Icon.stylus },
-  { route: { page: "words" }, label: "Words", icon: Icon.book },
-  { route: { page: "discover" }, label: "Discover", icon: Icon.card },
-  { route: { page: "rules" }, label: "Rules", icon: Icon.column },
+// Section names in Latin; the English shows as a tooltip.
+const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.Element }[] = [
+  { route: { page: "home" }, label: "Domus", en: "Home", icon: Icon.home },
+  { route: { page: "lessons" }, label: "Lectiōnēs", en: "Lessons", icon: Icon.scroll },
+  { route: { page: "train" }, label: "Exercitium", en: "Train", icon: Icon.stylus },
+  { route: { page: "words" }, label: "Verba", en: "Words", icon: Icon.book },
+  { route: { page: "discover" }, label: "Inventiō", en: "Discover", icon: Icon.card },
+  { route: { page: "rules" }, label: "Rēgulae", en: "Rules", icon: Icon.column },
 ];
 
 const active = (r: Route, t: Route) => r.page === t.page || (r.page === "lesson" && t.page === "lessons");
@@ -73,13 +74,12 @@ export function App() {
           </button>
           <nav class="nav" aria-label="Sections">
             {TABS.map((t) => (
-              <button key={t.label} aria-current={active(route, t.route) ? "page" : undefined} onClick={() => go(t.route)}>
+              <button key={t.label} title={t.en} aria-label={`${t.label} (${t.en})`} aria-current={active(route, t.route) ? "page" : undefined} onClick={() => go(t.route)}>
                 <t.icon /> {t.label}
               </button>
             ))}
           </nav>
-          <span class="sync" title="Where your progress is kept">{SYNC_TEXT[getSync()]}</span>
-          <button class="btn ghost small" onClick={() => setSettings(true)} aria-label="Settings" style={{ marginLeft: "auto" }}>
+          <button class="btn ghost small" onClick={() => setSettings(true)} aria-label="Optiōnēs (settings)" title={`Optiōnēs (settings) · ${SYNC_TEXT[getSync()]}`} style={{ marginLeft: "auto" }}>
             <Icon.gear />
           </button>
         </div>
@@ -89,7 +89,7 @@ export function App() {
 
       <nav class="bottomnav" aria-label="Sections">
         {TABS.map((t) => (
-          <button key={t.label} aria-current={active(route, t.route) ? "page" : undefined} onClick={() => go(t.route)}>
+          <button key={t.label} title={t.en} aria-label={`${t.label} (${t.en})`} aria-current={active(route, t.route) ? "page" : undefined} onClick={() => go(t.route)}>
             <t.icon />
             {t.label}
           </button>

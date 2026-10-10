@@ -42,10 +42,7 @@ export function Home() {
             <h1 class="hero-title">
               {done >= goal ? "Today's goal is done." : done > 0 ? "Keep going: the endings are settling in." : `Today: make Lesson ${roman(p.focusLesson)} automatic.`}
             </h1>
-            <p class="muted prose">
-              {focus ? `Focus: ${focus.title}. ` : ""}
-              Exercises use only what the videos taught, plus the words you open in Discover.
-            </p>
+            {focus && <p class="muted prose">Focus: {focus.title}</p>}
           </div>
           <div class="stack" style={{ gap: "6px", minWidth: "220px", flex: "0 1 280px" }}>
             <div class="spread small ui">

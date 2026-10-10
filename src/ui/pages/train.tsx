@@ -145,11 +145,6 @@ function Chooser() {
   ];
   return (
     <div class="stack-lg">
-      <div class="stack" style={{ gap: "6px" }}>
-        <span class="eyebrow">Exercitātiō</span>
-        <h1>Train</h1>
-        <p class="muted">Every exercise uses only the words and grammar you have learned, plus the words you add from Discover.</p>
-      </div>
       <div class="grid-2">
         {modes.map((m) => (
           <button key={m.title} class="panel frame stack" style={{ textAlign: "left", cursor: "pointer" }} onClick={() => startSession(m.mode)}>
@@ -189,10 +184,15 @@ function Runner({ s }: { s: Session }) {
   const [judgement, setJudgement] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
+  const sideRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!res) inputRef.current?.focus();
-    else nextRef.current?.focus();
+    else {
+      nextRef.current?.focus({ preventScroll: true });
+      // on narrow screens the result sits below the sentence: bring it into view
+      if (window.innerWidth < 980) sideRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }, [res]);
 
   // listening exercises play at once; other Latin prompts only when auto-read is on
@@ -258,101 +258,108 @@ function Runner({ s }: { s: Session }) {
   const isLatinAnswer = ex.answer === "la";
 
   return (
-    <div class="stack" style={{ maxWidth: "760px", margin: "0 auto" }}>
-      <div class="spread">
+    <div class="trainer">
+      <div class="trainer-top">
         <span class="eyebrow">{modeLabel(s.mode)}</span>
-        <div class="row">
-          <span class="ui small muted">{s.index + 1} / {s.items.length}</span>
-          <button class="linkish" onClick={() => setSession({ ...s, index: s.items.length })}>End</button>
-        </div>
+        <div class="progress-line"><i style={{ width: `${progress * 100}%` }} /></div>
+        <span class="ui small muted">{s.index + 1} / {s.items.length}</span>
+        <button class="linkish" onClick={() => setSession({ ...s, index: s.items.length })}>End</button>
       </div>
-      <div class="progress-line"><i style={{ width: `${progress * 100}%` }} /></div>
 
-      <div class="panel frame stack" style={{ padding: "26px" }}>
-        <span class="eyebrow">{ex.instruction}</span>
-        <Prompt ex={ex} showColors={showColors || !!res} res={res} chosen={answer} onChoose={(id) => { setAnswer(id); check(id); }} />
-
-        {ex.answer !== "choice" && (
-          <div class={`tablet ${res ? "done" : ""}`}>
-            {ex.answer === "ending" ? (
-              <input
-                id="answer-input"
-                ref={inputRef}
-                value={answer}
-                disabled={!!res}
-                autocomplete="off"
-                autocapitalize="off"
-                spellcheck={false}
-                placeholder="the ending, e.g. am"
-                onInput={(e) => setAnswer((e.target as HTMLInputElement).value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), res ? next() : check())}
-              />
-            ) : (
-              <textarea
-                id="answer-input"
-                ref={inputRef}
-                rows={2}
-                value={answer}
-                disabled={!!res}
-                autocomplete="off"
-                autocapitalize="off"
-                spellcheck={false}
-                lang={isLatinAnswer ? "la" : "en"}
-                placeholder={ex.kind === "listen" ? "Write what you hear, in Latin…" : isLatinAnswer ? "Scrībe Latīnē… (long marks not needed)" : "Write it in English…"}
-                onInput={(e) => setAnswer((e.target as HTMLTextAreaElement).value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    res ? next() : check();
-                  }
-                }}
-              />
-            )}
+      <div class={`panel frame exercise${res ? " answered" : ""}`}>
+        <div class="ex-main">
+          <span class="eyebrow ex-instruction">{ex.instruction}</span>
+          <div class="prompt">
+            <Prompt ex={ex} showColors={showColors || !!res} res={res} chosen={answer} onChoose={(id) => { setAnswer(id); check(id); }} />
           </div>
-        )}
 
-        {!res ? (
-          <div class="spread">
-            <div class="row">
-              {ex.hints.filter(Boolean).length > 0 && (
-                <button class="btn ghost small" onClick={() => setShowHints(!showHints)}>{showHints ? "Hide hint" : "Hint"}</button>
+          {ex.answer !== "choice" && (
+            <div class={`tablet ${res ? "done" : ""}`}>
+              {ex.answer === "ending" ? (
+                <input
+                  id="answer-input"
+                  ref={inputRef}
+                  value={answer}
+                  disabled={!!res}
+                  autocomplete="off"
+                  autocapitalize="off"
+                  spellcheck={false}
+                  placeholder="the ending, e.g. am"
+                  onInput={(e) => setAnswer((e.target as HTMLInputElement).value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), res ? next() : check())}
+                />
+              ) : (
+                <textarea
+                  id="answer-input"
+                  ref={inputRef}
+                  rows={2}
+                  value={answer}
+                  disabled={!!res}
+                  autocomplete="off"
+                  autocapitalize="off"
+                  spellcheck={false}
+                  lang={isLatinAnswer ? "la" : "en"}
+                  placeholder={ex.kind === "listen" ? "Write what you hear, in Latin…" : isLatinAnswer ? "Scrībe Latīnē… (long marks not needed)" : "Write it in English…"}
+                  onInput={(e) => setAnswer((e.target as HTMLTextAreaElement).value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      res ? next() : check();
+                    }
+                  }}
+                />
               )}
-              {ex.latin && ex.kind !== "identify" && (
-                <button class="btn ghost small" onClick={() => setShowColors(!showColors)}>{showColors ? "Hide colors" : "Show colors"}</button>
-              )}
-              <button class="linkish" onClick={giveUp}>I don't know</button>
             </div>
-            {ex.answer !== "choice" && (
-              <button class="btn" onClick={() => check()} disabled={!answer.trim()}>
-                Check <span class="kbd" style={{ color: "inherit", borderColor: "currentColor" }}>Enter</span>
-              </button>
-            )}
-          </div>
-        ) : null}
+          )}
 
-        {showHints && !res && (
-          <div class="well small stack" style={{ gap: "4px" }}>
-            {ex.hints.filter(Boolean).map((h, i) => <div key={i}><Inline text={h} /></div>)}
-          </div>
-        )}
-
-        {res && <Feedback ex={ex} res={res} answer={answer} />}
-
-        {res && judgement && <div class="well small"><Markup text={judgement} /></div>}
-
-        {res && (
-          <div class="spread">
-            <div class="row">
-              <button class="btn ghost small" onClick={askWhy}><Icon.quill /> Why?</button>
-              {res.verdict !== "correct" && ex.answer !== "choice" && answer.trim() && answer !== "—" && (
-                <button class="btn ghost small" onClick={dispute} disabled={judging}>
-                  {judging ? "Asking Claude…" : "I think my answer is right"}
+          {!res && (
+            <div class="spread ex-actions">
+              <div class="row">
+                {ex.hints.filter(Boolean).length > 0 && (
+                  <button class="btn ghost" onClick={() => setShowHints(!showHints)}>{showHints ? "Hide hint" : "Hint"}</button>
+                )}
+                {ex.latin && ex.kind !== "identify" && ex.kind !== "listen" && (
+                  <button class="btn ghost" onClick={() => setShowColors(!showColors)}>{showColors ? "Hide colors" : "Show colors"}</button>
+                )}
+                <button class="linkish" onClick={giveUp}>I don't know</button>
+              </div>
+              {ex.answer !== "choice" && (
+                <button class="btn big" onClick={() => check()} disabled={!answer.trim()}>
+                  Check <span class="kbd" style={{ color: "inherit", borderColor: "currentColor" }}>Enter</span>
                 </button>
               )}
             </div>
-            <button class="btn" ref={nextRef} onClick={next}>
-              Next <Icon.arrow />
-            </button>
+          )}
+
+          {showHints && !res && (
+            <div class="well stack ex-hints" style={{ gap: "4px" }}>
+              {ex.hints.filter(Boolean).map((h, i) => <div key={i}><Inline text={h} /></div>)}
+            </div>
+          )}
+        </div>
+
+        {res && (
+          <div class="ex-side" ref={sideRef}>
+            <Feedback ex={ex} res={res} answer={answer} />
+            {judgement && <div class="well"><Markup text={judgement} /></div>}
+            <div class="spread ex-next">
+              <div class="row">
+                <button class="btn ghost" onClick={askWhy}><Icon.quill /> Why?</button>
+                {res.verdict !== "correct" && ex.answer !== "choice" && answer.trim() && answer !== "—" && (
+                  <button class="btn ghost" onClick={dispute} disabled={judging} title="Ask Claude to check whether your answer is also correct">
+                    {judging ? "Asking…" : (
+                      <>
+                        <span class="wide-only">I think mine is right</span>
+                        <span class="narrow-only">I'm right?</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+              <button class="btn big" ref={nextRef} onClick={next}>
+                Next <Icon.arrow />
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -443,7 +450,7 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
         <span class="en">{v.en}</span>
       </div>
       {latinAnswer && res.verdict !== "correct" && answer !== "—" && (
-        <div class="small ui">
+        <div class="ui you-wrote">
           <span class="muted">You wrote: </span>
           <span class="mine latin">
             {res.tokens!.map((t, i) => (
@@ -455,11 +462,11 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
           </span>
         </div>
       )}
-      <div class="stack" style={{ gap: "4px" }}>
+      <div class="stack answer" style={{ gap: "4px" }}>
         <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{res.verdict === "correct" ? "Model answer" : "Correct answer"}</span>
         {ex.answer === "en" ? (
           <div class="stack" style={{ gap: "4px" }}>
-            <p class="latin-lg" style={{ fontSize: "1.2rem" }}>{res.expected}</p>
+            <p class="latin-lg">{res.expected}</p>
             {res.expectedTokens && (
               <p>
                 <LatinTokens tokens={res.expectedTokens} />
@@ -496,7 +503,7 @@ function Summary({ s }: { s: Session }) {
   const touched = [...new Set(s.attempts.flatMap((a) => Object.keys(a.res.credit)))].filter((id) => SKILL_BY_ID.has(id));
   touched.sort((a, b) => mastery(p.skills[a]) - mastery(p.skills[b]));
   return (
-    <div class="stack-lg" style={{ maxWidth: "760px", margin: "0 auto" }}>
+    <div class="stack-lg" style={{ maxWidth: "980px", margin: "0 auto" }}>
       <div class="stack" style={{ gap: "6px" }}>
         <span class="eyebrow">{modeLabel(s.mode)}</span>
         <h1>{right + almost === s.attempts.length && s.attempts.length ? "Optimē!" : "Bene labōrāvistī!"}</h1>

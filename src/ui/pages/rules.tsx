@@ -98,11 +98,6 @@ export function Rules() {
   const cases: Case[] = ["nom", "acc", "gen", "abl"];
   return (
     <div class="stack-lg">
-      <div class="stack" style={{ gap: "6px" }}>
-        <span class="eyebrow">Rēgulae</span>
-        <h1>Rules</h1>
-        <p class="muted prose">Everything the lessons have taught so far. Endings are colored by case everywhere on this site.</p>
-      </div>
 
       <section class="panel frame stack">
         <h2>Why endings matter</h2>

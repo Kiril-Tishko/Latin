@@ -22,34 +22,34 @@ async function run(name, viewport, colorScheme) {
   await p.screenshot({ path: `${out}/${name}-home.png`, fullPage: true });
   const mobile = viewport.width < 760;
   const nav = mobile ? ".bottomnav button" : ".nav button";
-  for (const label of ["Lessons", "Rules", "Words", "Discover"]) {
+  for (const [label, file] of [["Lectiōnēs", "lessons"], ["Rēgulae", "rules"], ["Verba", "words"], ["Inventiō", "discover"]]) {
     await p.locator(nav, { hasText: label }).first().click();
     await p.waitForTimeout(300);
-    await p.screenshot({ path: `${out}/${name}-${label.toLowerCase()}.png`, fullPage: true });
+    await p.screenshot({ path: `${out}/${name}-${file}.png`, fullPage: true });
   }
   // open a mystery card
-  await p.locator(nav, { hasText: "Discover" }).first().click();
+  await p.locator(nav, { hasText: "Inventiō" }).first().click();
   await p.locator(".card-front").click();
   await p.waitForTimeout(900);
-  await p.screenshot({ path: `${out}/${name}-card.png`, fullPage: true });
+  await p.screenshot({ path: `${out}/${name}-card.png` });
   // a lesson page
-  await p.locator(nav, { hasText: "Lessons" }).first().click();
+  await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();
   await p.locator(".lesson-card").nth(3).click();
   await p.waitForTimeout(300);
   await p.screenshot({ path: `${out}/${name}-lesson4.png`, fullPage: true });
   // train: mixed practice, answer three exercises
-  await p.locator(nav, { hasText: "Train" }).first().click();
+  await p.locator(nav, { hasText: "Exercitium" }).first().click();
   await p.locator("button", { hasText: "Mixed practice" }).first().click();
   for (let i = 0; i < 3; i++) {
     await p.waitForTimeout(200);
     if (await p.locator(".word-btn").count()) await p.locator(".word-btn").first().click();
     else {
       await p.locator("#answer-input").fill(i === 0 ? "puella" : "agricola aquam portat");
-      await p.screenshot({ path: `${out}/${name}-train-${i}-q.png`, fullPage: true });
+      await p.screenshot({ path: `${out}/${name}-train-${i}-q.png` });
       await p.locator("#answer-input").press("Enter");
     }
     await p.waitForTimeout(250);
-    await p.screenshot({ path: `${out}/${name}-train-${i}-a.png`, fullPage: true });
+    await p.screenshot({ path: `${out}/${name}-train-${i}-a.png` });
     await p.locator("button", { hasText: "Next" }).click();
   }
   // ask drawer opens (no Claude outside claude.ai: shows the fallback)
@@ -86,7 +86,7 @@ async function audio() {
   p.on("pageerror", (e) => errors.push(`audio: ${e.message}`));
   await p.goto(`file://${page}`);
   await p.waitForTimeout(800);
-  await p.locator(".nav button", { hasText: "Lessons" }).click();
+  await p.locator(".nav button", { hasText: "Lectiōnēs" }).click();
   await p.locator(".lesson-card").nth(1).click();
   const speakers = await p.locator(".speak").count();
   if (speakers < 20) errors.push(`audio: only ${speakers} speaker buttons on lesson II`);
@@ -99,7 +99,7 @@ async function audio() {
   const spoken = await p.evaluate(() => window.__spoken);
   if (spoken.length < 3) errors.push(`audio: listen & repeat spoke ${spoken.length} lines`);
   if (!spoken.some((t) => /dischìpula|maghìstra/.test(t))) errors.push(`audio: no respelled Latin in ${JSON.stringify(spoken.slice(0, 3))}`);
-  await p.locator(".nav button", { hasText: "Train" }).click();
+  await p.locator(".nav button", { hasText: "Exercitium" }).click();
   await p.locator("button", { hasText: "Listening" }).first().click();
   await p.waitForTimeout(400);
   const before = (await p.evaluate(() => window.__spoken)).length;

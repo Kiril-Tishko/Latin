@@ -19,14 +19,6 @@ export function Lessons() {
   const p = useProgress();
   return (
     <div class="stack-lg">
-      <div class="stack" style={{ gap: "6px" }}>
-        <span class="eyebrow">Lectiōnēs</span>
-        <h1>Lessons</h1>
-        <p class="muted prose">
-          Each lesson follows its video: the rules it teaches, the sentences it uses, and the story. Words and grammar from later videos stay
-          out of the exercises until you have watched them.
-        </p>
-      </div>
       <div class="stack">
         {LESSONS.map((l) => {
           const done = p.lessonsDone.includes(l.n);
@@ -45,10 +37,6 @@ export function Lessons() {
           );
         })}
       </div>
-      <p class="small muted ui prose">
-        Finished the next video? Tell Claude in the Claude Code session for this site, for example "add lesson 5", and it will be added
-        here with its own rules, words and exercises. Your progress is kept.
-      </p>
     </div>
   );
 }
@@ -256,7 +244,7 @@ export function LessonPage({ n }: { n: number }) {
       )}
 
       {card && next && (
-        <Modal onClose={() => setCard(false)} label="One more word">
+        <Modal onClose={() => setCard(false)} label="One more word" wide>
           <CardView card={next} onDone={() => setCard(false)} />
         </Modal>
       )}

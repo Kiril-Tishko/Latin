@@ -6,7 +6,7 @@ import { LESSONS } from "../../content/lessons";
 import { STORY_ONLY } from "../../content/words";
 import { conjugate, declineAdj, declineNoun, dictionaryForm } from "../../latin/morph";
 import { nounSkill, adjDecl } from "../../latin/skills";
-import { roman } from "../../latin/text";
+import { latinKey, roman } from "../../latin/text";
 import { Case, CASE_NAMES, Entry, full, Gender, NounKey, PN, VerbKey } from "../../latin/types";
 import { dueWords, strength } from "../../trainer/srs";
 import { openAsk } from "../ask";
@@ -137,45 +137,71 @@ function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
   );
 }
 
+/** The one word shown on a tile: nominative, first person, or masculine form. */
+export function headword(e: Entry): string {
+  return e.kind === "verb" ? e.pp[0] : e.lemma;
+}
+
+function matches(e: Entry, q: string, formHits: Set<string>): boolean {
+  if (!q) return true;
+  const key = latinKey(q);
+  const glosses = [e.en, ...(e.alt ?? [])].map((g) => g.toLowerCase());
+  return (
+    latinKey(headword(e)).includes(key) ||
+    glosses.some((g) => g.includes(q.toLowerCase())) ||
+    formHits.has(e.id)
+  );
+}
+
 export function Words() {
   const p = useProgress();
   const d = derived();
   const [filter, setFilter] = useState<number | "deck" | "all">("all");
+  const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Entry | null>(null);
   const vocab = d.words.filter((w) => w.kind !== "fixed" && !STORY_ONLY.has(w.id));
   const due = dueWords(p, vocab.map((w) => w.id)).length;
-  const shown = vocab.filter((w) => filter === "all" || (filter === "deck" ? "deck" in w.source : "lesson" in w.source && w.source.lesson === filter));
+  const q = query.trim();
+  // typing any form finds its word: puellam -> puella, labōrant -> labōrō
+  const formHits = new Set(q ? d.lexicon.analyze(q).map((a) => a.entry.id) : []);
+  const shown = vocab.filter(
+    (w) => (filter === "all" || (filter === "deck" ? "deck" in w.source : "lesson" in w.source && w.source.lesson === filter)) && matches(w, q, formHits),
+  );
   return (
-    <div class="stack-lg">
-      <div class="stack" style={{ gap: "6px" }}>
-        <span class="eyebrow">Verba</span>
-        <h1>My dictionary</h1>
-        <p class="muted prose">Every word from the lessons you've watched, plus the cards you added. The tiles show how firmly each word sits.</p>
-      </div>
-      <div class="panel frame spread">
-        <div class="stack" style={{ gap: "2px" }}>
-          <h3>{due > 0 ? `${due} word${due === 1 ? "" : "s"} ready for review` : "All words reviewed for now"}</h3>
-          <span class="small muted ui">{vocab.length} words · reviews are spaced so each word returns just before you'd forget it</span>
+    <div class="stack">
+      <input
+        id="word-search"
+        class="search"
+        type="search"
+        value={query}
+        placeholder="Quaere… search Latin (any form) or English"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck={false}
+        onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+      />
+      <div class="spread">
+        <div class="seg" role="group" aria-label="Filter words">
+          <button aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All</button>
+          {LESSONS.filter((l) => p.lessonsDone.includes(l.n)).map((l) => (
+            <button key={l.n} aria-pressed={filter === l.n} onClick={() => setFilter(l.n)}>{roman(l.n)}</button>
+          ))}
+          <button aria-pressed={filter === "deck"} onClick={() => setFilter("deck")}>Discovered ({d.added.length})</button>
         </div>
-        <button class="btn" disabled={!due} onClick={() => { startSession({ kind: "words" }); go({ page: "train" }); }}>Review now</button>
+        <button class="btn" disabled={!due} onClick={() => { startSession({ kind: "words" }); go({ page: "train" }); }}>
+          {due > 0 ? `Review ${due} word${due === 1 ? "" : "s"}` : "Nothing to review"}
+        </button>
       </div>
-      <div class="seg" role="group" aria-label="Filter words">
-        <button aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All</button>
-        {LESSONS.filter((l) => p.lessonsDone.includes(l.n)).map((l) => (
-          <button key={l.n} aria-pressed={filter === l.n} onClick={() => setFilter(l.n)}>Lesson {roman(l.n)}</button>
-        ))}
-        <button aria-pressed={filter === "deck"} onClick={() => setFilter("deck")}>Discovered ({d.added.length})</button>
-      </div>
-      <div class="grid-3">
+      <div class="word-grid">
         {shown.map((w) => (
-          <button key={w.id} class="panel tight stack" style={{ gap: "6px", textAlign: "left", cursor: "pointer" }} onClick={() => setOpen(w)}>
-            <span class="latin">{dictionaryForm(w).replace(/, (m|f|n)\.$/, "")}</span>
-            <span class="small muted">{w.en}</span>
+          <button key={w.id} class="panel word-tile" onClick={() => setOpen(w)}>
+            <span class="head latin" lang="la">{headword(w)}</span>
+            <span class="gloss">{w.en}</span>
             <Mosaic value={strength(p.words[w.id])} tiles={6} thin />
           </button>
         ))}
-        {!shown.length && <p class="muted">No words here yet. Open some cards in Discover.</p>}
       </div>
+      {!shown.length && <p class="muted">{q ? `Nothing found for "${q}".` : "No words here yet. Open some cards in Discover."}</p>}
       {open && <WordModal e={open} onClose={() => setOpen(null)} />}
     </div>
   );

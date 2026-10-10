@@ -50,7 +50,7 @@ export function CaseChip({ c, label }: { c: Case | "verb"; label?: string }) {
   return <span class={`chip case c-${c}`}>{label ?? (c === "verb" ? "verb ending" : CASE_NAMES[c])}</span>;
 }
 
-export function Modal({ onClose, children, label }: { onClose: () => void; children: ComponentChildren; label: string }) {
+export function Modal({ onClose, children, label, wide }: { onClose: () => void; children: ComponentChildren; label: string; wide?: boolean }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -59,7 +59,7 @@ export function Modal({ onClose, children, label }: { onClose: () => void; child
   return (
     <>
       <div class="scrim" onClick={onClose} />
-      <div class="modal" role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div class={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.target === e.currentTarget && onClose()}>
         <div class="panel frame">{children}</div>
       </div>
     </>

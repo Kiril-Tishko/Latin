@@ -1,4 +1,6 @@
-// Discover: mystery cards, opened one at a time.
+// Discover: mystery cards, opened one at a time. An open card shows everything
+// at once: the word and its relatives on the left, the memory hook and
+// examples on the right.
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { Card, CARD_BY_ID } from "../../content/deck";
 import { seeded } from "../../latin/generate";
@@ -29,7 +31,7 @@ function Relatives({ card }: { card: Card }) {
           <div key={title} class="stack" style={{ gap: "2px" }}>
             <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{title}</span>
             {LANG.filter(([k]) => rel[k]?.length).map(([k, label]) => (
-              <div key={k}>
+              <div key={k} class="rel-line">
                 <span class="rel-lang">{label}</span> {rel[k]!.join(", ")}
               </div>
             ))}
@@ -39,62 +41,86 @@ function Relatives({ card }: { card: Card }) {
   );
 }
 
+const plainDict = (c: Card) => dictionaryForm(c.entry).replace(/, (m|f|n)\.$/, "");
+
 /** The open face of a card: word, relatives, memory hook, examples, add button. */
-export function CardView({ card, onDone }: { card: Card; onDone?: () => void }) {
+export function CardView({ card, onDone, onNext }: { card: Card; onDone?: () => void; onNext?: () => void }) {
   const p = useProgress();
   const added = p.added.includes(card.id);
-  const examples = useMemo(() => cardExamples(card, derived().knowledge, seeded(card.id.length * 7919 + p.added.length), 3), [card.id, p.added.length]);
+  const examples = useMemo(() => cardExamples(card, derived().knowledge, seeded(card.id.length * 7919 + p.added.length), 2), [card.id, p.added.length]);
   useEffect(() => {
     if (!getProgress().revealed.includes(card.id)) update((x) => void x.revealed.push(card.id));
   }, [card.id]);
   const e = card.entry;
+  const kind = e.kind === "noun" ? (e.gender === "m" ? "noun · masculine" : e.gender === "f" ? "noun · feminine" : "noun · neuter") : e.kind === "verb" ? "verb" : "adjective";
   return (
-    <div class="stack">
-      <div class="stack" style={{ gap: "2px" }}>
-        <span class="eyebrow">{e.kind === "noun" ? (e.gender === "m" ? "noun · masculine" : e.gender === "f" ? "noun · feminine" : "noun · neuter") : e.kind === "verb" ? "verb" : "adjective"}</span>
-        <span>
-          <LatinText text={dictionaryForm(e).replace(/, (m|f|n)\.$/, "")} cls="latin-lg" />
-          <Speak text={dictionaryForm(e).replace(/, (m|f|n)\.$/, "")} id={`card-${card.id}`} />
-        </span>
-        <span style={{ fontSize: "1.15rem" }}>{e.en}{e.alt?.length ? <span class="muted">, {e.alt.slice(0, 2).join(", ")}</span> : null}</span>
-      </div>
-      <Relatives card={card} />
-      <div class="well stack" style={{ gap: "4px" }}>
-        <span class="eyebrow" style={{ color: "var(--ink-2)" }}>Remember it</span>
-        <p>{card.hook}</p>
-      </div>
-      {examples.length > 0 && (
-        <div class="stack" style={{ gap: "6px" }}>
-          <span class="eyebrow" style={{ color: "var(--ink-2)" }}>With words you know</span>
-          {examples.map((x, i) => (
-            <div key={i} class="ex-line">
-              <span>
-                <LatinTokens tokens={x.tokens} />
-                <Speak text={x.latin} id={`card-${card.id}-${i}`} />
-              </span>
-              <span class="muted">{x.english}</span>
-            </div>
-          ))}
+    <div class="card-grid">
+      <div class="stack" style={{ gap: "14px" }}>
+        <div class="stack" style={{ gap: "4px" }}>
+          <span class="eyebrow">{kind}</span>
+          <div class="card-word">
+            <LatinText text={plainDict(card)} />
+            <Speak text={plainDict(card)} id={`card-${card.id}`} />
+          </div>
+          <div class="card-meaning">
+            {e.en}
+            {e.alt?.length ? <span class="muted">, {e.alt.slice(0, 2).join(", ")}</span> : null}
+          </div>
         </div>
-      )}
-      <div class="row">
-        {added ? (
-          <span class="chip" style={{ color: "var(--good)", borderColor: "var(--good)" }}>In your dictionary</span>
-        ) : (
-          <button
-            class="btn gold"
-            onClick={() => {
-              update((x) => void x.added.push(card.id));
-              toast(`${e.en} added: it will appear in your exercises.`);
-              onDone?.();
-            }}
-          >
-            <Icon.check /> Add to my dictionary
-          </button>
+        <Relatives card={card} />
+      </div>
+      <div class="stack" style={{ gap: "14px" }}>
+        <div class="well stack" style={{ gap: "4px" }}>
+          <span class="eyebrow" style={{ color: "var(--ink-2)" }}>Remember it</span>
+          <p>{card.hook}</p>
+        </div>
+        {examples.length > 0 && (
+          <div class="stack" style={{ gap: "4px" }}>
+            <span class="eyebrow" style={{ color: "var(--ink-2)" }}>With words you know</span>
+            {examples.map((x, i) => (
+              <div key={i} class="ex-line">
+                <span>
+                  <LatinTokens tokens={x.tokens} />
+                  <Speak text={x.latin} id={`card-${card.id}-${i}`} />
+                </span>
+                <span class="muted">{x.english}</span>
+              </div>
+            ))}
+          </div>
         )}
-        <button class="btn ghost small" onClick={() => openAsk({ label: `Word: ${dictionaryForm(e)}`, detail: `The learner is looking at the Discover card for ${dictionaryForm(e)} (${e.en}). Hook shown: ${card.hook}` }, "Tell me more about this word and how to remember it.")}>
-          <Icon.quill /> Ask
-        </button>
+        <div class="row">
+          {added ? (
+            <span class="chip" style={{ color: "var(--good)", borderColor: "var(--good)" }}>In your dictionary</span>
+          ) : (
+            <button
+              class="btn gold"
+              onClick={() => {
+                update((x) => void x.added.push(card.id));
+                toast(`${e.en} added: it will appear in your exercises.`);
+                onDone?.();
+              }}
+            >
+              <Icon.check /> Add to my dictionary
+            </button>
+          )}
+          <button
+            class="btn ghost"
+            aria-label="Ask Claude about this word"
+            onClick={() =>
+              openAsk(
+                { label: `Word: ${dictionaryForm(e)}`, detail: `The learner is looking at the Discover card for ${dictionaryForm(e)} (${e.en}). Hook shown: ${card.hook}` },
+                "Tell me more about this word and how to remember it.",
+              )
+            }
+          >
+            <Icon.quill /> Ask
+          </button>
+          {onNext && (
+            <button class="btn ghost" onClick={onNext} style={{ marginLeft: "auto" }}>
+              Next card <Icon.arrow />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -109,18 +135,10 @@ export function Discover() {
   const current = open ? CARD_BY_ID.get(open) : null;
   const waiting = p.revealed.filter((id) => !p.added.includes(id) && id !== open).map((id) => CARD_BY_ID.get(id)).filter(Boolean) as Card[];
   const addedCards = p.added.map((id) => CARD_BY_ID.get(id)).filter(Boolean) as Card[];
+  const another = nextCard([...p.revealed, ...(open ? [open] : [])], d.knowledge, known);
 
   return (
     <div class="stack-lg">
-      <div class="stack" style={{ gap: "6px" }}>
-        <span class="eyebrow">Invenī</span>
-        <h1>Discover</h1>
-        <p class="muted prose">
-          Latin words you half-know already: each has relatives in English, Russian or Ukrainian. Open one card at a time. Add the ones you
-          like to your dictionary and they join your exercises.
-        </p>
-      </div>
-
       <div class={`mystery ${current ? "open" : ""}`}>
         <div class="flip">
           <div class="face front">
@@ -132,27 +150,20 @@ export function Discover() {
             </button>
           </div>
           <div class="face back panel frame">
-            {current && <CardView card={current} />}
+            {current && <CardView card={current} onNext={another ? () => setOpen(null) : undefined} />}
           </div>
         </div>
       </div>
-      {current && (
-        <div class="row" style={{ justifyContent: "center" }}>
-          <button class="btn ghost" onClick={() => setOpen(null)} disabled={!nextCard([...p.revealed], d.knowledge, known)}>
-            Next mystery card <Icon.arrow />
-          </button>
-        </div>
-      )}
 
       {waiting.length > 0 && (
         <section class="stack">
           <span class="eyebrow">Opened, not added yet</span>
-          <div class="grid-3">
+          <div class="word-grid">
             {waiting.map((c) => (
-              <div key={c.id} class="panel tight stack" style={{ gap: "6px" }}>
-                <LatinText text={dictionaryForm(c.entry).replace(/, (m|f|n)\.$/, "")} />
-                <span class="small muted">{c.entry.en}</span>
-                <div class="row">
+              <div key={c.id} class="panel word-tile" style={{ cursor: "default" }}>
+                <span class="head latin">{c.entry.kind === "verb" ? c.entry.pp[0] : (c.entry as { lemma: string }).lemma}</span>
+                <span class="gloss">{c.entry.en}</span>
+                <div class="row" style={{ gap: "8px" }}>
                   <button class="btn small gold" onClick={() => { update((x) => void x.added.push(c.id)); toast(`${c.entry.en} added.`); }}>Add</button>
                   <button class="linkish" onClick={() => setOpen(c.id)}>Look again</button>
                 </div>
@@ -165,11 +176,13 @@ export function Discover() {
       {addedCards.length > 0 && (
         <section class="stack">
           <span class="eyebrow">In your dictionary from Discover ({addedCards.length})</span>
-          <p class="small">
+          <p>
             {addedCards.map((c, i) => (
               <span key={c.id}>
                 {i > 0 && " · "}
-                <button class="linkish" style={{ color: "var(--ink)" }} onClick={() => setOpen(c.id)}>{c.entry.kind === "verb" ? c.entry.pp[0] : (c.entry as { lemma: string }).lemma}</button>
+                <button class="linkish latin" style={{ color: "var(--ink)", fontFamily: "var(--f-text)", fontSize: "1.05rem" }} onClick={() => setOpen(c.id)}>
+                  {c.entry.kind === "verb" ? c.entry.pp[0] : (c.entry as { lemma: string }).lemma}
+                </button>
               </span>
             ))}
           </p>

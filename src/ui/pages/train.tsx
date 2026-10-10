@@ -13,6 +13,9 @@ import { LatinTokens } from "../latin";
 import { Inline, Markup } from "../markup";
 import { derived, getProgress, update, useProgress } from "../store";
 import { roman } from "../../latin/text";
+import { latinText } from "../../latin/generate";
+import { speak, stopSpeaking } from "../../audio/speech";
+import { audioReady, Speak } from "../speak";
 
 export type Mode =
   | { kind: "mixed" }
@@ -21,7 +24,8 @@ export type Mode =
   | { kind: "placement" }
   | { kind: "writing" }
   | { kind: "endings" }
-  | { kind: "words" };
+  | { kind: "words" }
+  | { kind: "listening" };
 
 interface Attempt {
   ex: Exercise;
@@ -62,11 +66,13 @@ export function modeLabel(m: Mode): string {
       return "Endings drill";
     case "words":
       return "Word recall";
+    case "listening":
+      return "Listening";
   }
 }
 
 function ctx() {
-  return { k: derived().knowledge, lex: derived().lexicon, r: seeded(Date.now() % 2147483647) };
+  return { k: derived().knowledge, lex: derived().lexicon, r: seeded(Date.now() % 2147483647), audio: audioReady() };
 }
 
 /** Starts a new session (from anywhere in the app). */
@@ -93,6 +99,9 @@ export function startSession(mode: Mode) {
       break;
     case "words":
       items = buildSession(p, c, { size: 20, kinds: ["vocab"], vocab });
+      break;
+    case "listening":
+      items = buildSession(p, c, { size: 12, kinds: ["listen"] });
       break;
     default:
       items = buildSession(p, c, { size: SIZE, vocab });
@@ -131,6 +140,7 @@ function Chooser() {
     { mode: { kind: "writing" }, title: "Write Latin", text: "Translate into Latin and transform sentences. The fastest way to make endings automatic." },
     { mode: { kind: "endings" }, title: "Endings drill", text: "Short, quick: fill in endings and build forms." },
     { mode: { kind: "words" }, title: "Word recall", text: "Your dictionary, in both directions, spaced so words come back just before you forget." },
+    ...(audioReady() ? [{ mode: { kind: "listening" } as Mode, title: "Listening", text: "Hear a sentence, write it in Latin. Trains your ear for the endings." }] : []),
     ...(!p.placementDone ? [{ mode: { kind: "placement" } as Mode, title: "Check-up (3 min)", text: "Twelve questions across Lessons I-IV to find what is solid and what is shaky." }] : []),
   ];
   return (
@@ -184,6 +194,13 @@ function Runner({ s }: { s: Session }) {
     if (!res) inputRef.current?.focus();
     else nextRef.current?.focus();
   }, [res]);
+
+  // listening exercises play at once; other Latin prompts only when auto-read is on
+  useEffect(() => {
+    const auto = ex.kind === "listen" || (getProgress().settings.autoplay && (ex.kind === "la2en" || ex.kind === "transform"));
+    if (ex.audio && auto && audioReady()) void speak(ex.audio, { id: `prompt-${ex.id}` });
+    return () => stopSpeaking();
+  }, [ex.id]);
 
   function check(given = answer) {
     if (res) return;
@@ -281,7 +298,7 @@ function Runner({ s }: { s: Session }) {
                 autocapitalize="off"
                 spellcheck={false}
                 lang={isLatinAnswer ? "la" : "en"}
-                placeholder={isLatinAnswer ? "Scrībe Latīnē… (long marks not needed)" : "Write it in English…"}
+                placeholder={ex.kind === "listen" ? "Write what you hear, in Latin…" : isLatinAnswer ? "Scrībe Latīnē… (long marks not needed)" : "Write it in English…"}
                 onInput={(e) => setAnswer((e.target as HTMLTextAreaElement).value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -348,7 +365,32 @@ function Prompt({ ex, showColors, res, chosen, onChoose }: { ex: Exercise; showC
     case "en2la":
       return <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }}>{ex.english}</p>;
     case "la2en":
-      return <p class="latin-lg"><LatinTokens tokens={ex.latin!} plain={!showColors} /></p>;
+      return (
+        <p class="latin-lg">
+          <LatinTokens tokens={ex.latin!} plain={!showColors} />
+          {ex.audio && <Speak text={ex.audio} id={`prompt-${ex.id}`} />}
+        </p>
+      );
+    case "listen":
+      return (
+        <div class="stack" style={{ gap: "8px" }}>
+          <div class="listen-stage">
+            {ex.audio && <Speak text={ex.audio} id={`prompt-${ex.id}`} big label="Play the sentence" />}
+            {ex.audio && (
+              <button class="btn ghost small" onClick={() => void speak(ex.audio!, { id: `slow-${ex.id}`, rate: 0.6 })}>
+                Slower
+              </button>
+            )}
+            {!res && <span class="muted small ui">Listen as often as you like, then write it down.</span>}
+          </div>
+          {res && (
+            <div class="stack" style={{ gap: "4px" }}>
+              <p class="latin-lg"><LatinTokens tokens={ex.latin!} /></p>
+              <p class="muted">{ex.english}</p>
+            </div>
+          )}
+        </div>
+      );
     case "ending":
       return (
         <div class="stack" style={{ gap: "6px" }}>
@@ -359,7 +401,10 @@ function Prompt({ ex, showColors, res, chosen, onChoose }: { ex: Exercise; showC
     case "transform":
       return (
         <div class="stack" style={{ gap: "6px" }}>
-          <p class="latin-lg"><LatinTokens tokens={ex.latin!} plain={!showColors} /></p>
+          <p class="latin-lg">
+            <LatinTokens tokens={ex.latin!} plain={!showColors} />
+            {ex.audio && <Speak text={ex.audio} id={`prompt-${ex.id}`} />}
+          </p>
           <p class="muted small">{ex.english}</p>
         </div>
       );
@@ -415,10 +460,18 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
         {ex.answer === "en" ? (
           <div class="stack" style={{ gap: "4px" }}>
             <p class="latin-lg" style={{ fontSize: "1.2rem" }}>{res.expected}</p>
-            {res.expectedTokens && <p><LatinTokens tokens={res.expectedTokens} /></p>}
+            {res.expectedTokens && (
+              <p>
+                <LatinTokens tokens={res.expectedTokens} />
+                <Speak text={latinText(res.expectedTokens)} id={`answer-${ex.id}`} />
+              </p>
+            )}
           </div>
         ) : res.expectedTokens && ex.kind !== "identify" ? (
-          <p class="latin-lg"><LatinTokens tokens={res.expectedTokens} period={ex.kind !== "form"} /></p>
+          <p class="latin-lg">
+            <LatinTokens tokens={res.expectedTokens} period={ex.kind !== "form"} />
+            <Speak text={latinText(res.expectedTokens)} id={`answer-${ex.id}`} />
+          </p>
         ) : (
           <p class="latin-lg"><Inline text={`«${res.expected}»`} /></p>
         )}

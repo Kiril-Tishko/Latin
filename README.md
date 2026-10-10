@@ -13,6 +13,9 @@ published as a private claude.ai artifact.
 - **Discover**: mystery cards of Latin words related to English, Russian or
   Ukrainian words; add them and they join the exercises.
 - **Rules**: color legend and ending tables.
+- **Audio**: every Latin sentence can be heard in classical pronunciation
+  (through the device's Italian voice), Listen & repeat on lesson pages, and a
+  Listen and write exercise.
 - **Ask Claude**: a tutor that sees your lessons, words and weak spots.
 
 ARTIFACT_URL: https://claude.ai/artifact/3cvi4ofuaPLg6LfXXf7efX

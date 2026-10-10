@@ -37,6 +37,12 @@ export interface Settings {
   silly: number;
   /** Show (m) / (f) and dictionary hints on English prompts. */
   hints: boolean;
+  /** Chosen speech voice (voiceURI); empty = best Italian / Spanish voice. */
+  voice?: string;
+  /** Speech rate, 0.6-1.1. */
+  rate: number;
+  /** Read Latin prompts aloud as soon as they appear. */
+  autoplay: boolean;
 }
 
 export interface Progress {
@@ -58,7 +64,7 @@ export interface Progress {
   placementDone: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { macrons: true, dailyGoal: 20, silly: 0.35, hints: true };
+export const DEFAULT_SETTINGS: Settings = { macrons: true, dailyGoal: 20, silly: 0.35, hints: true, rate: 0.85, autoplay: false };
 
 export function newProgress(): Progress {
   return {

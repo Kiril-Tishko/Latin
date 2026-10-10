@@ -11,6 +11,7 @@ import { Words } from "./pages/words";
 import { Settings } from "./settings";
 import { connect, getSync, useProgress } from "./store";
 import { SKILL_BY_ID } from "../latin/skills";
+import { setSpeechPrefs } from "../audio/speech";
 
 const TABS: { route: Route; label: string; icon: () => preact.JSX.Element }[] = [
   { route: { page: "home" }, label: "Home", icon: Icon.home },
@@ -27,7 +28,8 @@ const SYNC_TEXT = { local: "saved in this browser", connecting: "connecting…",
 
 export function App() {
   const route = useRoute();
-  useProgress();
+  const p = useProgress();
+  setSpeechPrefs({ voice: p.settings.voice, rate: p.settings.rate });
   const [settings, setSettings] = useState(false);
 
   useEffect(() => {

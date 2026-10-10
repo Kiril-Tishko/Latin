@@ -8,6 +8,7 @@ import { openAsk } from "../ask";
 import { Icon, toast } from "../components";
 import { LatinText, LatinTokens } from "../latin";
 import { derived, getProgress, update, useProgress } from "../store";
+import { Speak } from "../speak";
 
 const LANG: [keyof Card["from"], string][] = [
   ["en", "EN"],
@@ -51,7 +52,10 @@ export function CardView({ card, onDone }: { card: Card; onDone?: () => void }) 
     <div class="stack">
       <div class="stack" style={{ gap: "2px" }}>
         <span class="eyebrow">{e.kind === "noun" ? (e.gender === "m" ? "noun · masculine" : e.gender === "f" ? "noun · feminine" : "noun · neuter") : e.kind === "verb" ? "verb" : "adjective"}</span>
-        <LatinText text={dictionaryForm(e).replace(/, (m|f|n)\.$/, "")} cls="latin-lg" />
+        <span>
+          <LatinText text={dictionaryForm(e).replace(/, (m|f|n)\.$/, "")} cls="latin-lg" />
+          <Speak text={dictionaryForm(e).replace(/, (m|f|n)\.$/, "")} id={`card-${card.id}`} />
+        </span>
         <span style={{ fontSize: "1.15rem" }}>{e.en}{e.alt?.length ? <span class="muted">, {e.alt.slice(0, 2).join(", ")}</span> : null}</span>
       </div>
       <Relatives card={card} />
@@ -64,7 +68,10 @@ export function CardView({ card, onDone }: { card: Card; onDone?: () => void }) 
           <span class="eyebrow" style={{ color: "var(--ink-2)" }}>With words you know</span>
           {examples.map((x, i) => (
             <div key={i} class="ex-line">
-              <LatinTokens tokens={x.tokens} />
+              <span>
+                <LatinTokens tokens={x.tokens} />
+                <Speak text={x.latin} id={`card-${card.id}-${i}`} />
+              </span>
               <span class="muted">{x.english}</span>
             </div>
           ))}

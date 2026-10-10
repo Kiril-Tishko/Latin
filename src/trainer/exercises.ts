@@ -12,7 +12,7 @@ import { SKILL_BY_ID, adjDecl, declGroup, nounSkill } from "../latin/skills";
 import { latinKey, words } from "../latin/text";
 import { AdjEntry, Case, CASE_NAMES, Entry, full, NounKey, Num, PN, VerbEntry, VerbKey } from "../latin/types";
 
-export type ExerciseKind = "en2la" | "la2en" | "ending" | "form" | "transform" | "identify" | "vocab";
+export type ExerciseKind = "en2la" | "la2en" | "ending" | "form" | "transform" | "identify" | "vocab" | "listen";
 
 export const KIND_LABEL: Record<ExerciseKind, string> = {
   en2la: "Translate into Latin",
@@ -22,6 +22,7 @@ export const KIND_LABEL: Record<ExerciseKind, string> = {
   transform: "Change the sentence",
   identify: "Find the word",
   vocab: "Word recall",
+  listen: "Listen and write",
 };
 
 export interface Result {
@@ -63,12 +64,16 @@ export interface Exercise {
   words: string[];
   /** Plain-text summary for Ask Claude. */
   context: string;
+  /** Latin to read aloud for the prompt (listening, or Latin shown on screen). */
+  audio?: string;
 }
 
 export interface Ctx {
   k: Knowledge;
   lex: Lexicon;
   r: Rand;
+  /** The device can read Latin aloud, so listening exercises are possible. */
+  audio?: boolean;
 }
 
 let counter = 0;
@@ -158,6 +163,7 @@ function la2en(ctx: Ctx, focus: string[]): Exercise | null {
     kind: "la2en",
     instruction: KIND_LABEL.la2en,
     latin: tokens,
+    audio: latinText(tokens),
     hints: hintsFor(tokens),
     answer: "en",
     skills: c.skills,
@@ -475,6 +481,7 @@ function transform(ctx: Ctx, focus: string[]): Exercise | null {
       kind: "transform",
       instruction: t.instruction,
       latin: from,
+      audio: latinText(from),
       english: english(c, ctx.k).text,
       hints: hintsFor(to),
       answer: "la",
@@ -602,6 +609,46 @@ export function vocabExercise(_ctx: Ctx, entry: Entry, direction: "la2en" | "en2
   };
 }
 
+// --------------------------------------------------------------- listen
+
+function listen(ctx: Ctx, focus: string[]): Exercise | null {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const c = generate(ctx.k, ctx.r, focus, ["sv", "svo", "loc", "motion", "est"]);
+    if (!c) continue;
+    const tokens = latinTokens(c, ctx.k);
+    if (tokens.length > 6) continue;
+    const en = english(c, ctx.k);
+    const slots = slotsFor(tokens, ctx.k);
+    const ids = wordIds(tokens);
+    return {
+      id: nextId(),
+      kind: "listen",
+      instruction: KIND_LABEL.listen,
+      latin: tokens,
+      english: en.text,
+      audio: latinText(tokens),
+      hints: hintsFor(tokens),
+      answer: "la",
+      skills: c.skills,
+      words: ids,
+      context: `Dictation: the learner heard "${latinText(tokens)}" ("${en.text}") and wrote it down in Latin.`,
+      check(answer) {
+        const r = checkLatin(answer, slots, ctx.lex);
+        return {
+          verdict: r.verdict,
+          issues: r.issues,
+          expected: latinText(tokens),
+          expectedTokens: tokens,
+          tokens: r.tokens,
+          credit: creditFrom(c.skills, r.verdict, r.issues),
+          wordCredit: wordsCredit(ids, r.verdict !== "wrong"),
+        };
+      },
+    };
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------- entry
 
 const FACTORIES: Record<Exclude<ExerciseKind, "vocab">, (ctx: Ctx, focus: string[]) => Exercise | null> = {
@@ -611,6 +658,7 @@ const FACTORIES: Record<Exclude<ExerciseKind, "vocab">, (ctx: Ctx, focus: string
   form: formEx,
   transform,
   identify,
+  listen,
 };
 
 export function makeExercise(kind: Exclude<ExerciseKind, "vocab">, ctx: Ctx, focus: string[]): Exercise | null {

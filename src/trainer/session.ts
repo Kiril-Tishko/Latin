@@ -16,6 +16,7 @@ export const KIND_WEIGHTS: [ExerciseKind, number][] = [
   ["transform", 12],
   ["identify", 6],
   ["vocab", 6],
+  ["listen", 10],
 ];
 
 function weighted<T>(r: Rand, items: [T, number][]): T | undefined {
@@ -52,7 +53,7 @@ export interface SessionOpts {
 }
 
 export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set<string>): Exercise | null {
-  const kinds = KIND_WEIGHTS.filter(([kind]) => !opts.kinds || opts.kinds.includes(kind));
+  const kinds = KIND_WEIGHTS.filter(([kind]) => (!opts.kinds || opts.kinds.includes(kind)) && (kind !== "listen" || ctx.audio));
   for (let attempt = 0; attempt < 12; attempt++) {
     const kind = weighted(ctx.r, kinds);
     if (!kind) return null;

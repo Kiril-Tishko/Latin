@@ -373,6 +373,39 @@ p { margin: 0; }
 .seg button { font-family: var(--f-ui); font-size: 0.9rem; border: 0; background: none; padding: 7px 12px; cursor: pointer; color: var(--ink-2); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
 
+/* ------------------------------------------------------------- audio */
+
+.speak {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink-2);
+  cursor: pointer;
+  flex: none;
+}
+.select {
+  font-family: var(--f-ui);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--wall);
+  padding: 7px 10px;
+  max-width: 100%;
+}
+.speak:hover { border-color: var(--gold); color: var(--ink); }
+.speak.on { background: var(--gold); border-color: var(--gold); color: var(--panel); }
+.speak svg { width: 16px; height: 16px; }
+.speak.big { width: 64px; height: 64px; margin: 0; }
+.speak.big svg { width: 30px; height: 30px; }
+.ex-line.playing { background: color-mix(in srgb, var(--gold-soft) 22%, transparent); border-radius: 4px; }
+.listen-stage { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 6px 0; }
+
 /* ------------------------------------------------------------- mosaic */
 
 .mosaic { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; }

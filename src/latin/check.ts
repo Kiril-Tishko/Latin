@@ -183,12 +183,15 @@ export function checkLatin(answer: string, slots: Slot[], lex: Lexicon): CheckRe
     }
   });
 
-  // 4. what is left: wrong words and extra words
+  // 4. what is left: wrong words (paired with a missing word of the same kind) and extra words
   const missing = slots.filter((s, j) => !used[j] && !s.optional);
+  const kindOf = (s: Slot) => s.analysis?.entry.kind ?? "fixed";
   tokens.forEach((t, i) => {
     if (t.status !== "extra") return;
-    if (missing.length) {
-      const slot = missing.shift()!;
+    const kinds = new Set(lex.analyze(typed[i]).map((r) => r.entry.kind));
+    const k = missing.findIndex((m) => (kinds.size ? kinds.has(kindOf(m)) : kindOf(m) !== "fixed"));
+    if (k >= 0) {
+      const slot = missing.splice(k, 1)[0];
       used[slots.indexOf(slot)] = true;
       t.status = "word";
       t.slot = slot;
@@ -201,9 +204,9 @@ export function checkLatin(answer: string, slots: Slot[], lex: Lexicon): CheckRe
     issues.push({ kind: "missing", message: `Missing ${ROLE_TEXT[slot.role] ?? "a word"}: ${hinted(slot.show, slot.analysis)}.`, skill: slot.skill });
   }
 
-  // 5. word order rules that do matter
+  // 5. word order rules that do matter (only for words the learner actually wrote)
   tokens.forEach((t, i) => {
-    if (t.status === "extra" || !t.slot) return;
+    if (t.status === "extra" || t.status === "word" || !t.slot) return;
     const next = tokens[i + 1]?.slot?.role;
     if (t.slot.role === "prep" && next && !["pp", "pp-adj", "pp-poss"].includes(next)) {
       issues.push({ kind: "order", message: `Put ${hinted(t.slot.show)} right before its noun: ${hinted(t.slot.show)} + the place.` });

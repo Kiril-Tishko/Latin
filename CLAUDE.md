@@ -44,6 +44,17 @@ Runtime capabilities used:
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
 
+## Audio
+
+No browser has a Latin voice. `src/audio/pronounce.ts` respells Latin for an
+Italian voice (Spanish as fallback) so the device's own speech engine reads it
+with classical sounds: c and g hard (ch / gh), v as w (u), ae as "ai", gn as
+"ngn", and the Latin stress rule marked with an accent (penult if long, else
+antepenult). `src/audio/speech.ts` picks the best Italian voice and speaks;
+`speakSequence` drives Listen & repeat. Audio buttons are hidden when the
+device has no Italian or Spanish voice (Settings explains how to add one).
+The smoke test fakes an Italian voice to exercise the audio paths.
+
 ## Adding a lesson (e.g. "add lesson 5")
 
 1. **Get the content.** YouTube blocks video downloads from cloud IPs, but

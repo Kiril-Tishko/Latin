@@ -64,6 +64,14 @@ describe("Latin answers", () => {
     expect(check(walkIn, "Ego in silva ambulo").verdict).toBe("correct");
   });
 
+  it("pairs a wrong word with a missing word of the same kind", () => {
+    const r = check(walkIn, "puella ambulat");
+    const wrong = r.issues.find((i) => i.kind === "word");
+    expect(wrong?.message).toContain("silvā");
+    expect(r.issues.some((i) => i.kind === "missing" && i.message.includes("«in»"))).toBe(true);
+    expect(r.issues.some((i) => i.kind === "order")).toBe(false);
+  });
+
   it("keeps prepositions next to their noun", () => {
     expect(check(walkIn, "Silvā in ambulō").verdict).toBe("almost");
     const wrongCase = check(walkIn, "In silvam ambulō");

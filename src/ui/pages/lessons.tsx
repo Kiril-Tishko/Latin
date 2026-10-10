@@ -1,4 +1,6 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
+import { speakSequence } from "../../audio/speech";
+import { audioReady, Speak } from "../speak";
 import { Lesson, LESSONS, LESSON_BY_N, Rule, videoUrl } from "../../content/lessons";
 import { dictionaryForm } from "../../latin/morph";
 import { roman } from "../../latin/text";
@@ -79,7 +81,10 @@ function RuleView({ r }: { r: Rule }) {
         <div class="well" style={{ paddingBlock: "6px" }}>
           {r.examples.map((e, i) => (
             <div key={i} class="ex-line">
-              <LatinText text={e.la} />
+              <span>
+                <LatinText text={e.la} />
+                <Speak text={e.la} id={`${r.id}-${i}`} />
+              </span>
               <span class="muted">{e.en}</span>
             </div>
           ))}
@@ -99,6 +104,22 @@ export function LessonPage({ n }: { n: number }) {
   const p = useProgress();
   const [showEn, setShowEn] = useState(true);
   const [card, setCard] = useState(false);
+  const [playing, setPlaying] = useState<{ part: "sentences" | "story"; line: number | null } | null>(null);
+  const [stopFn, setStopFn] = useState<(() => void) | null>(null);
+  useEffect(() => () => stopFn?.(), [stopFn]);
+  const play = (part: "sentences" | "story", lines: string[], repeat: boolean) => {
+    stopFn?.();
+    const stop = speakSequence(lines, {
+      repeatPause: repeat,
+      onLine: (line) => setPlaying(line === null ? null : { part, line }),
+    });
+    setStopFn(() => stop);
+  };
+  const stopPlaying = () => {
+    stopFn?.();
+    setStopFn(null);
+    setPlaying(null);
+  };
   if (!l) return <p>That lesson isn't here yet.</p>;
   const d = derived();
   const next = nextCard(p.revealed, d.knowledge, new Set(d.words.map((w) => w.id)));
@@ -132,12 +153,25 @@ export function LessonPage({ n }: { n: number }) {
       <section class="stack">
         <div class="spread">
           <span class="eyebrow">Sentences from the video</span>
-          <button class="linkish" onClick={() => setShowEn(!showEn)}>{showEn ? "Hide English" : "Show English"}</button>
+          <div class="row">
+            {audioReady() &&
+              (playing?.part === "sentences" ? (
+                <button class="btn small" onClick={stopPlaying}><Icon.stop /> Stop</button>
+              ) : (
+                <button class="btn ghost small" onClick={() => play("sentences", l.sentences.map((x) => x.la), true)} title="Each sentence is read, then there is a pause to say it back">
+                  <Icon.repeat /> Listen &amp; repeat
+                </button>
+              ))}
+            <button class="linkish" onClick={() => setShowEn(!showEn)}>{showEn ? "Hide English" : "Show English"}</button>
+          </div>
         </div>
         <div class="panel" style={{ paddingBlock: "8px" }}>
           {l.sentences.map((s, i) => (
-            <div key={i} class="ex-line">
-              <LatinText text={s.la} />
+            <div key={i} class={`ex-line${playing?.part === "sentences" && playing.line === i ? " playing" : ""}`}>
+              <span>
+                <LatinText text={s.la} />
+                <Speak text={s.la} id={`l${l.n}-s${i}`} />
+              </span>
               <span class="muted">
                 {showEn ? s.en : ""}
                 {s.note && showEn ? <span class="small" style={{ display: "block" }}><Inline text={s.note} /></span> : null}
@@ -149,12 +183,23 @@ export function LessonPage({ n }: { n: number }) {
 
       {l.story && (
         <section class="stack">
-          <span class="eyebrow">Story · {l.story.title}</span>
+          <div class="spread">
+            <span class="eyebrow">Story · {l.story.title}</span>
+            {audioReady() &&
+              (playing?.part === "story" ? (
+                <button class="btn small" onClick={stopPlaying}><Icon.stop /> Stop</button>
+              ) : (
+                <button class="btn ghost small" onClick={() => play("story", l.story!.lines.map((x) => x.la), false)}>
+                  <Icon.speaker /> Listen to the story
+                </button>
+              ))}
+          </div>
           <div class="panel frame" style={{ paddingBlock: "8px" }}>
             {l.story.lines.map((s, i) => (
-              <div key={i} class="ex-line">
+              <div key={i} class={`ex-line${playing?.part === "story" && playing.line === i ? " playing" : ""}`}>
                 <span>
                   <LatinText text={s.la} />
+                  <Speak text={s.la} id={`l${l.n}-st${i}`} />
                   {s.unverified && <span class="flag-unverified" title="Rebuilt from the narration; the exact wording in the video may differ.">check</span>}
                 </span>
                 <span class="muted">{showEn ? s.en : ""}</span>
@@ -173,7 +218,10 @@ export function LessonPage({ n }: { n: number }) {
           <div class="grid-2">
             {l.phrases.map((ph, i) => (
               <div key={i} class="panel tight stack" style={{ gap: "4px" }}>
-                <LatinText text={ph.la} cls="latin-lg" />
+                <span>
+                  <LatinText text={ph.la} cls="latin-lg" />
+                  <Speak text={ph.la} id={`l${l.n}-p${i}`} />
+                </span>
                 <span>{ph.en}</span>
                 {ph.note && <span class="small muted">{ph.note}</span>}
               </div>
@@ -187,7 +235,10 @@ export function LessonPage({ n }: { n: number }) {
         <div class="grid-3">
           {l.words.map((w) => (
             <div key={w.id} class="panel tight stack" style={{ gap: "2px" }}>
-              <LatinText text={dictionaryForm(w).replace(/, (m|f|n)\.$/, "")} />
+              <span>
+                <LatinText text={dictionaryForm(w).replace(/, (m|f|n)\.$/, "")} />
+                <Speak text={dictionaryForm(w).replace(/, (m|f|n)\.$/, "")} id={`w-${w.id}`} />
+              </span>
               <span class="small muted">
                 {w.kind === "noun" ? `${w.gender === "m" ? "masculine" : w.gender === "f" ? "feminine" : "neuter"} · ` : ""}
                 {w.en}

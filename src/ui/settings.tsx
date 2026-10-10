@@ -3,6 +3,7 @@ import { LESSONS } from "../content/lessons";
 import { roman } from "../latin/text";
 import { Icon, Modal } from "./components";
 import { getSync, resetProgress, update, useProgress } from "./store";
+import { allVoices, audioSupported, hasLatinVoice, latinVoices, pickVoice, speak, useVoices } from "../audio/speech";
 
 export function Settings({ onClose }: { onClose: () => void }) {
   const p = useProgress();
@@ -72,6 +73,8 @@ export function Settings({ onClose }: { onClose: () => void }) {
           <span class="small muted">Silly sentences ("the bull reads the letter") force you to read the endings instead of guessing.</span>
         </div>
 
+        <AudioSettings />
+
         <label class="row ui">
           <input id="macrons" type="checkbox" checked={p.settings.macrons} onChange={(e) => update((x) => void (x.settings.macrons = (e.target as HTMLInputElement).checked))} />
           Show long vowels (ā, ē, ī, ō, ū), as in the videos
@@ -98,5 +101,77 @@ export function Settings({ onClose }: { onClose: () => void }) {
         )}
       </div>
     </Modal>
+  );
+}
+
+const SPEEDS = [
+  [0.7, "Slow"],
+  [0.85, "Normal"],
+  [1, "Natural"],
+] as const;
+
+function AudioSettings() {
+  const p = useProgress();
+  useVoices();
+  if (!audioSupported()) {
+    return (
+      <div class="stack" style={{ gap: "6px" }}>
+        <span class="eyebrow">Audio</span>
+        <p class="small muted">This browser cannot read text aloud. Try Chrome, Edge or Safari.</p>
+      </div>
+    );
+  }
+  const latin = latinVoices();
+  const others = allVoices().filter((v) => !latin.includes(v));
+  const best = pickVoice();
+  return (
+    <div class="stack" style={{ gap: "8px" }}>
+      <span class="eyebrow">Audio</span>
+      <label class="stack ui small" style={{ gap: "4px" }} for="voice">
+        Voice
+        <select
+          id="voice"
+          class="select"
+          value={p.settings.voice ?? ""}
+          onChange={(e) => update((x) => void (x.settings.voice = (e.target as HTMLSelectElement).value || undefined))}
+        >
+          <option value="">Best available{best ? ` (${best.name})` : ""}</option>
+          {latin.length > 0 && (
+            <optgroup label="Italian and Spanish: best for Latin">
+              {latin.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} · {v.lang}</option>)}
+            </optgroup>
+          )}
+          {others.length > 0 && (
+            <optgroup label="Other voices">
+              {others.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} · {v.lang}</option>)}
+            </optgroup>
+          )}
+        </select>
+      </label>
+      <div class="row">
+        <div class="seg" role="group" aria-label="Speed">
+          {SPEEDS.map(([rate, label]) => (
+            <button key={label} aria-pressed={Math.abs(p.settings.rate - rate) < 0.01} onClick={() => update((x) => void (x.settings.rate = rate))}>{label}</button>
+          ))}
+        </div>
+        <button class="btn ghost small" onClick={() => void speak("Salvē! Puella in silvā ambulat et agricola aquam portat.", { id: "test" })}>Test the voice</button>
+      </div>
+      <label class="row ui small">
+        <input id="autoplay" type="checkbox" checked={p.settings.autoplay} onChange={(e) => update((x) => void (x.settings.autoplay = (e.target as HTMLInputElement).checked))} />
+        Read Latin prompts aloud as soon as they appear
+      </label>
+      {!hasLatinVoice() && (
+        <p class="small well">
+          No Italian or Spanish voice was found on this device, so audio buttons are hidden. Add an Italian voice, then reload the page.
+          iPhone / iPad: Settings › Accessibility › Spoken Content › Voices › Italian. Mac: System Settings › Accessibility › Spoken Content ›
+          System voice › Manage Voices › Italian. Windows: Settings › Time &amp; language › Speech › Add voices › Italian. Android: Settings ›
+          Text-to-speech › Google › install Italian.
+        </p>
+      )}
+      <p class="small muted">
+        Latin is read by an Italian voice with the classical rules applied: hard c and g, v as w, ae as "eye", and the Latin stress. It is
+        close to the videos' pronunciation, not identical.
+      </p>
+    </div>
   );
 }

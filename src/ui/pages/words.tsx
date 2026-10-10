@@ -15,6 +15,7 @@ import { LatinTokens } from "../latin";
 import { go } from "../nav";
 import { derived, useProgress } from "../store";
 import { startSession } from "./train";
+import { Speak } from "../speak";
 
 const CASE_ORDER: Case[] = ["nom", "acc", "gen", "abl", "dat", "voc"];
 const PN_ROWS: [PN, string][] = [
@@ -111,7 +112,10 @@ function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
       <div class="stack">
         <div class="spread">
           <div class="stack" style={{ gap: "2px" }}>
-            <span class="latin latin-lg">{dictionaryForm(e).replace(/, (m|f|n)\.$/, "")}</span>
+            <span>
+              <span class="latin latin-lg">{dictionaryForm(e).replace(/, (m|f|n)\.$/, "")}</span>
+              <Speak text={dictionaryForm(e).replace(/, (m|f|n)\.$/, "")} id={`word-${e.id}`} />
+            </span>
             <span>
               {e.kind === "noun" ? `${e.gender === "m" ? "masculine" : e.gender === "f" ? "feminine" : "neuter"} noun · ` : ""}
               {e.en}

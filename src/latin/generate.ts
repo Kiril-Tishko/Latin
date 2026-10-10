@@ -47,6 +47,16 @@ export interface Knowledge {
   fixed: Map<string, FixedEntry>;
   /** 0 = always sensible, 1 = anything goes. */
   silly: number;
+  /**
+   * How much a sentence may carry beyond its rule: 0 = bare and in the usual
+   * order (a new rule), 1 = adjectives, "of" phrases, adverbs, and the object
+   * sometimes first (a rule that has settled). Default 1.
+   */
+  richness?: number;
+  /** Skills the sentence being built should show (set by generate). */
+  focus?: string[];
+  /** Extras already in the sentence being built (set by generate). */
+  spent?: { n: number };
 }
 
 export interface NP {
@@ -76,6 +86,8 @@ export interface Clause {
   pred?: { np?: NP; adj?: AdjEntry; gender: Gender; predFirst: boolean };
   pp?: { prep: "in" | "ad"; case: "abl" | "acc"; np: NP };
   adv?: "bene" | "nunc";
+  /** The object comes before the subject (Discipulam magistra docet). */
+  objFirst?: boolean;
   skills: string[];
   /** Which sentence pattern built it. */
   template?: string;
@@ -133,7 +145,37 @@ interface NPOpts {
   sillyScale?: number;
 }
 
+const rich = (k: Knowledge) => k.richness ?? 1;
+
+/**
+ * Chance of an optional extra (an adjective, "of" phrase, nōn, a second
+ * subject…). Scaled by richness; while a rule is new a sentence carries an
+ * extra only when that extra is what is being practised.
+ */
+function extra(k: Knowledge, skills: string[], normal: number): number {
+  if (normal === 0) return 0; // the sentence pattern has no room for it
+  const r = rich(k);
+  if (r >= 0.5) return normal * r;
+  if ((k.spent?.n ?? 0) >= 1) return 0; // one extra at a time
+  return skills.some((s) => k.focus?.includes(s)) ? Math.max(normal, 0.5) : 0;
+}
+
+/** Rolls for an optional extra and counts it. */
+function takeExtra(k: Knowledge, r: Rand, skills: string[], normal: number): boolean {
+  if (!chance(r, extra(k, skills, normal))) return false;
+  if (k.spent) k.spent.n++;
+  return true;
+}
+
 const isPerson = (n: NounEntry) => n.tags.includes("person") || n.tags.includes("animal");
+const isHuman = (n: NounEntry) => n.tags.includes("person");
+/** Who does things: people, and (when silliness is allowed) animals too. */
+const agent = (k: Knowledge) => (k.silly === 0 ? isHuman : isPerson);
+/** Whether a verb takes an object here: there is nothing sensible to "learn" among the nouns yet. */
+const takesObject = (k: Knowledge, v: VerbEntry) => !!v.trans && !(k.silly === 0 && v.id === "disco");
+
+/** An adjective that suits a noun with these tags (long road, timid girl; not a long girl). */
+export const adjFits = (a: AdjEntry, tags: string[]) => !a.tags.length || a.tags.some((t) => tags.includes(t));
 const isThing = (n: NounEntry) => !isPerson(n);
 const isPlace = (n: NounEntry) => n.tags.includes("place");
 
@@ -152,10 +194,10 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
   if (!pool.length) return null;
   const noun = pick(r, pool);
   const np: NP = { noun, case: o.case, num: o.num };
-  if (chance(r, o.adjChance ?? 0.3)) {
+  if (takeExtra(k, r, ["adj.agree", "adj.gender"], o.adjChance ?? 0.3)) {
     let adjs = k.adjs.filter((a) => adjUsable(k, a, noun, o.case, o.num));
     if (!chance(r, k.silly * 0.5)) {
-      const fitting = adjs.filter((a) => !a.tags.length || a.tags.some((t) => noun.tags.includes(t)));
+      const fitting = adjs.filter((a) => adjFits(a, noun.tags));
       if (fitting.length) adjs = fitting;
     }
     if (adjs.length) {
@@ -163,7 +205,7 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
       np.adjFirst = np.adj.id === "meus" ? false : chance(r, 0.5);
     }
   }
-  if (np.adj?.id !== "meus" && k.skills.has("s.gen") && chance(r, o.possChance ?? 0.2)) {
+  if (np.adj?.id !== "meus" && k.skills.has("s.gen") && takeExtra(k, r, ["s.gen"], o.possChance ?? 0.2)) {
     const poss = makeNP(k, r, {
       case: "gen",
       num: "sg",
@@ -186,26 +228,28 @@ function makeSubject(k: Knowledge, r: Rand, o: { allowPron?: boolean; allowPlura
     {
       w: 6,
       build: () => {
-        const np = makeNP(k, r, { case: "nom", num: "sg", prefer: isPerson, possChance: o.possChance, sillyScale: 0.5 });
+        const np = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), possChance: o.possChance, sillyScale: 0.5 });
         return np && { subj: { kind: "np", np }, person: 3, num: "sg", skills: ["s.sv", ...npSkills(np)] };
       },
     },
   ];
-  if (o.allowPlural !== false && k.skills.has("s.pl") && k.skills.has("v.3pl")) {
+  const pluralW = 2.5 * extra(k, ["s.pl", "v.3pl", "n1.nom.pl", "n2.nom.pl"], 1);
+  if (o.allowPlural !== false && k.skills.has("s.pl") && k.skills.has("v.3pl") && pluralW > 0) {
     opts.push({
-      w: 2.5,
+      w: pluralW,
       build: () => {
-        const np = makeNP(k, r, { case: "nom", num: "pl", prefer: isPerson, possChance: 0, sillyScale: 0.5 });
+        const np = makeNP(k, r, { case: "nom", num: "pl", prefer: agent(k), possChance: 0, sillyScale: 0.5 });
         return np && { subj: { kind: "np", np }, person: 3, num: "pl", skills: ["s.sv", "s.pl", ...npSkills(np)] };
       },
     });
-    if (k.skills.has("s.et")) {
+    const coordW = extra(k, ["s.et"], 1);
+    if (k.skills.has("s.et") && coordW > 0) {
       opts.push({
-        w: 1,
+        w: coordW,
         build: () => {
-          const a = makeNP(k, r, { case: "nom", num: "sg", prefer: isPerson, adjChance: 0.15, possChance: 0, sillyScale: 0.5 });
+          const a = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), adjChance: 0.15, possChance: 0, sillyScale: 0.5 });
           if (!a) return null;
-          const b = makeNP(k, r, { case: "nom", num: "sg", prefer: isPerson, adjChance: 0.15, possChance: 0, exclude: [a.noun.id], sillyScale: 0.5 });
+          const b = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), adjChance: 0.15, possChance: 0, exclude: [a.noun.id], sillyScale: 0.5 });
           return b && { subj: { kind: "coord", nps: [a, b] }, person: 3, num: "pl", skills: ["s.sv", "s.pl", "s.et", ...npSkills(a), ...npSkills(b)] };
         },
       });
@@ -217,14 +261,15 @@ function makeSubject(k: Knowledge, r: Rand, o: { allowPron?: boolean; allowPlura
       opts.push({
         w: 2.5,
         build: () => {
-          const shown = !k.skills.has("s.drop") || chance(r, 0.4);
+          // a new rule keeps ego / tū in sight; later they are often left out, as in real Latin
+          const shown = !k.skills.has("s.drop") || chance(r, rich(k) >= 0.5 ? 0.4 : k.focus?.includes("s.drop") ? 0.3 : 0.9);
           return { subj: { kind: "pron", person, shown }, person, num: "sg", skills: shown ? [] : ["s.drop"] };
         },
       });
     }
   }
-  if (o.allowNemo && k.skills.has("s.conn") && k.fixed.has("nemo")) {
-    opts.push({ w: 0.6, build: () => ({ subj: { kind: "nemo" }, person: 3, num: "sg", skills: ["s.conn"] }) });
+  if (o.allowNemo && k.skills.has("s.conn") && k.fixed.has("nemo") && extra(k, ["s.conn"], 1) > 0) {
+    opts.push({ w: 0.6 * extra(k, ["s.conn"], 1), build: () => ({ subj: { kind: "nemo" }, person: 3, num: "sg", skills: ["s.conn"] }) });
   }
   for (let tries = 0; tries < 6; tries++) {
     const total = opts.reduce((s, x) => s + x.w, 0);
@@ -240,8 +285,11 @@ function objectFor(k: Knowledge, r: Rand, verb: VerbEntry, exclude: string[]): N
   const drink = (n: NounEntry) => n.tags.includes("drink");
   const writing = (n: NounEntry) => n.tags.includes("writing");
   if (verb.id === "bibo") return makeNP(k, r, { case: "acc", num: "sg", require: drink, exclude, adjChance: 0.15 });
+  const portable = (n: NounEntry) => n.tags.includes("thing") && !isPlace(n);
   const prefer =
     verb.id === "lego" || verb.id === "scribo" ? writing
+    : verb.id === "porto" ? portable
+    : verb.id === "habeo" ? (n: NounEntry) => !isPlace(n)
     : verb.id === "disco" ? isThing
     : verb.id === "doceo" || verb.id === "desidero" ? isPerson
     : undefined;
@@ -256,16 +304,17 @@ type Template = (k: Knowledge, r: Rand) => Clause | null;
 const finite = (k: Knowledge, pred: (v: VerbEntry) => boolean, person: 1 | 2 | 3, num: Num) =>
   k.verbs.filter((v) => !v.irregular && pred(v) && verbUsable(k, v, pnOf(person, num)));
 
-function base(k: Knowledge, r: Rand, s: NonNullable<ReturnType<typeof makeSubject>>, verb: VerbEntry, extra: string[]): Clause {
-  const c: Clause = { subj: s.subj, person: s.person, num: s.num, verb, neg: false, skills: [...s.skills, `v.${pnOf(s.person, s.num)}`, ...extra] };
-  if (s.subj.kind !== "nemo" && k.skills.has("s.non") && chance(r, 0.18)) {
+function base(k: Knowledge, r: Rand, s: NonNullable<ReturnType<typeof makeSubject>>, verb: VerbEntry, more: string[]): Clause {
+  const c: Clause = { subj: s.subj, person: s.person, num: s.num, verb, neg: false, skills: [...s.skills, `v.${pnOf(s.person, s.num)}`, ...more] };
+  if (s.subj.kind !== "nemo" && k.skills.has("s.non") && takeExtra(k, r, ["s.non"], 0.18)) {
     c.neg = true;
     c.skills.push("s.non");
   }
   return c;
 }
 
-const subjectIds = (s: Subject) => (s.kind === "np" ? [s.np.noun.id] : s.kind === "coord" ? s.nps.map((n) => n.noun.id) : []);
+const npIds = (np: NP): string[] => [np.noun.id, ...(np.poss ? npIds(np.poss) : [])];
+const subjectIds = (s: Subject) => (s.kind === "np" ? npIds(s.np) : s.kind === "coord" ? s.nps.flatMap(npIds) : []);
 
 const TEMPLATES: Record<string, Template> = {
   // Subject + verb, maybe "well" or "now".
@@ -275,10 +324,10 @@ const TEMPLATES: Record<string, Template> = {
     const verbs = finite(k, (v) => v.intrans && v.id !== "habito", s.person, s.num);
     if (!verbs.length) return null;
     const c = base(k, r, s, pick(r, verbs), []);
-    if (k.skills.has("s.conn") && k.fixed.has("bene") && chance(r, 0.15)) {
+    if (k.skills.has("s.conn") && k.fixed.has("bene") && takeExtra(k, r, ["s.conn"], 0.15)) {
       c.adv = "bene";
       c.skills.push("s.conn");
-    } else if (k.fixed.has("nunc") && chance(r, 0.1)) c.adv = "nunc";
+    } else if (k.fixed.has("nunc") && chance(r, rich(k) >= 0.5 ? 0.1 * rich(k) : 0)) c.adv = "nunc";
     return c;
   },
   // Subject + object + verb.
@@ -286,7 +335,7 @@ const TEMPLATES: Record<string, Template> = {
     if (!k.skills.has("s.svo")) return null;
     const s = makeSubject(k, r, { allowNemo: true, possChance: 0.15 });
     if (!s) return null;
-    const verbs = finite(k, (v) => v.trans, s.person, s.num);
+    const verbs = finite(k, (v) => takesObject(k, v), s.person, s.num);
     if (!verbs.length) return null;
     const verb = pick(r, verbs);
     const obj = objectFor(k, r, verb, subjectIds(s.subj));
@@ -296,6 +345,8 @@ const TEMPLATES: Record<string, Template> = {
     const c = base(k, r, s, verb, ["s.svo"]);
     c.obj = obj;
     c.skills.push(...npSkills(obj));
+    // once the endings are solid, the object sometimes leads: only the endings tell who does what
+    if (rich(k) >= 1 && s.subj.kind === "np" && chance(r, 0.3)) c.objFirst = true;
     return c;
   },
   // Where: in + ablative.
@@ -318,7 +369,9 @@ const TEMPLATES: Record<string, Template> = {
     if (!preps.length) return null;
     const s = makeSubject(k, r, { possChance: 0.1 });
     if (!s) return null;
-    const verbs = finite(k, (v) => MOTION.has(v.id) || v.tags.includes("motion"), s.person, s.num);
+    let verbs = finite(k, (v) => MOTION.has(v.id) || v.tags.includes("motion"), s.person, s.num);
+    // while the rule is new: walk or run somewhere, without carrying anything
+    if (rich(k) < 0.5 && verbs.some((v) => !v.trans)) verbs = verbs.filter((v) => !v.trans);
     if (!verbs.length) return null;
     const verb = pick(r, verbs);
     const prep = pick(r, preps);
@@ -349,7 +402,11 @@ const TEMPLATES: Record<string, Template> = {
     if (useAdj) {
       const holder: NounEntry =
         s.subj.kind === "np" ? s.subj.np.noun : ({ decl: gender === "f" ? "1" : "2", gender } as NounEntry);
-      const adjs = k.adjs.filter((a) => a.id !== "meus" && adjUsable(k, a, holder, "nom", "sg"));
+      let adjs = k.adjs.filter((a) => a.id !== "meus" && adjUsable(k, a, holder, "nom", "sg"));
+      if (!chance(r, k.silly * 0.5)) {
+        const fitting = adjs.filter((a) => adjFits(a, s.subj.kind === "np" ? s.subj.np.noun.tags : ["person"]));
+        if (fitting.length) adjs = fitting;
+      }
       if (!adjs.length) return null;
       c.pred = { adj: pick(r, adjs), gender, predFirst: chance(r, 0.6) };
       c.skills.push("adj.agree", nounSkill(adjDecl(gender), "nom", "sg"));
@@ -358,8 +415,16 @@ const TEMPLATES: Record<string, Template> = {
       const np = makeNP(k, r, {
         case: "nom",
         num: "sg",
-        prefer: isPerson,
-        require: (n) => !n.proper && (s.subj.kind !== "pron" || n.gender === gender || n.tags.includes("person")),
+        prefer: agent(k), // "the farmer is a poet"; "the farmer is a bull" only when silly
+        require: (n) => {
+          if (n.proper || !(s.subj.kind !== "pron" || n.gender === gender || n.tags.includes("person"))) return false;
+          // sensible: not "the student (f) is a student (m)"
+          if (k.silly === 0 && s.subj.kind === "np") {
+            const subj = s.subj.np.noun;
+            if (n.en === subj.en || (isHuman(n) && isHuman(subj) && n.gender !== subj.gender)) return false;
+          }
+          return true;
+        },
         exclude: subjectIds(s.subj),
         possChance: 0.15,
       });
@@ -381,7 +446,7 @@ const TEMPLATES: Record<string, Template> = {
     const inf = pick(r, infs);
     const c = base(k, r, s, possum, ["v.possum", "s.inf", "v.inf"]);
     c.inf = { verb: inf };
-    if (inf.trans && k.skills.has("s.svo") && (!inf.intrans || chance(r, 0.6))) {
+    if (takesObject(k, inf) && k.skills.has("s.svo") && (!inf.intrans || chance(r, 0.6))) {
       const obj = objectFor(k, r, inf, subjectIds(s.subj));
       if (obj) {
         c.inf.obj = obj;
@@ -405,7 +470,7 @@ const TEMPLATES: Record<string, Template> = {
     c.inf = { verb: pick(r, infs) };
     if (verb.id === "doceo") {
       if (!k.skills.has("s.svo")) return null;
-      const obj = makeNP(k, r, { case: "acc", num: "sg", prefer: isPerson, exclude: subjectIds(s.subj), possChance: 0 });
+      const obj = makeNP(k, r, { case: "acc", num: "sg", prefer: agent(k), exclude: subjectIds(s.subj), possChance: 0 });
       if (!obj) return null;
       c.obj = obj;
       c.skills.push("s.svo", ...npSkills(obj));
@@ -420,14 +485,29 @@ export const TEMPLATE_NAMES = Object.keys(TEMPLATES);
  * A new sentence. Builds several candidates and keeps the one that practises
  * the most focus skills (ties broken at random).
  */
-export function generate(k: Knowledge, r: Rand, focus: string[] = [], templates: string[] = TEMPLATE_NAMES): Clause | null {
+/** The construction each pattern beyond subject-verb(-object) is there to show. */
+const TEMPLATE_SKILLS: Record<string, string[]> = {
+  loc: ["s.loc", "n1.abl.sg", "n2.abl.sg", "n2n.abl.sg"],
+  motion: ["s.into", "s.ad"],
+  est: ["s.est", "v.sum"],
+  possum: ["v.possum", "s.inf"],
+  learnTo: ["s.inf", "v.inf"],
+};
+
+export function generate(k0: Knowledge, r: Rand, focus: string[] = [], templates: string[] = TEMPLATE_NAMES): Clause | null {
+  const k = { ...k0, focus };
   let alive = templates.filter((t) => TEMPLATES[t]);
+  // while a rule is new, a longer pattern only when it is the thing being practised
+  if (rich(k) < 0.5) {
+    const plain = alive.filter((t) => !TEMPLATE_SKILLS[t] || TEMPLATE_SKILLS[t].some((s) => focus.includes(s)));
+    if (plain.length) alive = plain;
+  }
   const fails: Record<string, number> = {};
   let best: Clause | null = null;
   let bestScore = -1;
   for (let i = 0; i < 80 && alive.length; i++) {
     const name = pick(r, alive);
-    const c = TEMPLATES[name](k, r);
+    const c = TEMPLATES[name]({ ...k, spent: { n: 0 } }, r);
     if (!c) {
       fails[name] = (fails[name] ?? 0) + 1;
       if (fails[name] >= 6) alive = alive.filter((t) => t !== name);
@@ -508,6 +588,8 @@ export function latinTokens(c: Clause, k: Knowledge): LToken[] {
   const out: LToken[] = [];
   const pn = pnOf(c.person, c.num);
   if (c.adv === "nunc") out.push(fixedToken(k, "nunc", "adv", "nunc"));
+  const objFirst = c.objFirst && c.obj && !c.pred && !c.inf;
+  if (objFirst) out.push(...npTokens(c.obj!, "obj"));
   switch (c.subj.kind) {
     case "np":
       out.push(...npTokens(c.subj.np, "subj"));
@@ -529,7 +611,7 @@ export function latinTokens(c: Clause, k: Knowledge): LToken[] {
     out.push(fixedToken(k, c.pp.prep === "in" ? "in-prep" : "ad-prep", "prep", c.pp.prep));
     out.push(...npTokens(c.pp.np, "pp"));
   }
-  if (c.obj) out.push(...npTokens(c.obj, "obj"));
+  if (c.obj && !objFirst) out.push(...npTokens(c.obj, "obj"));
   const verb = verbToken(c.verb, `pres.${pn}` as VerbKey, "verb");
   if (c.pred) {
     const pred: LToken[] = c.pred.np

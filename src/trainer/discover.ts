@@ -50,24 +50,25 @@ export interface Example {
   english: string;
 }
 
-/** Up to `count` different sentences that use the card's word with known words and grammar. */
+/** Up to `count` different sentences that use the card's word with known words and grammar: short ones first, different patterns. */
 export function cardExamples(card: Card, k: Knowledge, r: Rand, count = 3): Example[] {
   const biased = withWord({ ...k, silly: 0 }, card, card.entry.kind === "adj" ? 4 : 8);
-  const out: Example[] = [];
+  const pool: (Example & { template: string })[] = [];
   const seen = new Set<string>();
-  const usedTemplates = new Set<string>();
-  for (let i = 0; i < 300 && out.length < count; i++) {
+  for (let i = 0; i < 600 && pool.length < count * 4; i++) {
     const c = generate(biased, r);
     if (!c) continue;
     const tokens = latinTokens(c, biased);
     if (!tokens.some((t) => t.analysis?.entry.id === card.entry.id)) continue;
     const latin = latinText(tokens);
     if (seen.has(latin) || tokens.length > 7) continue;
-    // one example per sentence pattern, while there is a choice
-    if (i < 240 && usedTemplates.has(c.template ?? "")) continue;
-    usedTemplates.add(c.template ?? "");
     seen.add(latin);
-    out.push({ tokens, latin, english: english(c, biased).text });
+    pool.push({ tokens, latin, english: english(c, biased).text, template: c.template ?? "" });
   }
-  return out.sort((a, b) => a.tokens.length - b.tokens.length);
+  pool.sort((a, b) => a.tokens.length - b.tokens.length);
+  // the shortest of each pattern first, then the shortest of the rest
+  const out: typeof pool = [];
+  for (const x of pool) if (out.length < count && !out.some((o) => o.template === x.template)) out.push(x);
+  for (const x of pool) if (out.length < count && !out.includes(x)) out.push(x);
+  return out.sort((a, b) => a.tokens.length - b.tokens.length).map(({ tokens, latin, english }) => ({ tokens, latin, english }));
 }

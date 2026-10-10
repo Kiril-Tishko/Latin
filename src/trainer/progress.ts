@@ -46,13 +46,18 @@ export interface Settings {
 }
 
 export interface Progress {
-  version: 1;
+  version: 2;
   updatedAt: number;
   settings: Settings;
   /** Lessons the learner has watched; their words and rules are unlocked. */
   lessonsDone: number[];
-  /** The lesson the trainer concentrates on. */
+  /**
+   * The step the learner is on: practice uses the rules of this lesson and the
+   * ones before it (with every known word), and concentrates on this lesson.
+   */
   focusLesson: number;
+  /** Day (YYYY-MM-DD) each step's rule refresher was last shown, keyed by lesson. */
+  rulesShown: Record<string, string>;
   skills: Record<string, SkillStat>;
   words: Record<string, WordStat>;
   /** Discover cards opened (seen) and added to the dictionary. */
@@ -68,11 +73,12 @@ export const DEFAULT_SETTINGS: Settings = { macrons: true, dailyGoal: 20, silly:
 
 export function newProgress(): Progress {
   return {
-    version: 1,
+    version: 2,
     updatedAt: 0,
     settings: { ...DEFAULT_SETTINGS },
     lessonsDone: [1, 2, 3, 4],
-    focusLesson: 4,
+    focusLesson: 1,
+    rulesShown: {},
     skills: {},
     words: {},
     revealed: [],
@@ -87,10 +93,11 @@ export function newProgress(): Progress {
 export function migrate(raw: unknown): Progress {
   const base = newProgress();
   if (!raw || typeof raw !== "object") return base;
-  const p = raw as Partial<Progress>;
-  return {
+  const p = raw as Omit<Partial<Progress>, "version"> & { version?: number };
+  const out = {
     ...base,
     ...p,
+    version: 2,
     settings: { ...base.settings, ...(p.settings ?? {}) },
     skills: p.skills ?? {},
     words: p.words ?? {},
@@ -98,7 +105,12 @@ export function migrate(raw: unknown): Progress {
     added: p.added ?? [],
     days: p.days ?? {},
     mistakes: p.mistakes ?? [],
+    rulesShown: p.rulesShown ?? {},
   } as Progress;
+  // Version 2 practises step by step. The learner remembered the words but not
+  // the rules, so saves from version 1 start again at Lesson I.
+  if ((p.version ?? 1) < 2) out.focusLesson = out.lessonsDone.length ? Math.min(...out.lessonsDone) : 1;
+  return out;
 }
 
 export const dayKey = (t = Date.now()) => {

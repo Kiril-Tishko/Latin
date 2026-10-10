@@ -4,6 +4,7 @@ import { LESSON_WORDS } from "../../content/words";
 import { conjugate, declineNoun } from "../../latin/morph";
 import { nounSkill } from "../../latin/skills";
 import { roman } from "../../latin/text";
+import { Knowledge } from "../../latin/generate";
 import { Case, CASE_NAMES, CASE_ROLE, CASE_SLAVIC, full, NounEntry, NounKey, PN, VerbEntry, VerbKey } from "../../latin/types";
 import { CaseChip } from "../components";
 import { LatinTokens } from "../latin";
@@ -12,20 +13,20 @@ import { RuleView } from "./lessons";
 
 const word = (id: string) => Object.values(LESSON_WORDS).flat().find((w) => w.id === id)!;
 
-function NounTable() {
-  const k = derived().knowledge;
-  const cols = ["puella", "amicus", "liber", "vinum"].map((id) => word(id) as NounEntry);
-  const rows: [Case, "sg" | "pl"][] = [["nom", "sg"], ["acc", "sg"], ["gen", "sg"], ["abl", "sg"], ["nom", "pl"]];
+type NounRow = [Case, "sg" | "pl"];
+const NOUN_ROWS: NounRow[] = [["nom", "sg"], ["acc", "sg"], ["gen", "sg"], ["abl", "sg"], ["nom", "pl"]];
+const NOUN_COLS: [string, string][] = [["puella", "-a (1st)"], ["amicus", "-us (2nd)"], ["liber", "-er (2nd)"], ["vinum", "-um (2nd, neuter)"]];
+
+/** Noun endings, one column per pattern. Forms the learner has not met yet show as "?". */
+export function NounTable({ rows = NOUN_ROWS, cols = NOUN_COLS.map(([id]) => id), k = derived().knowledge }: { rows?: NounRow[]; cols?: string[]; k?: Knowledge }) {
+  const entries = NOUN_COLS.filter(([id]) => cols.includes(id)).map(([id, label]) => [word(id) as NounEntry, label] as const);
   return (
     <div class="table-wrap">
       <table class="paradigm">
         <thead>
           <tr>
             <th></th>
-            <th>-a (1st)</th>
-            <th>-us (2nd)</th>
-            <th>-er (2nd)</th>
-            <th>-um (2nd, neuter)</th>
+            {entries.map(([e, label]) => <th key={e.id}>{label}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -34,7 +35,7 @@ function NounTable() {
               <th>
                 <CaseChip c={c} label={`${CASE_NAMES[c]}${n === "pl" ? " plural" : ""}`} />
               </th>
-              {cols.map((e) => {
+              {entries.map(([e]) => {
                 const key = `${c}.${n}` as NounKey;
                 const form = declineNoun(e)[key];
                 if (!form || !k.skills.has(nounSkill(e.decl, c, n))) return <td key={e.id} class="lock" title="Comes in a later lesson">?</td>;
@@ -52,32 +53,30 @@ function NounTable() {
   );
 }
 
-function VerbTable() {
-  const k = derived().knowledge;
-  const cols = ["laboro", "doceo", "scribo", "dormio", "sum", "possum"].map((id) => word(id) as VerbEntry);
-  const rows: [PN | "inf", string][] = [["1sg", "ego"], ["2sg", "tū"], ["3sg", "he / she / it"], ["3pl", "they"], ["inf", "to …"]];
+type VerbRow = PN | "inf";
+const VERB_ROWS: [VerbRow, string][] = [["1sg", "ego"], ["2sg", "tū"], ["3sg", "he / she / it"], ["3pl", "they"], ["inf", "to …"]];
+const VERB_COLS: [string, string][] = [["laboro", "1st"], ["doceo", "2nd"], ["scribo", "3rd"], ["dormio", "4th"], ["sum", "to be"], ["possum", "can"]];
+
+/** Present-tense verb endings, one column per pattern. */
+export function VerbTable({ rows = VERB_ROWS.map(([r]) => r), cols = VERB_COLS.map(([id]) => id), k = derived().knowledge }: { rows?: VerbRow[]; cols?: string[]; k?: Knowledge }) {
+  const entries = VERB_COLS.filter(([id]) => cols.includes(id)).map(([id, label]) => [word(id) as VerbEntry, label] as const);
   return (
     <div class="table-wrap">
       <table class="paradigm">
         <thead>
           <tr>
             <th></th>
-            <th>1st</th>
-            <th>2nd</th>
-            <th>3rd</th>
-            <th>4th</th>
-            <th>to be</th>
-            <th>can</th>
+            {entries.map(([v, label]) => <th key={v.id}>{label}</th>)}
           </tr>
         </thead>
         <tbody>
-          {rows.map(([pn, label]) => (
+          {VERB_ROWS.filter(([pn]) => rows.includes(pn)).map(([pn, label]) => (
             <tr key={pn}>
               <th>{label}</th>
-              {cols.map((v) => {
+              {entries.map(([v]) => {
                 const key = (pn === "inf" ? "inf" : `pres.${pn}`) as VerbKey;
                 const form = conjugate(v)[key];
-                const known = pn === "inf" ? k.skills.has("v.inf") : k.skills.has(`v.${pn}`) && (!v.irregular || pn.endsWith("sg"));
+                const known = pn === "inf" ? k.skills.has("v.inf") : v.irregular ? k.skills.has(`v.${v.irregular}`) && pn.endsWith("sg") : k.skills.has(`v.${pn}`);
                 if (!form || !known) return <td key={v.id} class="lock" title="Comes in a later lesson">?</td>;
                 return (
                   <td key={v.id}>

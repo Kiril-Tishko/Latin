@@ -30,7 +30,11 @@ export function Settings({ onClose }: { onClose: () => void }) {
                     update((x) => {
                       const on = (e.target as HTMLInputElement).checked;
                       x.lessonsDone = on ? [...new Set([...x.lessonsDone, l.n])].sort() : x.lessonsDone.filter((n) => n !== l.n);
-                      if (!x.lessonsDone.includes(x.focusLesson)) x.focusLesson = Math.max(1, ...x.lessonsDone);
+                      // the step moves to the nearest watched lesson below it (or the first one)
+                      if (!x.lessonsDone.includes(x.focusLesson)) {
+                        const below = x.lessonsDone.filter((n) => n < x.focusLesson);
+                        x.focusLesson = below.length ? Math.max(...below) : x.lessonsDone.length ? Math.min(...x.lessonsDone) : 1;
+                      }
                     })
                   }
                 />
@@ -41,13 +45,13 @@ export function Settings({ onClose }: { onClose: () => void }) {
         </div>
 
         <div class="stack" style={{ gap: "6px" }}>
-          <span class="eyebrow">Focus lesson</span>
+          <span class="eyebrow">Step</span>
           <div class="seg">
             {p.lessonsDone.map((n) => (
-              <button key={n} aria-pressed={p.focusLesson === n} onClick={() => update((x) => void (x.focusLesson = n))}>{roman(n)}</button>
+              <button key={n} aria-pressed={p.focusLesson === n} onClick={() => update((x) => void (x.focusLesson = n))}>Lesson {roman(n)}</button>
             ))}
           </div>
-          <span class="small muted">Mixed practice gives this lesson's rules extra weight.</span>
+          <span class="small muted">Practice uses every word you know but only the rules up to this lesson, and concentrates on this lesson.</span>
         </div>
 
         <div class="stack" style={{ gap: "6px" }}>

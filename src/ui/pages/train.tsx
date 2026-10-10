@@ -2,22 +2,26 @@
 // detailed feedback with colored endings, and Claude on hand for "why?".
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { LESSON_BY_N } from "../../content/lessons";
-import { seeded } from "../../latin/generate";
+import { Knowledge, latinText, seeded } from "../../latin/generate";
 import { SKILL_BY_ID } from "../../latin/skills";
+import { roman } from "../../latin/text";
 import { Exercise, ExerciseKind, KIND_LABEL, Result } from "../../trainer/exercises";
-import { mastery } from "../../trainer/progress";
-import { applyResult, buildSession, nextExercise, placementSession } from "../../trainer/session";
+import { buildKnowledge } from "../../trainer/knowledge";
+import { dayKey, mastery } from "../../trainer/progress";
+import { applyResult, buildSession, nextExercise, placementSession, readiness, SessionOpts } from "../../trainer/session";
 import { openAsk, judge } from "../ask";
 import { CaseChip, Icon, Mosaic, toast } from "../components";
 import { LatinTokens } from "../latin";
 import { Inline, Markup } from "../markup";
+import { go } from "../nav";
+import { lessonOfSkill, RuleBox, RuleIntro } from "../rulecard";
+import { fitToWindow } from "../fit";
 import { derived, getProgress, update, useProgress } from "../store";
-import { roman } from "../../latin/text";
-import { latinText } from "../../latin/generate";
 import { speak, stopSpeaking } from "../../audio/speech";
 import { audioReady, Speak } from "../speak";
 
 export type Mode =
+  | { kind: "step" }
   | { kind: "mixed" }
   | { kind: "lesson"; n: number }
   | { kind: "skills"; skills: string[]; label: string }
@@ -39,6 +43,10 @@ interface Session {
   index: number;
   attempts: Attempt[];
   size: number;
+  /** Highest lesson whose rules the exercises use. */
+  level: number;
+  /** Show the step's rules before the first exercise. */
+  showRules?: boolean;
 }
 
 let session: Session | null = null;
@@ -52,8 +60,10 @@ const SIZE = 15;
 
 export function modeLabel(m: Mode): string {
   switch (m.kind) {
+    case "step":
+      return `Step ${roman(getProgress().focusLesson)} · ${LESSON_BY_N.get(getProgress().focusLesson)?.title ?? ""}`;
     case "mixed":
-      return `Mixed practice · Lesson ${roman(getProgress().focusLesson)} focus`;
+      return "All lessons mixed";
     case "lesson":
       return `Lesson ${roman(m.n)}`;
     case "skills":
@@ -71,37 +81,72 @@ export function modeLabel(m: Mode): string {
   }
 }
 
-function ctx() {
-  return { k: derived().knowledge, lex: derived().lexicon, r: seeded(Date.now() % 2147483647), audio: audioReady() };
+/**
+ * The highest lesson whose rules a mode uses. Practice goes step by step: every
+ * word the learner knows, but only the rules up to the current step (or up to
+ * the lesson / rule chosen). "All lessons mixed" and the check-up use them all.
+ */
+function levelOf(mode: Mode): number {
+  const p = getProgress();
+  const top = Math.max(1, ...p.lessonsDone);
+  switch (mode.kind) {
+    case "mixed":
+    case "placement":
+      return top;
+    case "lesson":
+      return mode.n;
+    case "skills":
+      return Math.max(p.focusLesson, ...mode.skills.map((id) => lessonOfSkill(id) ?? 1));
+    default:
+      return p.focusLesson;
+  }
+}
+
+function knowledgeFor(level: number): Knowledge {
+  const p = getProgress();
+  const d = derived();
+  if (level >= Math.max(...p.lessonsDone)) return d.knowledge;
+  if (level === p.focusLesson) return d.stepKnowledge;
+  return buildKnowledge(p.lessonsDone, d.added, p.settings.silly, p.lessonsDone.filter((n) => n <= level));
+}
+
+function ctx(level: number) {
+  return { k: knowledgeFor(level), lex: derived().lexicon, r: seeded(Date.now() % 2147483647), audio: audioReady() };
 }
 
 /** Starts a new session (from anywhere in the app). */
 export function startSession(mode: Mode) {
   const p = getProgress();
-  const c = ctx();
+  const level = levelOf(mode);
+  const c = ctx(level);
   const vocab = derived().words.filter((w) => w.kind !== "fixed");
+  // a step meets a rule in single forms and endings first, whole sentences later
+  const stepwise: Partial<SessionOpts> = { adaptive: true, focusLesson: level, kinds: ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen"] };
   let items: Exercise[];
   switch (mode.kind) {
+    case "step":
+      items = buildSession(p, c, { size: 12, ...stepwise });
+      break;
     case "placement":
       items = placementSession(p, c);
       break;
     case "lesson":
-      items = buildSession(p, c, { size: SIZE, skills: LESSON_BY_N.get(mode.n)?.skills, vocab: LESSON_BY_N.get(mode.n)?.words.filter((w) => w.kind !== "fixed") });
+      items = buildSession(p, c, { size: 12, ...stepwise, skills: LESSON_BY_N.get(mode.n)?.skills });
       break;
     case "skills":
-      items = buildSession(p, c, { size: 10, skills: mode.skills, kinds: ["en2la", "ending", "form", "transform", "la2en"] });
+      items = buildSession(p, c, { size: 10, ...stepwise, skills: mode.skills, kinds: ["en2la", "ending", "choose", "form", "transform", "la2en"] });
       break;
     case "writing":
-      items = buildSession(p, c, { size: SIZE, kinds: ["en2la", "transform"] });
+      items = buildSession(p, c, { size: SIZE, kinds: ["en2la", "transform"], focusLesson: level });
       break;
     case "endings":
-      items = buildSession(p, c, { size: 20, kinds: ["ending", "form"] });
+      items = buildSession(p, c, { size: 20, kinds: ["ending", "choose", "form"], focusLesson: level });
       break;
     case "words":
       items = buildSession(p, c, { size: 20, kinds: ["vocab"], vocab });
       break;
     case "listening":
-      items = buildSession(p, c, { size: 12, kinds: ["listen"] });
+      items = buildSession(p, c, { size: 12, kinds: ["listen"], focusLesson: level });
       break;
     default:
       items = buildSession(p, c, { size: SIZE, vocab });
@@ -110,7 +155,8 @@ export function startSession(mode: Mode) {
     toast("Nothing to practise there yet.");
     return;
   }
-  setSession({ mode, items, index: 0, attempts: [], size: items.length });
+  const showRules = mode.kind === "step" && p.rulesShown[level] !== dayKey();
+  setSession({ mode, items, index: 0, attempts: [], size: items.length, level, showRules });
 }
 
 function useSession() {
@@ -129,22 +175,69 @@ export function Train() {
   const s = useSession();
   useProgress();
   if (!s) return <Chooser />;
+  if (s.showRules) {
+    const start = () => {
+      update((p) => void (p.rulesShown[s.level] = dayKey()));
+      setSession({ ...s, showRules: false });
+    };
+    return <RuleIntro lesson={s.level} k={knowledgeFor(s.level)} onStart={start} />;
+  }
   if (s.index >= s.items.length) return <Summary s={s} />;
   return <Runner s={s} key={s.items[s.index].id} />;
 }
 
 function Chooser() {
   const p = useProgress();
+  const level = p.focusLesson;
+  const lesson = LESSON_BY_N.get(level);
+  const ready = readiness(p, level);
+  const nextLesson = p.lessonsDone.filter((n) => n > level).sort()[0];
+  const upTo = level === 1 ? "the rules of Lesson I" : `the rules of Lessons I-${roman(level)}`;
   const modes: { mode: Mode; title: string; text: string }[] = [
-    { mode: { kind: "mixed" }, title: "Mixed practice", text: `All exercise types, aimed at your weakest endings, mostly from Lesson ${roman(p.focusLesson)}.` },
-    { mode: { kind: "writing" }, title: "Write Latin", text: "Translate into Latin and transform sentences. The fastest way to make endings automatic." },
-    { mode: { kind: "endings" }, title: "Endings drill", text: "Short, quick: fill in endings and build forms." },
-    { mode: { kind: "words" }, title: "Word recall", text: "Your dictionary, in both directions, spaced so words come back just before you forget." },
-    ...(audioReady() ? [{ mode: { kind: "listening" } as Mode, title: "Listening", text: "Hear a sentence, write it in Latin. Trains your ear for the endings." }] : []),
-    ...(!p.placementDone ? [{ mode: { kind: "placement" } as Mode, title: "Check-up (3 min)", text: "Twelve questions across Lessons I-IV to find what is solid and what is shaky." }] : []),
+    { mode: { kind: "writing" }, title: "Write Latin", text: `Whole sentences into Latin, with ${upTo}.` },
+    { mode: { kind: "endings" }, title: "Endings drill", text: "Quick: choose and fill in endings." },
+    { mode: { kind: "words" }, title: "Word recall", text: "Your words, both ways, just before you would forget them." },
+    ...(audioReady() ? [{ mode: { kind: "listening" } as Mode, title: "Listening", text: "Hear a sentence, write it down." }] : []),
+    { mode: { kind: "mixed" }, title: "All lessons mixed", text: "Every rule at once. The hardest." },
+    ...(!p.placementDone ? [{ mode: { kind: "placement" } as Mode, title: "Check-up (3 min)", text: "Twelve questions across Lessons I-IV." }] : []),
   ];
   return (
     <div class="stack-lg">
+      <section class="panel frame step-panel">
+        <div class="stack" style={{ gap: "10px" }}>
+          <span class="eyebrow">Step by step · Lesson {roman(level)}</span>
+          <h2>{lesson?.title}</h2>
+          <p class="muted small">Only {upTo}, with all your words. Easy first; harder as it sticks.</p>
+          <div class="row">
+            <button class="btn big" onClick={() => startSession({ kind: "step" })}>
+              <Icon.play /> Practise Lesson {roman(level)}
+            </button>
+            <button class="linkish" onClick={() => go({ page: "lesson", n: level })}>Read the lesson</button>
+          </div>
+        </div>
+        <div class="stack step-side" style={{ gap: "8px" }}>
+          <div class="seg" role="group" aria-label="Step">
+            {p.lessonsDone.map((n) => (
+              <button key={n} aria-pressed={n === level} title={LESSON_BY_N.get(n)?.title} onClick={() => update((x) => void (x.focusLesson = n))}>
+                Lesson {roman(n)}
+                {readiness(p, n).ready ? " ✓" : ""}
+              </button>
+            ))}
+          </div>
+          <div class="spread small ui">
+            <span>Ready for the next step</span>
+            <strong>{Math.round(ready.value * 100)}%</strong>
+          </div>
+          <Mosaic value={ready.value} tiles={10} label={`${Math.round(ready.value * 100)}% ready`} />
+          {ready.ready && nextLesson ? (
+            <button class="btn gold small" style={{ alignSelf: "flex-start" }} onClick={() => update((x) => void (x.focusLesson = nextLesson))}>
+              Lesson {roman(level)} is solid: go to Lesson {roman(nextLesson)} <Icon.arrow />
+            </button>
+          ) : (
+            <span class="small muted">{ready.ready ? "Every lesson you watched is solid." : `The next lesson opens up at 80%.`}</span>
+          )}
+        </div>
+      </section>
       <div class="mode-grid">
         {modes.map((m) => (
           <button key={m.title} class="panel frame mode-card" onClick={() => startSession(m.mode)}>
@@ -153,16 +246,6 @@ function Chooser() {
             <p class="muted small">{m.text}</p>
           </button>
         ))}
-      </div>
-      <div class="stack">
-        <span class="eyebrow">Practise one lesson</span>
-        <div class="row">
-          {p.lessonsDone.map((n) => (
-            <button key={n} class="btn ghost" onClick={() => startSession({ kind: "lesson", n })}>
-              Lesson {roman(n)}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -179,7 +262,9 @@ function Runner({ s }: { s: Session }) {
   const [answer, setAnswer] = useState("");
   const [res, setRes] = useState<Result | null>(null);
   const [showHints, setShowHints] = useState(false);
-  const [showColors, setShowColors] = useState(false);
+  const [showRule, setShowRule] = useState(false);
+  // a rule that is still new is shown with its colors from the start
+  const [showColors, setShowColors] = useState(!!ex.easy);
   const [showEnglish, setShowEnglish] = useState(false);
   const [judging, setJudging] = useState(false);
   const [judgement, setJudgement] = useState<string | null>(null);
@@ -189,7 +274,7 @@ function Runner({ s }: { s: Session }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   // the exercise always fits the window: shrink it (never below a readable size) when it would scroll
-  useLayoutEffect(() => fitToWindow(panelRef.current, !!res), [ex.id, res, showHints, showEnglish, judgement, judging]);
+  useLayoutEffect(() => fitToWindow(panelRef.current, !!res), [ex.id, res, showHints, showRule, showEnglish, judgement, judging]);
 
   useEffect(() => {
     if (!res) inputRef.current?.focus();
@@ -206,6 +291,21 @@ function Runner({ s }: { s: Session }) {
     if (ex.audio && auto && audioReady()) void speak(ex.audio, { id: `prompt-${ex.id}` });
     return () => stopSpeaking();
   }, [ex.id]);
+
+  // 1, 2, 3 pick an option in a choice exercise
+  useEffect(() => {
+    if (ex.answer !== "choice" || res || !ex.choices) return;
+    const onKey = (e: KeyboardEvent) => {
+      const n = Number(e.key);
+      if ((e.target as HTMLElement).closest?.("input, textarea, select, [contenteditable]")) return;
+      if (n >= 1 && n <= ex.choices!.length) {
+        setAnswer(String(n - 1));
+        check(String(n - 1));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ex.id, res]);
 
   function check(given = answer) {
     if (res) return;
@@ -228,7 +328,7 @@ function Runner({ s }: { s: Session }) {
     let items = s.items;
     // a wrong sentence comes back once more at the end of the round
     if (res.verdict === "wrong" && ex.kind !== "identify" && s.items.length < s.size + 4) {
-      const again = nextExercise(getProgress(), ctx(), { size: 1, skills: Object.keys(res.credit).filter((k) => res.credit[k] < 0.5), kinds: [ex.kind === "vocab" ? "vocab" : ex.kind], vocab: derived().words.filter((w) => ex.words.includes(w.id)) }, new Set(s.items.map((e) => e.context)));
+      const again = nextExercise(getProgress(), ctx(s.level), { size: 1, skills: Object.keys(res.credit).filter((k) => res.credit[k] < 0.5), kinds: [ex.kind === "vocab" ? "vocab" : ex.kind], vocab: derived().words.filter((w) => ex.words.includes(w.id)) }, new Set(s.items.map((e) => e.context)));
       if (again) items = [...items, again];
     }
     setSession({ ...s, items, attempts, index: s.index + 1 });
@@ -328,10 +428,17 @@ function Runner({ s }: { s: Session }) {
           {!res && (
             <div class="spread ex-actions">
               <div class="row">
-                {ex.hints.filter(Boolean).length > 0 && (
-                  <button class="btn ghost" onClick={() => setShowHints(!showHints)}>{showHints ? "Hide hint" : "Hint"}</button>
+                {ex.skills.length > 0 && (
+                  <button class="btn ghost" aria-pressed={showRule} onClick={() => { setShowRule(!showRule); setShowHints(false); }}>
+                    {showRule ? "Hide rule" : "Rule"}
+                  </button>
                 )}
-                {ex.latin && ex.kind !== "identify" && ex.kind !== "listen" && (
+                {ex.hints.filter(Boolean).length > 0 && (
+                  <button class="btn ghost" aria-pressed={showHints} onClick={() => { setShowHints(!showHints); setShowRule(false); }}>
+                    {showHints ? "Hide hint" : "Hint"}
+                  </button>
+                )}
+                {ex.latin && ex.kind !== "identify" && ex.kind !== "listen" && !ex.easy && (
                   <button class="btn ghost" onClick={() => setShowColors(!showColors)}>{showColors ? "Hide colors" : "Show colors"}</button>
                 )}
                 <button class="linkish" onClick={giveUp}>I don't know</button>
@@ -349,6 +456,7 @@ function Runner({ s }: { s: Session }) {
               {ex.hints.filter(Boolean).map((h, i) => <div key={i}><Inline text={h} /></div>)}
             </div>
           )}
+          {showRule && !res && <RuleBox skills={ex.skills} lesson={s.level} />}
         </div>
 
         {res && (
@@ -450,6 +558,23 @@ function Prompt(props: {
           {translation}
         </div>
       );
+    case "choose":
+      return (
+        <div class="stack" style={{ gap: "6px" }}>
+          <p class="latin-lg"><LatinTokens tokens={ex.latin!} blank={res ? undefined : ex.blank} whole plain={!showColors} /></p>
+          {translation}
+          <div class="choices" role="group" aria-label="Options">
+            {ex.choices!.map((c, i) => {
+              const state = !res ? "" : c.id === ex.correctChoice ? "chosen-good" : c.id === chosen ? "chosen-bad" : "";
+              return (
+                <button key={c.id} class={`word-btn choice ${state}`} disabled={!!res} onClick={() => onChoose(c.id)}>
+                  <span class="kbd">{i + 1}</span> <span class="latin">{c.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
     case "form":
       return (
         <div class="row">
@@ -478,7 +603,10 @@ function Prompt(props: {
 function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: string }) {
   const v = VERDICT[res.verdict];
   const latinAnswer = ex.answer === "la" && res.tokens;
-  const meaning = ex.kind === "transform" ? ex.answerEnglish : ex.kind === "ending" ? ex.english : undefined;
+  const meaning = ex.kind === "transform" ? ex.answerEnglish : ex.kind === "ending" || ex.kind === "choose" ? ex.english : undefined;
+  // after a mistake: the one-line rule for each skill it was about
+  const blamed = res.verdict === "correct" ? [] : [...new Set(res.issues.filter((i) => i.kind !== "tip" && i.kind !== "typo").map((i) => i.skill).filter(Boolean) as string[])];
+  const ruleHints = blamed.map((id) => SKILL_BY_ID.get(id)?.hint).filter(Boolean).slice(0, 2) as string[];
   return (
     <div class="stack" style={{ gap: "12px" }}>
       <div class={`verdict ${res.verdict}`} role="status">
@@ -512,7 +640,7 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
           </div>
         ) : res.expectedTokens && ex.kind !== "identify" ? (
           <p class="latin-lg">
-            <LatinTokens tokens={res.expectedTokens} period={ex.kind !== "form"} />
+            <LatinTokens tokens={res.expectedTokens} period={ex.kind !== "form"} cap={ex.kind !== "form"} />
             <Speak text={latinText(res.expectedTokens)} id={`answer-${ex.id}`} />
           </p>
         ) : (
@@ -524,6 +652,38 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
         <ul class="issues">
           {res.issues.filter((i) => i.message).map((i, k) => <li key={k}><Inline text={i.message} /></li>)}
         </ul>
+      )}
+      {ruleHints.length > 0 && (
+        <div class="rule-hint">
+          <span class="eyebrow">Rule</span>
+          {ruleHints.map((h, i) => <p key={i}><Inline text={h} /></p>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** After a step session: how close the step is to done, and the way to the next one. */
+function StepProgress({ level }: { level: number }) {
+  const p = useProgress();
+  const r = readiness(p, level);
+  const nextLesson = p.lessonsDone.filter((n) => n > level).sort()[0];
+  return (
+    <div class="panel stack" style={{ gap: "8px" }}>
+      <div class="spread">
+        <h3>Lesson {roman(level)}: ready for the next step</h3>
+        <strong class="ui">{Math.round(r.value * 100)}%</strong>
+      </div>
+      <Mosaic value={r.value} tiles={10} />
+      {r.ready && nextLesson && p.focusLesson === level ? (
+        <div class="row">
+          <span class="small">These rules are solid now.</span>
+          <button class="btn gold small" onClick={() => { update((x) => void (x.focusLesson = nextLesson)); setSession(null); }}>
+            Go to Lesson {roman(nextLesson)} <Icon.arrow />
+          </button>
+        </div>
+      ) : (
+        <span class="small muted">{r.ready ? "These rules are solid." : "The next lesson opens up at 80%. Another round brings it closer."}</span>
       )}
     </div>
   );
@@ -545,6 +705,7 @@ function Summary({ s }: { s: Session }) {
           {right} correct, {almost} almost, {wrong.length} to review, out of {s.attempts.length}.
         </p>
       </div>
+      {(s.mode.kind === "step" || s.mode.kind === "lesson") && <StepProgress level={s.level} />}
       {touched.length > 0 && (
         <div class="panel stack">
           <h3>Skills practised</h3>
@@ -587,42 +748,6 @@ function Summary({ s }: { s: Session }) {
       </div>
     </div>
   );
-}
-
-/**
- * Scales the exercise panel down (CSS zoom) until the page no longer scrolls.
- * On narrow screens the answer sits below the sentence and the page scrolls to
- * it, so only the question is fitted there.
- */
-function fitToWindow(el: HTMLElement | null, answered: boolean) {
-  if (!el) return;
-  const run = () => {
-    el.style.removeProperty("zoom");
-    const wide = window.innerWidth > 980;
-    if (!wide && answered) return;
-    const min = wide ? 0.55 : 0.8;
-    const doc = document.documentElement;
-    let zoom = 1;
-    for (let i = 0; i < 8; i++) {
-      const over = doc.scrollHeight - window.innerHeight;
-      if (over <= 0 || zoom <= min) break;
-      const h = el.getBoundingClientRect().height;
-      zoom = Math.max(min, zoom * Math.min(0.97, (h - over - 2) / h));
-      el.style.setProperty("zoom", zoom.toFixed(3));
-    }
-  };
-  run();
-  let frame = 0;
-  const again = () => {
-    cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(run);
-  };
-  window.addEventListener("resize", again);
-  void document.fonts?.ready.then(again);
-  return () => {
-    cancelAnimationFrame(frame);
-    window.removeEventListener("resize", again);
-  };
 }
 
 export function endSession() {

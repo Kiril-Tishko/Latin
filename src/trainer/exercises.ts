@@ -5,19 +5,20 @@ import { checkEnglish, checkLatin, CheckedToken, describe, hinted, Issue, slotsF
 import { normalizeEnglish } from "../latin/english";
 import {
   chance, Clause, english, generate, Knowledge, latinText, latinTokens, LToken, NP, pick, Rand, shuffle, swapRoles, verbUsable,
-  nounUsable, adjUsable,
+  nounUsable, adjUsable, adjFits,
 } from "../latin/generate";
 import { conjugate, declineAdj, declineNoun, dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, adjDecl, declGroup, nounSkill } from "../latin/skills";
 import { latinKey, words } from "../latin/text";
 import { AdjEntry, Case, CASE_NAMES, Entry, full, NounKey, Num, PN, VerbEntry, VerbKey } from "../latin/types";
 
-export type ExerciseKind = "en2la" | "la2en" | "ending" | "form" | "transform" | "identify" | "vocab" | "listen";
+export type ExerciseKind = "en2la" | "la2en" | "ending" | "choose" | "form" | "transform" | "identify" | "vocab" | "listen";
 
 export const KIND_LABEL: Record<ExerciseKind, string> = {
   en2la: "Translate into Latin",
   la2en: "Translate into English",
   ending: "Fill in the ending",
+  choose: "Choose the right word",
   form: "Build the form",
   transform: "Change the sentence",
   identify: "Find the word",
@@ -68,6 +69,8 @@ export interface Exercise {
   context: string;
   /** Latin to read aloud for the prompt (listening, or Latin shown on screen). */
   audio?: string;
+  /** Aimed at a rule that is still new: shown with colors and as plainly as possible. */
+  easy?: boolean;
 }
 
 export interface Ctx {
@@ -197,9 +200,13 @@ function ending(ctx: Ctx, focus: string[]): Exercise | null {
   const c = generate(ctx.k, ctx.r, focus);
   if (!c) return null;
   const tokens = latinTokens(c, ctx.k);
-  const candidates = tokens
+  // before subject and object are told apart (Lesson II), a subject's ending is
+  // just the dictionary form: blank something that tests a rule instead
+  const trivial = (t: LToken) => !ctx.k.skills.has("s.svo") && t.analysis?.key === "nom.sg";
+  const all = tokens
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => t.analysis && t.analysis.entry.kind !== "fixed" && t.analysis.form.ending && t.analysis.form.stem);
+  const candidates = all.some(({ t }) => !trivial(t)) ? all.filter(({ t }) => !trivial(t)) : all;
   if (!candidates.length) return null;
   const focused = candidates.filter(({ t }) => t.skill && focus.includes(t.skill));
   const { t: target, i: blank } = pick(ctx.r, focused.length ? focused : candidates);
@@ -247,6 +254,101 @@ function ending(ctx: Ctx, focus: string[]): Exercise | null {
   };
 }
 
+// --------------------------------------------------------------- choose
+
+const PERSONS: PN[] = ["1sg", "2sg", "3sg", "3pl"];
+const NOUN_KEYS: NounKey[] = ["nom.sg", "acc.sg", "gen.sg", "abl.sg", "nom.pl"];
+
+/**
+ * Other forms of a word that the learner knows, as wrong options. Only forms
+ * that cannot also make a correct sentence: no "of" form unless that is the
+ * answer, and after in / ad only forms a preposition never takes.
+ */
+function wrongForms(k: Knowledge, t: LToken): LToken[] {
+  const a = t.analysis!;
+  const e = a.entry;
+  const out: LToken[] = [];
+  if (e.kind === "verb" && t.role === "verb" && !a.key.startsWith("inf")) {
+    for (const pn of PERSONS) {
+      const key = `pres.${pn}` as VerbKey;
+      const form = conjugate(e)[key];
+      if (key !== a.key && form && verbUsable(k, e, pn)) out.push({ text: full(form), role: t.role, analysis: { entry: e, key, form }, skill: `v.${pn}` });
+    }
+  } else if (e.kind === "noun") {
+    for (const key of NOUN_KEYS) {
+      const [c, n] = key.split(".") as [Case, Num];
+      if (key === a.key || !nounUsable(k, e, c, n)) continue;
+      if (c === "gen" && !a.key.startsWith("gen")) continue;
+      if (t.role === "pp" && (c === "acc" || c === "abl")) continue;
+      const form = declineNoun(e)[key];
+      if (form) out.push({ text: full(form), role: t.role, analysis: { entry: e, key, gender: e.gender, form }, skill: nounSkill(e.decl, c, n) });
+    }
+  }
+  // one option per spelling (puellae is both "of the girl" and "girls")
+  const seen = new Set([latinKey(t.text)]);
+  return out.filter((x) => !seen.has(latinKey(x.text)) && (seen.add(latinKey(x.text)), true));
+}
+
+const whatForm = (a: Analysis) => (a.entry.kind === "verb" ? describe(a) : `the ${describe(a)}`);
+
+/** Pick the right form for the gap out of two or three: the gentlest way to meet an ending. */
+function choose(ctx: Ctx, focus: string[]): Exercise | null {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const generated = generate(ctx.k, ctx.r, focus);
+    if (!generated) return null;
+    // with ego / tū in sight only one verb form fits
+    const c: Clause = generated.subj.kind === "pron" ? { ...generated, subj: { ...generated.subj, shown: true } } : generated;
+    const tokens = latinTokens(c, ctx.k);
+    const options = tokens
+      .map((t, i) => ({ t, i, wrong: t.analysis && (t.analysis.entry.kind === "verb" || t.analysis.entry.kind === "noun") ? wrongForms(ctx.k, t) : [] }))
+      .filter((x) => x.wrong.length > 0);
+    if (!options.length) continue;
+    const focused = options.filter((x) => x.t.skill && focus.includes(x.t.skill));
+    const { t: target, i: blank, wrong } = pick(ctx.r, focused.length ? focused : options);
+    const all = shuffle(ctx.r, [target, ...shuffle(ctx.r, wrong).slice(0, 2)]);
+    const correct = String(all.indexOf(target));
+    const a = target.analysis!;
+    const en = english(c, ctx.k);
+    const skills = [target.skill].filter(Boolean) as string[];
+    return {
+      id: nextId(),
+      kind: "choose",
+      instruction: KIND_LABEL.choose,
+      latin: tokens,
+      blank,
+      english: en.text,
+      hints: [`${dictionaryForm(a.entry)}: ${a.entry.en}`],
+      answer: "choice",
+      choices: all.map((x, i) => ({ id: String(i), label: x.text })),
+      correctChoice: correct,
+      skills,
+      words: [a.entry.id],
+      context: `Choose the word for the gap in: ${latinText(tokens)} ("${en.text}"). Options: ${all.map((x) => x.text).join(" / ")}. Answer: ${target.text}`,
+      check(answer) {
+        const ok = answer === correct;
+        const chosen = all[Number(answer)];
+        const issues: Issue[] = [];
+        if (!ok && chosen?.analysis) {
+          issues.push({
+            kind: "form",
+            message: `${hinted(chosen.text, chosen.analysis)} is ${whatForm(chosen.analysis)}. Here it must be ${whatForm(a)}: ${hinted(target.text, a)}.`,
+            skill: target.skill,
+          });
+        }
+        return {
+          verdict: ok ? "correct" : "wrong",
+          issues,
+          expected: target.text,
+          expectedTokens: tokens,
+          credit: Object.fromEntries(skills.map((sk) => [sk, ok ? 1 : 0])),
+          wordCredit: { [a.entry.id]: ok },
+        };
+      },
+    };
+  }
+  return null;
+}
+
 // ----------------------------------------------------------------- form
 
 const ROLE_OF_CASE: Partial<Record<Case, string>> = {
@@ -257,7 +359,7 @@ const ROLE_OF_CASE: Partial<Record<Case, string>> = {
   dat: "to / for",
 };
 
-function nounFormExercise(ctx: Ctx, skillId: string): Exercise | null {
+function nounFormExercise(ctx: Ctx, skillId: string, focus: string[] = []): Exercise | null {
   const [group, c, n] = skillId.split(".") as [string, Case, Num];
   const pool = ctx.k.nouns.filter((x) => declGroup(x.decl) === group && nounUsable(ctx.k, x, c, n));
   if (!pool.length) return null;
@@ -265,8 +367,13 @@ function nounFormExercise(ctx: Ctx, skillId: string): Exercise | null {
   const key = `${c}.${n}` as NounKey;
   const form = declineNoun(noun)[key]!;
   let adj: AdjEntry | undefined;
-  if (chance(ctx.r, 0.35)) {
-    const adjs = ctx.k.adjs.filter((x) => x.id !== "meus" && adjUsable(ctx.k, x, noun, c, n) && adjUsable(ctx.k, x, noun, "nom", "sg"));
+  // an adjective comes along once the endings settle, or when agreement is the point
+  const rich = ctx.k.richness ?? 1;
+  const adjChance = rich >= 0.5 ? 0.35 * rich : focus.includes("adj.agree") ? 0.6 : 0;
+  if (chance(ctx.r, adjChance)) {
+    const adjs = ctx.k.adjs.filter(
+      (x) => x.id !== "meus" && adjUsable(ctx.k, x, noun, c, n) && adjUsable(ctx.k, x, noun, "nom", "sg") && (ctx.k.silly > 0 || adjFits(x, noun.tags)),
+    );
     if (adjs.length) adj = pick(ctx.r, adjs);
   }
   const nounNom = full(declineNoun(noun)["nom.sg"] ?? form);
@@ -390,11 +497,12 @@ function verbFormExercise(ctx: Ctx, skillId: string): Exercise | null {
 }
 
 function formEx(ctx: Ctx, focus: string[]): Exercise | null {
-  const formSkills = [...ctx.k.skills].filter((s) => /^n\d|^v\./.test(s));
+  // the nominative singular is the dictionary form itself: nothing to build
+  const formSkills = [...ctx.k.skills].filter((s) => /^n\d|^v\./.test(s) && !s.endsWith(".nom.sg"));
   const focused = focus.filter((s) => formSkills.includes(s));
   const skillId = pick(ctx.r, focused.length ? focused : formSkills);
   if (!skillId) return null;
-  return skillId.startsWith("v.") ? verbFormExercise(ctx, skillId) : nounFormExercise(ctx, skillId);
+  return skillId.startsWith("v.") ? verbFormExercise(ctx, skillId) : nounFormExercise(ctx, skillId, focus);
 }
 
 // ------------------------------------------------------------ transform
@@ -658,6 +766,7 @@ const FACTORIES: Record<Exclude<ExerciseKind, "vocab">, (ctx: Ctx, focus: string
   en2la,
   la2en,
   ending,
+  choose,
   form: formEx,
   transform,
   identify,

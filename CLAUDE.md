@@ -8,7 +8,9 @@ published as a private claude.ai artifact.
 
 - Native in English, Russian and Ukrainian. Explanations are in English;
   comparisons with Russian / Ukrainian cases are welcome.
-- Finished Lessons 1-4 (October 2026); Lesson 4 still felt shaky.
+- Finished Lessons 1-4 (October 2026). Remembers the words but forgot most of
+  the rules, so practice restarted step by step from Lesson I and should feel
+  very simple at first ("I want to think little").
 - Wants: only words and constructions from the videos (plus words they open
   in Discover), lots of written exercises, colored endings, Roman classic look,
   silly sentences allowed, light motivation (daily goal + streak).
@@ -43,6 +45,22 @@ Runtime capabilities used:
 - `sample`: the Ask Claude drawer and "I think my answer is right" (judge).
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
+
+## Practice, step by step
+
+`focusLesson` is the learner's step. Practice uses every known word but only the
+rules of the lessons up to the step (`derived().stepKnowledge`; "All lessons
+mixed" and the check-up use everything). A step session opens with a one-screen
+rule refresher (the step's endings table and its two main rules, once a day),
+and each exercise has a Rule button. While a rule is new (mastery < 0.4) the
+exercises are mostly "choose the right word" and reading, with colors on, and
+sentences are bare and sensible (`sentenceStyle` in `src/trainer/session.ts`:
+richness 0, silliness 0, one extra only when it is the thing practised). As the
+rule settles, whole sentences to write, adjectives and "of" phrases, the object
+first, and silly pairings come in to test real understanding. The next step is
+offered (never forced) when the step's practised skills average 80% and none is
+under 60% (`readiness`). Saves from before the steps (version 1) restart at
+Lesson I.
 
 ## Audio
 

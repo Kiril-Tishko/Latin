@@ -4,6 +4,7 @@ import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
 import { mastery, streak, todayDone } from "../../trainer/progress";
+import { readiness } from "../../trainer/session";
 import { dueWords } from "../../trainer/srs";
 import { openAsk } from "../ask";
 import { CardBack, Icon, Mosaic } from "../components";
@@ -40,12 +41,12 @@ function Stylus() {
   );
 }
 
-/** Sentence of the day, written on a wax tablet: one short sentence from a lesson already watched. */
+/** Sentence of the day, written on a wax tablet: one short sentence from the current step or before. */
 function HeroTablet({ lessons }: { lessons: number[] }) {
   const [english, setEnglish] = useState(false);
   const pool = LESSONS.filter((l) => lessons.includes(l.n))
     .flatMap((l) => l.sentences)
-    .filter((x) => /^[^.?!]+\.$/.test(x.la) && x.la.split(" ").length >= 3 && x.la.split(" ").length <= 5);
+    .filter((x) => /^[^.?!]+\.$/.test(x.la) && x.la.split(" ").length >= 2 && x.la.split(" ").length <= 5);
   if (!pool.length) return null;
   const s = pool[Math.floor(Date.now() / 86_400_000) % pool.length];
   return (
@@ -76,7 +77,9 @@ export function Home() {
   const goal = p.settings.dailyGoal;
   const days = streak(p);
   const focus = LESSONS.find((l) => l.n === p.focusLesson);
-  const known = [...d.knowledge.skills].filter((id) => SKILL_BY_ID.has(id));
+  const ready = readiness(p, p.focusLesson);
+  // weak spots among the rules of the current step and the ones before it
+  const known = [...d.stepKnowledge.skills].filter((id) => SKILL_BY_ID.has(id));
   const focusSet = new Set(focus?.skills ?? []);
   const weak = known
     .sort((a, b) => mastery(p.skills[a]) - (focusSet.has(a) ? 0.15 : 0) - (mastery(p.skills[b]) - (focusSet.has(b) ? 0.15 : 0)))
@@ -93,9 +96,13 @@ export function Home() {
           <div class="stack" style={{ gap: "6px" }}>
             <span class="eyebrow">Salvē!</span>
             <h1 class="hero-title">
-              {done >= goal ? "Today's goal is done." : done > 0 ? "Keep going: the endings are settling in." : `Today: make Lesson ${roman(p.focusLesson)} automatic.`}
+              {done >= goal ? "Today's goal is done." : done > 0 ? "Keep going: the endings are settling in." : `Today: Lesson ${roman(p.focusLesson)}, step by step.`}
             </h1>
-            {focus && <p class="muted prose">Focus: {focus.title}</p>}
+            {focus && (
+              <p class="muted prose">
+                Step {roman(p.focusLesson)}: {focus.title} · {Math.round(ready.value * 100)}% ready for the next step
+              </p>
+            )}
           </div>
           <div class="stack" style={{ gap: "6px", maxWidth: "360px" }}>
             <div class="spread small ui">
@@ -105,8 +112,8 @@ export function Home() {
             <Mosaic value={done / goal} tiles={Math.min(goal, 20)} label={`${done} of ${goal} exercises today`} />
           </div>
         <div class="row">
-          <button class="btn big" onClick={() => { startSession({ kind: "mixed" }); go({ page: "train" }); }}>
-            <Icon.play /> Start practice
+          <button class="btn big" onClick={() => { startSession({ kind: "step" }); go({ page: "train" }); }}>
+            <Icon.play /> Practise Lesson {roman(p.focusLesson)}
           </button>
           {!p.placementDone && (
             <button class="btn ghost big" onClick={() => { startSession({ kind: "placement" }); go({ page: "train" }); }}>
@@ -115,7 +122,7 @@ export function Home() {
           )}
         </div>
         </div>
-        <HeroTablet lessons={p.lessonsDone} />
+        <HeroTablet lessons={p.lessonsDone.filter((n) => n <= p.focusLesson)} />
       </section>
 
       <div class="grid-2 home-grid">

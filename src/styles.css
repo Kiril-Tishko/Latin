@@ -300,6 +300,11 @@ p { margin: 0; }
   cursor: pointer;
 }
 .word-btn:hover { border-color: var(--gold); }
+.blank.whole { min-width: 3.4em; }
+.choices { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.exercise .word-btn.choice { font-size: 0.8em; padding: 6px 18px 6px 12px; margin: 0; display: inline-flex; align-items: center; gap: 10px; border-radius: 8px; background: var(--panel); box-shadow: var(--shadow); }
+.word-btn.choice .kbd { font-size: 0.5em; padding: 0 6px; }
+.word-btn.choice .latin { font-size: 1em; }
 .word-btn.chosen-good { border-color: var(--good); box-shadow: 0 0 0 2px color-mix(in srgb, var(--good) 35%, transparent); }
 .word-btn.chosen-bad { border-color: var(--bad); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 35%, transparent); }
 
@@ -539,6 +544,25 @@ p { margin: 0; }
 .mode-card .mode-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--panel); }
 .mode-card .mode-icon svg { width: 18px; height: 18px; margin-left: 2px; }
 .mode-card:hover .mode-icon { background: var(--gold); }
+
+/* step by step: the current lesson, the refresher before practice, rules on request */
+.step-panel { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(18px, 3vw, 36px); align-items: start; padding: clamp(18px, 2.6vw, 28px); }
+.step-panel h2 { font-size: clamp(1.25rem, 2.4vw, 1.6rem); }
+@media (max-width: 820px) { .step-panel { grid-template-columns: minmax(0, 1fr); } }
+.rule-intro { display: flex; flex-direction: column; gap: clamp(14px, 2.2vh, 22px); padding: clamp(18px, min(3vw, 3.6vh), 36px); }
+.rule-intro-head { align-items: flex-start; }
+.rule-intro-head h2 { font-size: clamp(1.3rem, 2.6vw, 1.9rem); }
+.step-tables { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: flex-start; }
+.step-tables .table-wrap { flex: 0 1 auto; }
+.step-tables table.paradigm { width: auto; }
+.step-tables table.paradigm td .latin { font-size: 1.2rem; }
+.rule-minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px 24px; }
+.rule-mini { display: flex; flex-direction: column; gap: 3px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.rule-mini h3 { font-size: 1.05rem; }
+.rule-mini .rule-ex { font-size: 0.95rem; }
+.rule-box .rule-mini:first-child { border-top: 0; padding-top: 0; }
+.rule-hint { display: flex; flex-direction: column; gap: 2px; border-left: 3px solid var(--gold-soft); padding: 2px 0 2px 12px; font-size: 1.02rem; }
+.rule-hint .eyebrow { font-size: 0.72rem; }
 
 /* ------------------------------------------------------------ cards */
 

@@ -1,5 +1,7 @@
 // Builds practice sessions: mostly the focus lesson, weakest skills first,
-// a mix of exercise types, and words that are due for review.
+// a mix of exercise types, and words that are due for review. Step-by-step
+// sessions start a new rule with single forms and endings, and move on to
+// whole sentences as it settles.
 import { LESSON_BY_N } from "../content/lessons";
 import { Lexicon } from "../latin/analyze";
 import { Knowledge, pick, Rand } from "../latin/generate";
@@ -11,6 +13,7 @@ import { dueWords, exposeWord, reviewWord } from "./srs";
 export const KIND_WEIGHTS: [ExerciseKind, number][] = [
   ["en2la", 30],
   ["ending", 18],
+  ["choose", 6],
   ["la2en", 14],
   ["form", 14],
   ["transform", 12],
@@ -28,10 +31,10 @@ function weighted<T>(r: Rand, items: [T, number][]): T | undefined {
 }
 
 /** One or two skills to aim the next exercise at: weak ones, mostly from the focus lesson. */
-export function pickFocus(p: Progress, k: Knowledge, r: Rand, only?: string[]): string[] {
+export function pickFocus(p: Progress, k: Knowledge, r: Rand, only?: string[], focusLesson = p.focusLesson): string[] {
   const known = [...k.skills].filter((s) => !only || only.includes(s));
   if (!known.length) return [];
-  const lessonSkills = new Set(LESSON_BY_N.get(p.focusLesson)?.skills ?? []);
+  const lessonSkills = new Set(LESSON_BY_N.get(focusLesson)?.skills ?? []);
   const items: [string, number][] = known.map((s) => {
     const m = mastery(p.skills[s]);
     const recent = Date.now() - (p.skills[s]?.last ?? 0) < 60_000 ? 0.5 : 1;
@@ -43,9 +46,34 @@ export function pickFocus(p: Progress, k: Knowledge, r: Rand, only?: string[]): 
   return [first, weighted(r, rest)!];
 }
 
+/**
+ * Exercise types by how well the focus is known: a new rule is met in single
+ * forms, endings and reading; whole sentences to write come as it settles.
+ */
+export function kindWeights(m: number): [ExerciseKind, number][] {
+  if (m < 0.35) return [["choose", 40], ["la2en", 24], ["ending", 16], ["form", 12], ["en2la", 8]];
+  if (m < 0.7) return [["ending", 22], ["choose", 14], ["form", 16], ["la2en", 14], ["en2la", 22], ["transform", 6], ["identify", 2], ["listen", 4]];
+  return [["en2la", 36], ["transform", 18], ["la2en", 14], ["ending", 12], ["form", 6], ["choose", 2], ["identify", 4], ["listen", 8]];
+}
+
+/**
+ * How a sentence looks for a rule at mastery m: while it is new, short and
+ * sensible, in the usual word order; once it holds, longer and unexpected ones
+ * ("the student teaches the teacher") that can only be read by the endings.
+ */
+export function sentenceStyle(m: number, silly: number): { richness: number; silly: number } {
+  if (m < 0.4) return { richness: 0, silly: 0 };
+  if (m < 0.7) return { richness: 0.5, silly: silly / 2 };
+  return { richness: 1, silly: silly > 0 ? Math.min(1, silly + 0.15) : 0 };
+}
+
 export interface SessionOpts {
   size: number;
   kinds?: ExerciseKind[];
+  /** Choose exercise types by the mastery of the focus (step-by-step practice). */
+  adaptive?: boolean;
+  /** The lesson whose skills get extra weight (default: the learner's focus lesson). */
+  focusLesson?: number;
   /** Restrict focus to these skills (e.g. one rule or one lesson). */
   skills?: string[];
   /** Words available for recall exercises (default: all known words). */
@@ -53,9 +81,20 @@ export interface SessionOpts {
 }
 
 export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set<string>): Exercise | null {
-  const kinds = KIND_WEIGHTS.filter(([kind]) => (!opts.kinds || opts.kinds.includes(kind)) && (kind !== "listen" || ctx.audio));
+  const allowed = ([kind]: [ExerciseKind, number]) => (!opts.kinds || opts.kinds.includes(kind)) && (kind !== "listen" || ctx.audio);
+  const kinds = KIND_WEIGHTS.filter(allowed);
   for (let attempt = 0; attempt < 12; attempt++) {
-    const kind = weighted(ctx.r, kinds);
+    let focus: string[] | undefined;
+    let kind: ExerciseKind | undefined;
+    let c = ctx;
+    let easy = false;
+    if (opts.adaptive) {
+      focus = pickFocus(p, ctx.k, ctx.r, opts.skills, opts.focusLesson);
+      const m = focus.length ? focus.reduce((sum, f) => sum + mastery(p.skills[f]), 0) / focus.length : 0;
+      kind = weighted(ctx.r, kindWeights(m).filter(allowed));
+      c = { ...ctx, k: { ...ctx.k, ...sentenceStyle(m, ctx.k.silly) } };
+      easy = m < 0.4;
+    } else kind = weighted(ctx.r, kinds);
     if (!kind) return null;
     let ex: Exercise | null;
     if (kind === "vocab") {
@@ -66,10 +105,11 @@ export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set
       const entry = pool.find((e) => e.id === id)!;
       ex = vocabExercise(ctx, entry, ctx.r() < 0.5 ? "la2en" : "en2la");
     } else {
-      ex = makeExercise(kind, ctx, pickFocus(p, ctx.k, ctx.r, opts.skills));
+      ex = makeExercise(kind, c, focus ?? pickFocus(p, ctx.k, ctx.r, opts.skills, opts.focusLesson));
     }
     if (!ex || seen.has(ex.context)) continue;
     seen.add(ex.context);
+    if (easy) ex.easy = true;
     return ex;
   }
   return null;
@@ -83,6 +123,18 @@ export function buildSession(p: Progress, ctx: Ctx, opts: SessionOpts): Exercise
     if (ex) out.push(ex);
   }
   return out;
+}
+
+/**
+ * How ready the learner is to leave a step: the mastery of the lesson's rules
+ * practised so far. Ready when they average 80% and none is below 60%.
+ */
+export function readiness(p: Progress, lesson: number): { value: number; ready: boolean; practised: number } {
+  const ids = (LESSON_BY_N.get(lesson)?.skills ?? []).filter((id) => (p.skills[id]?.seen ?? 0) > 0);
+  if (!ids.length) return { value: 0, ready: false, practised: 0 };
+  const values = ids.map((id) => mastery(p.skills[id]));
+  const value = values.reduce((a, b) => a + b, 0) / values.length;
+  return { value, ready: ids.length >= 3 && value >= 0.8 && Math.min(...values) >= 0.6, practised: ids.length };
 }
 
 /** The first-visit check: a short mix across lessons 1-4 that calibrates mastery. */

@@ -75,7 +75,7 @@ function profile(): string {
   const words = d.words.map((w) => `${dictionaryForm(w)} = ${w.en}`).join("; ");
   const mistakes = p.mistakes.slice(0, 8).map((m) => `- "${m.prompt}" | wrote: ${m.answer} | expected: ${m.expected}${m.notes.length ? ` | ${m.notes.join(" ")}` : ""}`);
   return [
-    `Lessons finished: ${lessons.join("; ")}. The learner says Lesson ${Math.max(...p.lessonsDone)} still feels shaky. Trainer focus: Lesson ${p.focusLesson}.`,
+    `Lessons finished: ${lessons.join("; ")}. The learner remembers the words of these lessons but has forgotten most of the rules, so practice restarted step by step from Lesson 1. Current step: Lesson ${p.focusLesson} (exercises use only the rules up to Lesson ${p.focusLesson}). Explain with the rules up to the current step unless the learner asks about later ones, and remind them of a rule plainly rather than assuming they remember it.`,
     `Skills learned (ids for PRACTICE):\n${skills.join("\n")}`,
     `Words known: ${words}`,
     mistakes.length ? `Recent mistakes:\n${mistakes.join("\n")}` : "No recent mistakes recorded.",

@@ -21,8 +21,15 @@ function tooltip(a?: Analysis): string | undefined {
   return `${a.entry.en}: ${describe(a)}`;
 }
 
-export function Word({ text, analysis, blank, plain }: { text: string; analysis?: Analysis; blank?: boolean; plain?: boolean }) {
+export function Word({ text, analysis, blank, whole, plain }: { text: string; analysis?: Analysis; blank?: boolean; whole?: boolean; plain?: boolean }) {
   const a = analysis;
+  if (blank && whole) {
+    return (
+      <span class="w" title="choose the word">
+        <span class="blank whole">?</span>
+      </span>
+    );
+  }
   if (!a || a.entry.kind === "fixed") return <span class="w" title={tooltip(a)}>{show(text)}</span>;
   const cls = colorClass(a);
   const plural = numOf(a) === "pl" && a.entry.kind !== "verb" ? " pl" : "";
@@ -54,13 +61,13 @@ export function Word({ text, analysis, blank, plain }: { text: string; analysis?
 }
 
 /** A generated sentence, word by word. */
-export function LatinTokens({ tokens, blank, plain, period = true, cap = true, cls = "" }: { tokens: LToken[]; blank?: number; plain?: boolean; period?: boolean; cap?: boolean; cls?: string }) {
+export function LatinTokens({ tokens, blank, whole, plain, period = true, cap = true, cls = "" }: { tokens: LToken[]; blank?: number; whole?: boolean; plain?: boolean; period?: boolean; cap?: boolean; cls?: string }) {
   return (
     <span class={`latin ${plain ? "plain" : ""} ${cls}`} lang="la">
       {tokens.map((t, i) => (
         <Fragment key={i}>
           {i > 0 && " "}
-          <Word text={i === 0 && cap ? capitalize(t.text) : t.text} analysis={t.analysis} blank={i === blank} plain={plain} />
+          <Word text={i === 0 && cap ? capitalize(t.text) : t.text} analysis={t.analysis} blank={i === blank} whole={whole} plain={plain} />
         </Fragment>
       ))}
       {period && "."}

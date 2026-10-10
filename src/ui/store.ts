@@ -122,7 +122,10 @@ document.addEventListener("visibilitychange", () => {
 // ------------------------------------------------------------- derived
 
 interface Derived {
+  /** Every word and rule of the lessons watched. */
   knowledge: Knowledge;
+  /** Every word, but only the rules up to the current step (focusLesson). */
+  stepKnowledge: Knowledge;
   lexicon: Lexicon;
   /** Words in the learner's dictionary: lesson words plus added cards. */
   words: Entry[];
@@ -137,6 +140,7 @@ export function derived(): Derived {
   const added = p.added.map((id) => CARD_BY_ID.get(id)?.entry).filter(Boolean) as Entry[];
   derivedCache = {
     knowledge: buildKnowledge(p.lessonsDone, added, p.settings.silly),
+    stepKnowledge: buildKnowledge(p.lessonsDone, added, p.settings.silly, p.lessonsDone.filter((n) => n <= p.focusLesson)),
     lexicon: fullLexicon(DECK_CARDS.map((c) => c.entry)),
     words: [...lessonWords(p.lessonsDone), ...added],
     added,

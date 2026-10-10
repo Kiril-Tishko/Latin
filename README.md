@@ -6,9 +6,11 @@ published as a private claude.ai artifact.
 
 - **Lessons**: every rule from the videos as What / How / When, the video's
   sentences and stories, with case endings in color.
-- **Train**: written exercises built only from words and grammar already taught
-  (translate both ways, fill in endings, build forms, transform sentences),
-  with feedback that names the case or person you used and the one needed.
+- **Train**: step by step, one lesson's rules at a time (with every word you
+  know): a short rule refresher, then choose-the-word and reading while a rule
+  is new, and written exercises (translate both ways, fill in endings, build
+  forms, transform sentences) as it settles, with feedback that names the case
+  or person you used and the one needed, plus the rule behind it.
   Each exercise fits the window; translations of Latin prompts stay hidden
   until you press Translate.
 - **Words**: your dictionary with spaced repetition.

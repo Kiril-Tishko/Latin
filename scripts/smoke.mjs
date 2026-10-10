@@ -47,11 +47,21 @@ async function run(name, viewport, colorScheme) {
   await p.locator(".lesson-card").nth(3).click();
   await p.waitForTimeout(300);
   await p.screenshot({ path: `${out}/${name}-lesson4.png`, fullPage: true });
-  // train: mixed practice, answer three exercises
+  // train: the current step (Lesson I), its rule refresher first, then three exercises
   await p.locator(nav, { hasText: "Exercitium" }).first().click();
-  await p.locator("button", { hasText: "Mixed practice" }).first().click();
+  await p.waitForTimeout(200);
+  await p.screenshot({ path: `${out}/${name}-chooser.png`, fullPage: true });
+  await p.locator(".step-panel .btn.big").click();
+  await p.waitForTimeout(200);
+  await p.screenshot({ path: `${out}/${name}-rules-first.png`, fullPage: true });
+  await p.locator("button", { hasText: "Start exercises" }).click();
   for (let i = 0; i < 3; i++) {
     await p.waitForTimeout(200);
+    if (i === 1) {
+      await p.locator(".ex-actions button", { hasText: "Rule" }).click();
+      await p.waitForTimeout(100);
+      if (!(await p.locator(".rule-box").count())) errors.push(`${name}: the Rule button shows no rule`);
+    }
     if (await p.locator(".word-btn").count()) await p.locator(".word-btn").first().click();
     else {
       await p.locator("#answer-input").fill(i === 0 ? "puella" : "agricola aquam portat");

@@ -13,10 +13,11 @@ published as a private claude.ai artifact.
   or person you used and the one needed, plus the rule behind it.
   Each exercise fits the window; translations of Latin prompts stay hidden
   until you press Translate.
-- **Words**: your dictionary with spaced repetition.
-- **Discover**: a deck of mystery cards, each in its own fixed spot, with Latin
-  words related to English, Russian or Ukrainian words; opened cards turn face
-  up where they lie; add them and they join the exercises.
+- **Words**: your dictionary with spaced repetition; each word has its forms,
+  sensible example sentences and, where one exists, a famous Latin saying.
+- **Discover**: mystery cards, five at a time, each in its own fixed spot, with
+  Latin words related to English, Russian or Ukrainian words; opened cards turn
+  face up where they lie; add them and they join the exercises.
 - **Rules**: color legend and ending tables.
 - **Audio**: every Latin sentence can be heard in classical pronunciation
   (through the device's Spanish or Italian voice), Listen & repeat on lesson pages, and a

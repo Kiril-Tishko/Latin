@@ -3,7 +3,7 @@
 import { Card, DECK_CARDS } from "../content/deck";
 import { english, generate, Knowledge, latinText, latinTokens, LToken, Rand } from "../latin/generate";
 import { nounSkill } from "../latin/skills";
-import { AdjEntry, NounEntry, VerbEntry } from "../latin/types";
+import { AdjEntry, Entry, NounEntry, VerbEntry } from "../latin/types";
 
 export function cardUnlocked(card: Card, k: Knowledge): boolean {
   const e = card.entry;
@@ -33,8 +33,8 @@ export function nextCard(revealed: string[], k: Knowledge, known: Set<string>): 
 }
 
 /** Knowledge with the card's word added (and favoured, so examples feature it). */
-export function withWord(k: Knowledge, card: Card, weight = 1): Knowledge {
-  const e = card.entry;
+export function withWord(k: Knowledge, card: Card | Entry, weight = 1): Knowledge {
+  const e = "entry" in card ? card.entry : card;
   const rep = <T>(x: T) => Array.from({ length: weight }, () => x);
   return {
     ...k,
@@ -50,16 +50,32 @@ export interface Example {
   english: string;
 }
 
-/** Up to `count` different sentences that use the card's word with known words and grammar: short ones first, different patterns. */
-export function cardExamples(card: Card, k: Knowledge, r: Rand, count = 3): Example[] {
-  const biased = withWord({ ...k, silly: 0 }, card, card.entry.kind === "adj" ? 4 : 8);
+/** The construction that shows off an indeclinable word (nōn, in, ad, et…). */
+const FIXED_FOCUS: Record<string, string[]> = {
+  non: ["s.non"],
+  "in-prep": ["s.loc", "s.into"],
+  "ad-prep": ["s.ad"],
+  et: ["s.et"],
+  nemo: ["s.conn"],
+  bene: ["s.conn"],
+  ego: ["v.1sg"],
+  tu: ["v.2sg"],
+};
+
+/**
+ * Up to `count` sensible sentences that use a word with known words and
+ * grammar: short ones first, one per sentence pattern where possible.
+ */
+export function wordExamples(e: Entry, k: Knowledge, r: Rand, count = 3): Example[] {
+  const biased = { ...withWord(k, e, e.kind === "adj" ? 4 : 8), silly: 0, richness: 0.5 };
+  const focus = e.kind === "fixed" ? FIXED_FOCUS[e.id] ?? [] : [];
   const pool: (Example & { template: string })[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < 600 && pool.length < count * 4; i++) {
-    const c = generate(biased, r);
+    const c = generate(biased, r, focus);
     if (!c) continue;
     const tokens = latinTokens(c, biased);
-    if (!tokens.some((t) => t.analysis?.entry.id === card.entry.id)) continue;
+    if (!tokens.some((t) => t.analysis?.entry.id === e.id)) continue;
     const latin = latinText(tokens);
     if (seen.has(latin) || tokens.length > 7) continue;
     seen.add(latin);
@@ -71,4 +87,9 @@ export function cardExamples(card: Card, k: Knowledge, r: Rand, count = 3): Exam
   for (const x of pool) if (out.length < count && !out.some((o) => o.template === x.template)) out.push(x);
   for (const x of pool) if (out.length < count && !out.includes(x)) out.push(x);
   return out.sort((a, b) => a.tokens.length - b.tokens.length).map(({ tokens, latin, english }) => ({ tokens, latin, english }));
+}
+
+/** Examples for a Discover card. */
+export function cardExamples(card: Card, k: Knowledge, r: Rand, count = 3): Example[] {
+  return wordExamples(card.entry, k, r, count);
 }

@@ -104,11 +104,13 @@ const PREF: NounKey[] = ["nom.sg", "acc.sg", "abl.sg", "gen.sg", "nom.pl", "acc.
  * plural verbs, adjacent nouns).
  */
 export function annotate(text: string, lex: Lexicon): Token[] {
-  const raw = text.normalize("NFC").split(/([\p{L}]+(?:#[a-z0-9.]+)?)/u).filter((s) => s !== "");
+  const raw = text.normalize("NFC").split(/([\p{L}]+(?:#[a-z0-9]+(?:\.[a-z0-9]+)*)?)/u).filter((s) => s !== "");
   const tokens: Token[] = raw.map((piece) => {
-    const m = piece.match(/^([\p{L}]+)(?:#([a-z0-9.]+))?$/u);
+    const m = piece.match(/^([\p{L}]+)(?:#([a-z0-9]+(?:\.[a-z0-9]+)*))?$/u);
     if (!m) return { text: piece, isWord: false };
     const [, word, hint] = m;
+    // #x: a word that only looks like a known form (fīnis is not fīnīs): leave it plain
+    if (hint === "x") return { text: word, isWord: true, readings: [] };
     const readings = lex.analyze(word);
     const chosen = hint ? readings.filter((r) => r.key === hint || r.key.startsWith(hint)) : [];
     return { text: word, isWord: true, readings, analysis: chosen[0] };
@@ -156,10 +158,10 @@ function rank(a: Analysis): number {
 
 /** Plain words of a Latin sentence (for checking), without hints or punctuation. */
 export function latinWords(text: string): string[] {
-  return words(text.replace(/#[a-z0-9.]+/g, ""));
+  return words(text.replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, ""));
 }
 
 /** Removes #hints so text can be shown or compared. */
 export function stripHints(text: string): string {
-  return text.replace(/#[a-z0-9.]+/g, "");
+  return text.replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "");
 }

@@ -126,6 +126,6 @@ export function respellWord(word: string, target: Target): string {
 /** A Latin sentence respelled word by word, punctuation kept for pauses. */
 export function respell(text: string, target: Target): string {
   return text
-    .replace(/#[a-z0-9.]+/g, "")
+    .replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "")
     .replace(/[\p{L}]+/gu, (w) => respellWord(w, target));
 }

@@ -101,7 +101,7 @@ export function spokenText(latin: string, voice: SpeechSynthesisVoice | null): s
   const lang = voice?.lang.toLowerCase() ?? "";
   if (lang.startsWith("it")) return respell(latin, "it");
   if (lang.startsWith("es")) return respell(latin, "es");
-  return latin.replace(/#[a-z0-9.]+/g, "");
+  return latin.replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "");
 }
 
 let generation = 0;

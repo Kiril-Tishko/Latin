@@ -179,7 +179,7 @@ export function applyResult(p: Progress, ex: Exercise, res: Result, answer: stri
       answer,
       expected: res.expected,
       skills: Object.entries(res.credit).filter(([, v]) => v < 0.5).map(([s]) => s),
-      notes: res.issues.filter((i) => i.message).map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9.]+/g, "")),
+      notes: res.issues.filter((i) => i.message).map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "")),
     });
   }
   p.updatedAt = now;

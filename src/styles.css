@@ -735,6 +735,11 @@ table.paradigm td .latin { font-size: 1.08rem; }
 .card-back .num { position: absolute; left: 0; right: 0; bottom: 12px; font-family: var(--f-display); font-size: 0.66rem; letter-spacing: 0.18em; color: color-mix(in srgb, var(--back-gold) 80%, transparent); }
 :root[data-theme="dark"] .card-back { --back: #120d0a; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .card-back { --back: #120d0a; } }
+.saying { margin: 0; padding: 8px 0 8px 14px; border-left: 3px solid var(--gold-soft); display: flex; flex-direction: column; gap: 3px; }
+.saying blockquote { margin: 0; font-size: 1.22rem; line-height: 1.35; font-style: italic; }
+.saying blockquote .latin { font-size: inherit; }
+.saying figcaption { font-size: 0.98rem; }
+.saying-source { font-family: var(--f-ui); font-size: 0.82rem; color: var(--ink-2); }
 .rel-lang { font-family: var(--f-ui); font-weight: 700; font-size: 0.75rem; letter-spacing: 0.1em; color: var(--ink-2); min-width: 2.4em; display: inline-block; }
 
 /* ------------------------------------------------------------ misc */

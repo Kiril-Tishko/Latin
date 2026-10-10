@@ -52,7 +52,7 @@ function RuleView({ r }: { r: Rule }) {
               <Icon.stylus /> Practise
             </button>
           )}
-          <button class="btn ghost small" aria-label={`Ask Claude about: ${r.title}`} onClick={() => openAsk({ label: `Rule: ${r.title}`, detail: `What: ${r.what} How: ${r.how} When: ${r.when}` })}>
+          <button class="btn ghost small" aria-label={`Ask Claude about: ${r.title}`} onClick={() => openAsk({ label: `Rule: ${r.title}`, detail: `What: ${r.what} How: ${r.how} When: ${r.when}` }, "Explain this rule simply, with two short examples.")}>
             <Icon.quill />
           </button>
         </div>

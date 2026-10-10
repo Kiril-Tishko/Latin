@@ -32,6 +32,9 @@ async function run(name, viewport, colorScheme) {
   // (the mouse is moved off the tiles first: a hovered tile lifts by 2px)
   const spots = () => p.mouse.move(1, 1).then(() => p.waitForTimeout(300)).then(() => p.locator(".deck-tile").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return `${Math.round(r.x)},${Math.round(r.y + scrollY)}`; }).join(" ")));
   const before = await spots();
+  // five unopened cards at a time
+  const backs = await p.locator(".deck-tile:not(.face)").count();
+  if (backs < 1 || backs > 5) errors.push(`${name}: ${backs} unopened cards on the table (expected 1-5)`);
   await p.locator(".deck-head .btn").click();
   await p.waitForTimeout(700);
   await p.screenshot({ path: `${out}/${name}-card.png` });
@@ -138,6 +141,47 @@ async function audio() {
   await ctx.close();
 }
 
+// Ask Claude, with a fake sample capability: a suggested question waits in the box
+// until it is sent, the answer appears, and a failure offers Try again.
+async function askClaude() {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addInitScript(() => {
+    window.__asked = [];
+    window.__fail = null;
+    const sample = (input, opts) => {
+      window.__asked.push(input);
+      if (window.__fail) return Promise.reject(window.__fail);
+      return new Promise((res) => setTimeout(() => {
+        const text = "The ending «-am» marks the object.";
+        opts?.onText?.({ text, delta: text });
+        res({ text, truncated: false });
+      }, 50));
+    };
+    sample.json = async () => ({ correct: false, explanation: "no" });
+    window.claude = { use: async (name) => (name === "sample" ? sample : null) };
+  });
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => errors.push(`ask: ${e.message}`));
+  await p.goto(`file://${page}`);
+  await p.waitForTimeout(800);
+  await p.locator("button", { hasText: "Ask Claude what to practise today" }).click();
+  await p.waitForTimeout(300);
+  if (!(await p.locator("#ask-input").inputValue()).includes("practise")) errors.push("ask: no suggested question in the box");
+  if ((await p.evaluate(() => window.__asked.length)) !== 0) errors.push("ask: the suggestion was sent without the learner pressing Ask");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(400);
+  const answer = await p.locator(".msg.assistant").last().textContent();
+  if (!answer.includes("marks the object")) errors.push(`ask: no answer shown (${answer.slice(0, 80)})`);
+  await p.evaluate(() => { window.__fail = { code: "upstream_error", message: "simulated" }; });
+  await p.locator("#ask-input").fill("And the ablative?");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(400);
+  if (!(await p.locator("button", { hasText: "Try again" }).count())) errors.push("ask: a failed answer offers no Try again");
+  await p.screenshot({ path: `${out}/ask-error.png` });
+  await ctx.close();
+}
+
+await askClaude();
 await audio();
 await run("desktop-light", { width: 1280, height: 900 }, "light");
 await run("desktop-dark", { width: 1280, height: 900 }, "dark");

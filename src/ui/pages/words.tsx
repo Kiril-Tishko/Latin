@@ -1,6 +1,6 @@
 // My dictionary: every word from the lessons plus the cards added from
 // Discover, with strength, forms and spaced review.
-import { useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import { CARD_BY_ID } from "../../content/deck";
 import { LESSONS } from "../../content/lessons";
 import { STORY_ONLY } from "../../content/words";
@@ -8,6 +8,8 @@ import { conjugate, declineAdj, declineNoun, dictionaryForm } from "../../latin/
 import { nounSkill, adjDecl } from "../../latin/skills";
 import { latinKey, roman } from "../../latin/text";
 import { Case, CASE_NAMES, Entry, full, Gender, NounKey, PN, VerbKey } from "../../latin/types";
+import { seeded } from "../../latin/generate";
+import { wordExamples } from "../../trainer/discover";
 import { dueWords, strength } from "../../trainer/srs";
 import { openAsk } from "../ask";
 import { Icon, Modal, Mosaic } from "../components";
@@ -16,6 +18,7 @@ import { go } from "../nav";
 import { derived, useProgress } from "../store";
 import { startSession } from "./train";
 import { Speak } from "../speak";
+import { Sayings } from "../saying";
 
 const CASE_ORDER: Case[] = ["nom", "acc", "gen", "abl", "dat", "voc"];
 const PN_ROWS: [PN, string][] = [
@@ -105,8 +108,14 @@ function Forms({ e }: { e: Entry }) {
   return null;
 }
 
+/** A stable number for a word, to seed its examples. */
+const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 2147483647, 7);
+
 function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
   const card = CARD_BY_ID.get(e.id);
+  // two short, sensible sentences with words and grammar the learner knows; "Other examples" draws new ones
+  const [round, setRound] = useState(0);
+  const examples = useMemo(() => wordExamples(e, derived().knowledge, seeded(hash(e.id) + round * 7919), 2), [e.id, round]);
   return (
     <Modal onClose={onClose} label={e.en}>
       <div class="stack">
@@ -126,6 +135,24 @@ function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
         </div>
         {e.note && <p class="small well">{e.note}</p>}
         <Forms e={e} />
+        {examples.length > 0 && (
+          <div class="stack" style={{ gap: "2px" }}>
+            <div class="spread">
+              <span class="eyebrow" style={{ color: "var(--ink-2)" }}>Examples</span>
+              <button class="linkish" onClick={() => setRound(round + 1)}>Other examples</button>
+            </div>
+            {examples.map((x, i) => (
+              <div key={x.latin} class="ex-line">
+                <span>
+                  <LatinTokens tokens={x.tokens} />
+                  <Speak text={x.latin} id={`word-${e.id}-ex-${i}`} />
+                </span>
+                <span class="muted">{x.english}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <Sayings wordId={e.id} max={2} />
         {card && <p class="small"><span class="eyebrow" style={{ marginRight: "8px" }}>Remember</span>{card.hook}</p>}
         <div class="row">
           <button class="btn ghost small" onClick={() => { onClose(); openAsk({ label: `Word: ${dictionaryForm(e)}`, detail: `The learner opened the dictionary entry ${dictionaryForm(e)} (${e.en}).` }, "How is this word used? Give me two short examples with words I know."); }}>

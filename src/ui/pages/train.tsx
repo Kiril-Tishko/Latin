@@ -356,7 +356,7 @@ function Runner({ s }: { s: Session }) {
         label: `Exercise: ${KIND_LABEL[ex.kind]}`,
         detail: `${ex.instruction}. ${ex.context}. The learner answered: "${answer || "(nothing)"}". Checker verdict: ${res?.verdict ?? "not checked yet"}. ${res?.issues.map((i) => i.message).join(" ") ?? ""}`,
       },
-      res && res.verdict !== "correct" ? "Why is my answer wrong, and how do I get it right next time?" : undefined,
+      res && res.verdict !== "correct" ? "Why is my answer wrong, and how do I get it right next time?" : res ? "Why is this the right form here?" : "Which rule do I need here? Give me a hint, not the answer.",
     );
 
   const progress = s.index / s.items.length;

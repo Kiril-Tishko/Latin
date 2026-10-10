@@ -43,6 +43,11 @@ Artifact URL: https://claude.ai/artifact/3cvi4ofuaPLg6LfXXf7efX (also in README.
 
 Runtime capabilities used:
 - `sample`: the Ask Claude drawer and "I think my answer is right" (judge).
+  Ask buttons only put a suggested question in the box; nothing goes to Claude
+  until the learner presses Ask. A failed answer shows plain advice, Try again,
+  and the error code under "Details" (ask the learner for it when debugging).
+  Keep the sample function in state as `setSample(() => fn)`: Preact calls a
+  function given to a state setter, which once broke every question.
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
 
@@ -120,7 +125,11 @@ Italian and a Spanish voice to exercise the audio paths.
 
 - Latin is stored with long marks (macrons); typing never requires them.
 - In content strings, `«…»` marks Latin to color, `word#gen.sg` forces a
-  reading of an ambiguous form.
+  reading of an ambiguous form, and `word#x` leaves a word that only looks like
+  a known form uncolored (*fīnis* is not *fīnīs*).
+- Famous sayings live in `src/content/sayings.ts`, linked to word ids; the
+  Words dialog and Discover cards show them. Check each one's colors with the
+  analyzer before adding it.
 - Each case owns one color (see `src/styles.css`); nothing else in the UI uses
   those hues.
 - Known content gaps: story lines marked `unverified` were rebuilt from the

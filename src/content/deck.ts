@@ -93,6 +93,7 @@ export const CARDS: Card[] = [
     hook: "sedeō ~ сидеть / сидіти ~ sit. A president is the one who 'sits in front' (prae-sidet).",
   }),
   a("novus, nova, novum", "new", {
+    tags: ["thing", "place", "person"],
     from: { en: ["novel", "novice", "renovate"], ru: ["новелла"], uk: ["новела"] },
     kin: { en: ["new"], ru: ["новый"], uk: ["новий"] },
     hook: "novus = новый / новий = new. A novice is new at something; a novel was once 'a new story'.",
@@ -149,7 +150,7 @@ export const CARDS: Card[] = [
     hook: "An аудитория is a room for listening. Audio is literally 'I hear'.",
   }),
   n("rosa, rosae, f", "rose", {
-    tags: ["nature", "thing"],
+    tags: ["nature", "thing", "plant"],
     from: { en: ["rose", "rosary"], ru: ["роза"], uk: ["роза"] },
     hook: "Роза is simply rosa. The textbook word every Latin student meets first.",
   }),
@@ -187,6 +188,7 @@ export const CARDS: Card[] = [
     hook: "A локомотив moves 'from its place' (locō mōtīvus). Location, local: all about places.",
   }),
   a("plēnus, plēna, plēnum", "full", {
+    tags: ["thing"],
     from: { en: ["plenty", "plenary"], ru: ["пленум", "пленарный"], uk: ["пленарний"] },
     kin: { en: ["full"], ru: ["полный"], uk: ["повний"] },
     hook: "plēnus ~ полный / повний ~ full: one ancient word. A пленарное заседание is the full meeting.",
@@ -248,6 +250,7 @@ export const CARDS: Card[] = [
     hook: "A кампания was first a military 'season in the field'. A campus is the university's field.",
   }),
   a("multus, multa, multum", "much", {
+    tags: ["mass"],
     alt: ["many", "a lot of"],
     from: { en: ["multi-", "multiply", "multitude"], ru: ["мультфильм"], uk: ["мультфільм"] },
     hook: "Мультфильм comes from 'multiplication': many drawings multiplied into motion. multus = many.",
@@ -277,6 +280,7 @@ export const CARDS: Card[] = [
     hook: "Глобус: the ball of the world.",
   }),
   a("tōtus, tōta, tōtum", "whole", {
+    tags: ["thing", "place", "mass"],
     alt: ["entire", "all"],
     from: { en: ["total"], ru: ["тотальный"], uk: ["тотальний"] },
     hook: "Total = the whole thing. Тотальный контроль controls everything.",
@@ -329,6 +333,7 @@ export const CARDS: Card[] = [
     hook: "A миссия is a 'sending'. A missile is something sent flying.",
   }),
   a("albus, alba, album", "white", {
+    tags: ["thing", "animal", "plant"],
     from: { en: ["album", "albino"], ru: ["альбом"], uk: ["альбом"] },
     hook: "An album was a white board for notices. Your альбом still starts with white pages.",
   }),
@@ -383,6 +388,7 @@ export const CARDS: Card[] = [
     hook: "Літера is a single littera. Litterae (plural) became literature.",
   }),
   a("pūblicus, pūblica, pūblicum", "public", {
+    tags: ["thing", "place"],
     alt: ["common"],
     from: { en: ["public", "publish"], ru: ["публика", "публичный"], uk: ["публіка", "публічний"] },
     hook: "Публика is the public. Rēs pūblica (the public thing) gave us the republic.",
@@ -438,11 +444,12 @@ export const CARDS: Card[] = [
     hook: "An овал is egg-shaped.",
   }),
   n("verbum, verbī, n", "word", {
-    tags: ["thing", "writing"],
+    tags: ["thing", "writing", "abstract"],
     from: { en: ["verb", "verbal", "proverb"], ru: ["вербальный"], uk: ["вербальний"] },
     hook: "Verbal = in words. A verb is 'the word' of the sentence.",
   }),
   a("rārus, rāra, rārum", "rare", {
+    tags: ["thing", "animal", "plant"],
     alt: ["scattered"],
     from: { en: ["rare", "rarity"], ru: ["раритет"], uk: ["раритет"] },
     hook: "A раритет is a rare thing.",
@@ -476,6 +483,7 @@ export const CARDS: Card[] = [
     hook: "porcus ~ поросёнок / порося: the same ancient word for a young pig. Pork came through French.",
   }),
   a("clārus, clāra, clārum", "bright", {
+    tags: ["thing", "place"],
     alt: ["clear", "famous"],
     from: { en: ["clear", "clarify"], ru: ["кларнет"], uk: ["кларнет"] },
     hook: "The кларнет was named for its clear (clārus) bright sound.",
@@ -533,6 +541,7 @@ export const CARDS: Card[] = [
     hook: "Премия is your praemium.",
   }),
   a("ruber, rubra, rubrum", "red", {
+    tags: ["thing", "plant"],
     from: { en: ["ruby", "rubric"], ru: ["рубин"], uk: ["рубін"] },
     hook: "A рубин is a red stone. Ruber declines like pulcher: rubra, rubrum.",
   }),
@@ -578,6 +587,7 @@ export const CARDS: Card[] = [
     hook: "Your коллега belongs to the same collēgium.",
   }),
   a("prīvātus, prīvāta, prīvātum", "private", {
+    tags: ["thing", "place"],
     alt: ["personal"],
     from: { en: ["private"], ru: ["приватный"], uk: ["приватний"] },
     hook: "Приватний / приватный = prīvātus, belonging to a single person.",
@@ -589,7 +599,7 @@ export const CARDS: Card[] = [
     hook: "Купидон (Cupid) is Desire itself.",
   }),
   n("līlium, līliī, n", "lily", {
-    tags: ["nature", "thing"],
+    tags: ["nature", "thing", "plant"],
     from: { en: ["lily"], ru: ["лилия"], uk: ["лілія"] },
     hook: "Лилия / лілія = līlium.",
   }),

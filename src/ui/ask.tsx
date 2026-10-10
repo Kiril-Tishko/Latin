@@ -23,13 +23,16 @@ interface Turn {
   content: string;
   practice?: string[];
   error?: boolean;
+  /** For a failed answer: the error code and message, to report if it keeps happening. */
+  detail?: string;
 }
 
 interface AskState {
   open: boolean;
   context: AskContext | null;
   turns: Turn[];
-  pending?: string;
+  /** A suggested question: put in the box for the learner to change or send. Never sent by itself. */
+  draft?: string;
 }
 
 let state: AskState = { open: false, context: null, turns: [] };
@@ -44,10 +47,10 @@ export function onPractice(fn: (skills: string[]) => void) {
   practiceHandler = fn;
 }
 
-/** Opens the drawer about the current screen; with a question, sends it right away. */
-export function openAsk(context: AskContext | null, question?: string) {
+/** Opens the drawer about the current screen, with a suggested question in the box (the learner sends it). */
+export function openAsk(context: AskContext | null, suggestion?: string) {
   const sameContext = state.context?.detail === context?.detail;
-  set({ open: true, context: context ?? state.context, turns: sameContext ? state.turns : [], pending: question });
+  set({ open: true, context: context ?? state.context, turns: sameContext ? state.turns : [], draft: suggestion ?? "" });
 }
 
 // ------------------------------------------------------------- prompts
@@ -108,7 +111,7 @@ export async function judge(ex: Exercise, answer: string, res: Result): Promise<
 
 Exercise: ${ex.instruction}. ${ex.context}
 Learner's answer: "${answer}"
-The automatic checker said "${res.verdict}" because: ${res.issues.map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9.]+/g, "")).join(" ") || "it did not match the accepted answers."}
+The automatic checker said "${res.verdict}" because: ${res.issues.map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "")).join(" ") || "it did not match the accepted answers."}
 
 Decide whether the learner's answer is a correct answer. Accept any Latin word order, missing long marks, and natural English variants (articles, progressive tense, synonyms). Reject wrong endings, wrong person or number, and missing or extra meaning.
 Reply with only JSON: {"correct": true or false, "explanation": "one or two sentences; put Latin inside «guillemets»"}`;
@@ -129,10 +132,12 @@ const QUICK = ["Why is this the right ending?", "Explain this rule simply", "Giv
 export function AskDrawer() {
   const [, setTick] = useState(0);
   const [input, setInput] = useState("");
+  const [suggested, setSuggested] = useState("");
   const [busy, setBusy] = useState(false);
   const [sample, setSample] = useState<SampleFn | null | undefined>(undefined);
   const ctl = useRef<AbortController | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const l = () => setTick((t) => t + 1);
@@ -141,15 +146,24 @@ export function AskDrawer() {
   }, []);
 
   useEffect(() => {
-    if (state.open && sample === undefined) sampler().then(setSample);
+    // (a function given to a state setter is called as an updater, so wrap it)
+    if (state.open && sample === undefined) void sampler().then((fn) => setSample(() => fn));
   }, [state.open, sample]);
 
+  // a suggested question goes into the box, ready to edit or send
   useEffect(() => {
-    if (state.open && state.pending && sample !== undefined && !busy) {
-      const q = state.pending;
-      set({ pending: undefined });
-      void send(q);
+    if (!state.open || state.draft === undefined) return;
+    const draft = state.draft;
+    set({ draft: undefined });
+    if (draft) {
+      setInput(draft);
+      setSuggested(draft);
     }
+    setTimeout(() => {
+      const el = inputRef.current;
+      el?.focus();
+      el?.setSelectionRange(el.value.length, el.value.length);
+    }, 30);
   });
 
   useEffect(() => {
@@ -162,7 +176,9 @@ export function AskDrawer() {
     const q = question.trim();
     if (!q || busy) return;
     setInput("");
-    const prior = state.turns.filter((t) => !t.error);
+    setSuggested("");
+    // earlier turns as context: never a failed or empty one (an empty turn is refused)
+    const prior = state.turns.filter((t) => !t.error && t.content.trim());
     const turns: Turn[] = [...state.turns, { role: "user", content: q }];
     set({ turns: [...turns, { role: "assistant", content: "" }] });
     if (!sample) {
@@ -175,11 +191,12 @@ export function AskDrawer() {
     let hist = prior.map((t) => ({ role: t.role, content: t.content }));
     while (hist.length > 8) hist = hist.slice(2);
     if (hist.length && hist[0].role !== "user") hist = hist.slice(1);
-    const messages = hist.length
+    // a first question goes as one prompt; a follow-up as the conversation so far
+    const ask = hist.length
       ? [{ role: "user" as const, content: fullPrompt(hist[0].content, state.context) }, ...hist.slice(1), { role: "user" as const, content: q }]
-      : [{ role: "user" as const, content: fullPrompt(q, state.context) }];
+      : fullPrompt(q, state.context);
     try {
-      const { text } = await sample(messages, {
+      const { text } = await sample(ask, {
         cache: false,
         signal: ctl.current.signal,
         onText: ({ text }: { text: string }) => set({ turns: [...turns, { role: "assistant", content: text }] }),
@@ -187,10 +204,11 @@ export function AskDrawer() {
       const { body, practice } = splitPractice(text);
       set({ turns: [...turns, { role: "assistant", content: body, practice }] });
     } catch (e) {
-      const err = e as { code?: string; text?: string };
+      const err = (e ?? {}) as { code?: string; text?: string; message?: string };
       const msg = sampleErrorText(err.code);
       const kept = err.text ? splitPractice(err.text).body : "";
-      set({ turns: [...turns, { role: "assistant", content: [kept, msg].filter(Boolean).join("\n\n") || "Stopped.", error: !kept }] });
+      const detail = err.code === "cancelled" ? undefined : `${err.code ?? "no code"}${err.message ? `: ${err.message}` : ""}`;
+      set({ turns: [...turns, { role: "assistant", content: [kept, msg].filter(Boolean).join("\n\n") || "Stopped.", error: !kept, detail }] });
     } finally {
       setBusy(false);
       ctl.current = null;
@@ -234,7 +252,18 @@ export function AskDrawer() {
               <p class="muted ui">Ask anything about the rule, the word or your answer. Claude sees what you have learned, your weak spots and the exercise on screen.</p>
               <div class="row" style={{ gap: "6px" }}>
                 {QUICK.map((q) => (
-                  <button key={q} class="btn ghost small" onClick={() => send(q)} disabled={busy}>{q}</button>
+                  <button
+                    key={q}
+                    class="btn ghost small"
+                    disabled={busy}
+                    onClick={() => {
+                      setInput(q);
+                      setSuggested(q);
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    {q}
+                  </button>
                 ))}
               </div>
             </div>
@@ -245,6 +274,27 @@ export function AskDrawer() {
                 t.content ? <Markup text={t.content} /> : <span class="muted ui">Thinking…</span>
               ) : (
                 t.content
+              )}
+              {t.error && t.detail && (
+                <div class="stack" style={{ gap: "6px", marginTop: "8px" }}>
+                  <div class="row" style={{ gap: "8px" }}>
+                    {i === state.turns.length - 1 && i > 0 && state.turns[i - 1].role === "user" && (
+                      <button
+                        class="btn ghost small"
+                        disabled={busy}
+                        onClick={() => {
+                          const q = state.turns[i - 1].content;
+                          set({ turns: state.turns.slice(0, i - 1) });
+                          void send(q);
+                        }}
+                      >
+                        Try again
+                      </button>
+                    )}
+                    <button class="linkish" onClick={copyPrompt}>Copy the question for a Claude chat</button>
+                  </div>
+                  <span class="small muted ui">Details: {t.detail}</span>
+                </div>
               )}
               {t.practice && t.practice.length > 0 && (
                 <div class="row" style={{ marginTop: "10px" }}>
@@ -272,6 +322,7 @@ export function AskDrawer() {
           >
             <textarea
               id="ask-input"
+              ref={inputRef}
               rows={2}
               value={input}
               placeholder="Why… / How… / What does…"
@@ -289,6 +340,9 @@ export function AskDrawer() {
               <button type="submit" class="btn" disabled={!input.trim()}>Ask</button>
             )}
           </form>
+          {suggested && input === suggested && !busy && (
+            <span class="small muted ui">A suggested question: change it or press Ask.</span>
+          )}
           {sample === null && (
             <div class="row small">
               <span class="muted ui">Claude answers here when this page is open on claude.ai.</span>

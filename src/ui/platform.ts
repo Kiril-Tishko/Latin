@@ -63,8 +63,21 @@ export function sampleErrorText(code?: string): string {
       return "That was too long to send. Try a shorter question.";
     case "cancelled":
       return "";
+    case "upstream_error":
+      return "Claude's service did not answer this time. Try again in a moment.";
+    case "empty_completion":
+      return "Claude sent back an empty answer. Try asking a little differently.";
+    case "not_declared":
+    case "capability_disabled":
+    case "capability_removed":
+      return "Asking Claude isn't available in this view of the page. Open it on claude.ai in a browser.";
+    case "invalid_request":
+    case "transform_error":
+      return "The page sent the question in a form Claude could not read. That is a bug on the page.";
+    case "queue_overflow":
+      return "Too many questions were waiting. Reload the page and try again.";
     default:
-      return "Something went wrong reaching Claude. Try again.";
+      return `Something went wrong reaching Claude${code ? ` (${code})` : ""}. Try again.`;
   }
 }
 

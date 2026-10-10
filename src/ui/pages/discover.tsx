@@ -14,6 +14,7 @@ import { CardBack, Icon, Modal, toast } from "../components";
 import { LatinText, LatinTokens } from "../latin";
 import { derived, getProgress, update, useProgress } from "../store";
 import { Speak } from "../speak";
+import { Sayings } from "../saying";
 
 const LANG: [keyof Card["from"], string][] = [
   ["en", "EN"],
@@ -81,6 +82,7 @@ export function CardView({ card, n, onDone, onNext, onClose }: { card: Card; n?:
           <span class="eyebrow" style={{ color: "var(--ink-2)" }}>Remember it</span>
           <p>{card.hook}</p>
         </div>
+        <Sayings wordId={card.id} />
         {examples.length > 0 && (
           <div class="stack" style={{ gap: "4px" }}>
             <span class="eyebrow" style={{ color: "var(--ink-2)" }}>With words you know</span>
@@ -145,6 +147,9 @@ export function openCardOnArrival(id: string) {
 
 type TileState = "new" | "seen" | "added";
 
+/** How many unopened cards lie on the table at once. */
+const BATCH = 5;
+
 function Tile({ card, n, state, next, turned, onOpen }: { card: Card; n: number; state: TileState; next: boolean; turned: boolean; onOpen: () => void }) {
   if (state === "new") {
     return (
@@ -174,12 +179,18 @@ export function Discover() {
   // cards turned over during this visit flip in place; the rest are drawn as they are
   const [turned, setTurned] = useState<Set<string>>(() => new Set(open ? [open] : []));
   const lessonIds = useMemo(() => new Set(lessonWords(p.lessonsDone).map((w) => w.id)), [p.lessonsDone.join()]);
-  const cards = DECK_CARDS.filter((c) => !lessonIds.has(c.id) && (cardUnlocked(c, d.knowledge) || p.revealed.includes(c.id) || p.added.includes(c.id)));
+  const all = DECK_CARDS.filter((c) => !lessonIds.has(c.id) && (cardUnlocked(c, d.knowledge) || p.revealed.includes(c.id) || p.added.includes(c.id)));
   const state = (id: string): TileState => (p.added.includes(id) ? "added" : p.revealed.includes(id) || id === open ? "seen" : "new");
+  // five new cards at a time: the next five join the deck once these are all opened
+  const firstNew = all.findIndex((c) => state(c.id) === "new");
+  const end = firstNew < 0 ? all.length : (Math.floor(firstNew / BATCH) + 1) * BATCH;
+  const cards = all.filter((c, i) => i < end || state(c.id) !== "new");
+  const number = (c: Card) => all.indexOf(c) + 1;
   const fresh = cards.filter((c) => state(c.id) === "new");
-  const seenCount = cards.length - fresh.length;
-  const addedCount = cards.filter((c) => state(c.id) === "added").length;
-  const later = DECK_CARDS.filter((c) => !lessonIds.has(c.id)).length - cards.length;
+  const seenCount = all.filter((c) => state(c.id) !== "new").length;
+  const addedCount = all.filter((c) => state(c.id) === "added").length;
+  const waiting = all.length - cards.length;
+  const later = DECK_CARDS.filter((c) => !lessonIds.has(c.id)).length - all.length;
 
   const current = open ? CARD_BY_ID.get(open) : undefined;
   const index = current ? cards.findIndex((c) => c.id === current.id) : -1;
@@ -196,7 +207,7 @@ export function Discover() {
     <div class="stack">
       <div class="spread deck-head">
         <p class="ui">
-          <strong>{seenCount}</strong> of {cards.length} cards opened · <strong>{addedCount}</strong> in your dictionary
+          <strong>{seenCount}</strong> of {all.length} cards opened · <strong>{addedCount}</strong> in your dictionary
         </p>
         <button class="btn gold" disabled={!fresh.length} onClick={() => fresh[0] && show(fresh[0].id)}>
           <Icon.card /> {fresh.length ? "Open a new card" : "All cards opened"}
@@ -204,17 +215,22 @@ export function Discover() {
       </div>
 
       <div class="deck-grid">
-        {cards.map((c, i) => (
-          <Tile key={c.id} card={c} n={i + 1} state={state(c.id)} next={c.id === fresh[0]?.id} turned={turned.has(c.id)} onOpen={() => show(c.id)} />
+        {cards.map((c) => (
+          <Tile key={c.id} card={c} n={number(c)} state={state(c.id)} next={c.id === fresh[0]?.id} turned={turned.has(c.id)} onOpen={() => show(c.id)} />
         ))}
       </div>
 
+      {waiting > 0 && (
+        <p class="small muted">
+          {waiting} more card{waiting === 1 ? " is" : "s are"} waiting: the next {Math.min(BATCH, waiting)} appear when you have opened {fresh.length === 1 ? "this one" : `these ${fresh.length}`}.
+        </p>
+      )}
       {later > 0 && <p class="small muted">{later} more card{later === 1 ? "" : "s"} open with later lessons.</p>}
 
       {current && (
-        <Modal wide className="card-modal" label={`Card ${roman(index + 1)}`} onClose={() => setOpen(null)}>
+        <Modal wide className="card-modal" label={`Card ${roman(number(current))}`} onClose={() => setOpen(null)}>
           <div class="card-turn" key={current.id}>
-            <CardView card={current} n={index + 1} onNext={next ? () => show(next.id) : undefined} onClose={() => setOpen(null)} />
+            <CardView card={current} n={number(current)} onNext={next ? () => show(next.id) : undefined} onClose={() => setOpen(null)} />
           </div>
         </Modal>
       )}

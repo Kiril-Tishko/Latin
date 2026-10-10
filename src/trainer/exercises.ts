@@ -84,7 +84,7 @@ export interface Ctx {
 let counter = 0;
 const nextId = () => `ex${Date.now().toString(36)}${(counter++).toString(36)}`;
 
-const plainText = (s: string) => s.replace(/«|»/g, "").replace(/#[a-z0-9.]+/g, "");
+const plainText = (s: string) => s.replace(/«|»/g, "").replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "");
 
 function contentWords(tokens: LToken[]): Entry[] {
   const seen = new Set<string>();

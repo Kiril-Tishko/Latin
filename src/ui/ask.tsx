@@ -271,7 +271,7 @@ export function AskDrawer() {
           {state.turns.map((t, i) => (
             <div key={i} class={`msg ${t.role}`}>
               {t.role === "assistant" ? (
-                t.content ? <Markup text={t.content} /> : <span class="muted ui">Thinking…</span>
+                t.content ? <Markup text={t.content} /> : <span class="thinking" role="status" aria-label="Thinking"><i /><i /><i /></span>
               ) : (
                 t.content
               )}

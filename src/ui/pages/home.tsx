@@ -7,7 +7,7 @@ import { mastery, streak, todayDone } from "../../trainer/progress";
 import { readiness } from "../../trainer/session";
 import { dueWords } from "../../trainer/srs";
 import { openAsk } from "../ask";
-import { CardBack, Icon, Mosaic } from "../components";
+import { CardBack, Icon, Laurel, Mosaic } from "../components";
 import { LatinText } from "../latin";
 import { go } from "../nav";
 import { Speak } from "../speak";
@@ -107,7 +107,10 @@ export function Home() {
           <div class="stack" style={{ gap: "6px", maxWidth: "360px" }}>
             <div class="spread small ui">
               <span><strong>{Math.min(done, goal)}</strong> / {goal} today</span>
-              <span class="muted">{days > 0 ? `${days}-day streak` : "Start a streak"}</span>
+              <span class="muted streak">
+                {days > 0 && <Laurel cls="laurel-mini" />}
+                {days > 0 ? `${days}-day streak` : "Start a streak"}
+              </span>
             </div>
             <Mosaic value={done / goal} tiles={Math.min(goal, 20)} label={`${done} of ${goal} exercises today`} />
           </div>

@@ -105,6 +105,21 @@ export function Laurel({ cls = "laurel" }: { cls?: string }) {
   );
 }
 
+/**
+ * A hedera: the ivy leaf Roman stone-cutters carved between words and at the
+ * end of an inscription. Used as a quiet ornament (the footer, end marks).
+ */
+export function Hedera({ flip }: { flip?: boolean }) {
+  return (
+    <svg class="hedera" viewBox="0 0 24 24" aria-hidden="true" style={flip ? { transform: "scaleX(-1)" } : undefined}>
+      <g transform="rotate(-90 12 12)">
+        <path d="M12 21C5.5 15.5 2.6 11.6 4.7 7.6 6.6 4.6 10.3 4.9 12 8.2 13.7 4.9 17.4 4.6 19.3 7.6 21.4 11.6 18.5 15.5 12 21Z" fill="currentColor" />
+        <path d="M12 8.2C12 5.2 10.4 3.2 8 3.3 6.4 3.4 5.8 4.9 6.9 5.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+      </g>
+    </svg>
+  );
+}
+
 /** The back of a Discover card: dark, framed in gold, a wreath round a question mark. */
 export function CardBack({ n }: { n?: number }) {
   return (
@@ -132,7 +147,7 @@ export function Toaster() {
       showToastFn = null;
     };
   }, []);
-  return text ? <div class="toast" role="status">{text}</div> : null;
+  return text ? <div class="toast ansata" role="status">{text}</div> : null;
 }
 
 export function Section({ eyebrow, title, children, actions }: { eyebrow?: string; title?: string; children: ComponentChildren; actions?: ComponentChildren }) {

@@ -63,7 +63,7 @@ function a(dict: string, en: string, o: Opts): Card {
 
 export const CARDS: Card[] = [
   n("ventus, ventī, m", "wind", {
-    tags: ["nature", "thing"],
+    tags: ["nature", "thing", "unseen"],
     from: { en: ["vent", "ventilate"], ru: ["вентилятор", "вентиляция"], uk: ["вентилятор", "вентиляція"] },
     kin: { en: ["wind"], ru: ["ветер"], uk: ["вітер"] },
     hook: "A вентилятор makes ventus. And ventus, ветер, вітер and wind are one ancient word.",

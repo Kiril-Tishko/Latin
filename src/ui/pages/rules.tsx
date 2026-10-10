@@ -15,7 +15,8 @@ const word = (id: string) => Object.values(LESSON_WORDS).flat().find((w) => w.id
 
 type NounRow = [Case, "sg" | "pl"];
 const NOUN_ROWS: NounRow[] = [["nom", "sg"], ["acc", "sg"], ["gen", "sg"], ["abl", "sg"], ["nom", "pl"]];
-const NOUN_COLS: [string, string][] = [["puella", "-a (1st)"], ["amicus", "-us (2nd)"], ["liber", "-er (2nd)"], ["vinum", "-um (2nd, neuter)"]];
+// declensions and conjugations numbered the way Latin grammars do: I, II, III, IV
+const NOUN_COLS: [string, string][] = [["puella", "I · -a"], ["amicus", "II · -us"], ["liber", "II · -er"], ["vinum", "II · -um (neuter)"]];
 
 /** Noun endings, one column per pattern. Forms the learner has not met yet show as "?". */
 export function NounTable({ rows = NOUN_ROWS, cols = NOUN_COLS.map(([id]) => id), k = derived().knowledge }: { rows?: NounRow[]; cols?: string[]; k?: Knowledge }) {
@@ -26,7 +27,7 @@ export function NounTable({ rows = NOUN_ROWS, cols = NOUN_COLS.map(([id]) => id)
         <thead>
           <tr>
             <th></th>
-            {entries.map(([e, label]) => <th key={e.id}>{label}</th>)}
+            {entries.map(([e, label]) => <th key={e.id} title={`${label.split(" · ")[0]} declension`}>{label}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -55,7 +56,7 @@ export function NounTable({ rows = NOUN_ROWS, cols = NOUN_COLS.map(([id]) => id)
 
 type VerbRow = PN | "inf";
 const VERB_ROWS: [VerbRow, string][] = [["1sg", "ego"], ["2sg", "tū"], ["3sg", "he / she / it"], ["3pl", "they"], ["inf", "to …"]];
-const VERB_COLS: [string, string][] = [["laboro", "1st"], ["doceo", "2nd"], ["scribo", "3rd"], ["dormio", "4th"], ["sum", "to be"], ["possum", "can"]];
+const VERB_COLS: [string, string][] = [["laboro", "I"], ["doceo", "II"], ["scribo", "III"], ["dormio", "IV"], ["sum", "to be"], ["possum", "can"]];
 
 /** Present-tense verb endings, one column per pattern. */
 export function VerbTable({ rows = VERB_ROWS.map(([r]) => r), cols = VERB_COLS.map(([id]) => id), k = derived().knowledge }: { rows?: VerbRow[]; cols?: string[]; k?: Knowledge }) {
@@ -66,7 +67,7 @@ export function VerbTable({ rows = VERB_ROWS.map(([r]) => r), cols = VERB_COLS.m
         <thead>
           <tr>
             <th></th>
-            {entries.map(([v, label]) => <th key={v.id}>{label}</th>)}
+            {entries.map(([v, label]) => <th key={v.id} title={/^[IV]+$/.test(label) ? `conjugation ${label}` : undefined}>{label}</th>)}
           </tr>
         </thead>
         <tbody>

@@ -176,7 +176,10 @@ const takesObject = (k: Knowledge, v: VerbEntry) => !!v.trans && !(k.silly === 0
 
 /** An adjective that suits a noun with these tags (long road, timid girl; not a long girl). */
 export const adjFits = (a: AdjEntry, tags: string[]) =>
-  !a.tags.length || (a.tags.some((t) => tags.includes(t)) && (!tags.includes("mass") || a.tags.includes("mass"))); // wine is not "long"
+  !a.tags.length ||
+  (a.tags.some((t) => tags.includes(t)) &&
+    (!tags.includes("mass") || a.tags.includes("mass")) && // wine is not "long"
+    (!tags.includes("nature") || tags.includes("place") || a.tags.includes("nature") || a.tags.includes("plant"))); // nor is the wind
 const isThing = (n: NounEntry) => !isPerson(n);
 const isPlace = (n: NounEntry) => n.tags.includes("place");
 
@@ -293,7 +296,7 @@ const solid = (n: NounEntry) => physical(n) && !n.tags.includes("mass");
 /** Things you can pick up: not the wind or the smoke, but water, a rose, a book. */
 const portable = (n: NounEntry) => physical(n) && (!n.tags.includes("nature") || n.tags.includes("drink") || n.tags.includes("plant"));
 /** What can be seen or watched: a number, a shape, a play; not "life" itself. */
-const visible = (n: NounEntry) => !(n.tags.includes("abstract") && n.tags.includes("mass"));
+const visible = (n: NounEntry) => !(n.tags.includes("abstract") && n.tags.includes("mass")) && !n.tags.includes("unseen");
 const tagged = (tag: string) => (n: NounEntry) => n.tags.includes(tag);
 /** Verbs that need an object or a place to make sense on their own: not "I see on Olympus", "learns to live". */
 const NEEDS_MORE = new Set(["video", "sentio", "audio", "habito"]);

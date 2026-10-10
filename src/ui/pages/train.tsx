@@ -10,7 +10,7 @@ import { buildKnowledge } from "../../trainer/knowledge";
 import { dayKey, mastery } from "../../trainer/progress";
 import { applyResult, buildSession, nextExercise, placementSession, readiness, SessionOpts } from "../../trainer/session";
 import { openAsk, judge } from "../ask";
-import { CaseChip, Icon, Mosaic, toast } from "../components";
+import { CaseChip, Icon, Laurel, Mosaic, toast } from "../components";
 import { LatinTokens } from "../latin";
 import { Inline, Markup } from "../markup";
 import { go } from "../nav";
@@ -228,7 +228,9 @@ function Chooser() {
             <span>Ready for the next step</span>
             <strong>{Math.round(ready.value * 100)}%</strong>
           </div>
-          <Mosaic value={ready.value} tiles={10} label={`${Math.round(ready.value * 100)}% ready`} />
+          <div style={{ maxWidth: "360px" }}>
+            <Mosaic value={ready.value} tiles={10} label={`${Math.round(ready.value * 100)}% ready`} />
+          </div>
           {ready.ready && nextLesson ? (
             <button class="btn gold small" style={{ alignSelf: "flex-start" }} onClick={() => update((x) => void (x.focusLesson = nextLesson))}>
               Lesson {roman(level)} is solid: go to Lesson {roman(nextLesson)} <Icon.arrow />
@@ -366,8 +368,15 @@ function Runner({ s }: { s: Session }) {
     <div class="trainer">
       <div class="trainer-top">
         <span class="eyebrow">{modeLabel(s.mode)}</span>
-        <div class="progress-line"><i style={{ width: `${progress * 100}%` }} /></div>
-        <span class="ui small muted">{s.index + 1} / {s.items.length}</span>
+        {/* the session as a strip of tesserae: gold when right, pale when almost, dark when wrong */}
+        <div class="session-mosaic" role="img" aria-label={`${Math.round(progress * 100)}% of the round done`}>
+          {s.items.map((item, i) => (
+            <i key={item.id} class={s.attempts[i] ? s.attempts[i].res.verdict : i === s.index ? "current" : ""} />
+          ))}
+        </div>
+        <span class="counter" title={`${s.index + 1} of ${s.items.length}`}>
+          {roman(s.index + 1)} / {roman(s.items.length)}
+        </span>
         <button class="linkish" onClick={() => setSession({ ...s, index: s.items.length })}>End</button>
       </div>
 
@@ -609,7 +618,7 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
   const ruleHints = blamed.map((id) => SKILL_BY_ID.get(id)?.hint).filter(Boolean).slice(0, 2) as string[];
   return (
     <div class="stack" style={{ gap: "12px" }}>
-      <div class={`verdict ${res.verdict}`} role="status">
+      <div class={`verdict ansata ${res.verdict}`} role="status">
         <span class="la">{v.la}</span>
         <span class="en">{v.en}</span>
       </div>
@@ -674,7 +683,9 @@ function StepProgress({ level }: { level: number }) {
         <h3>Lesson {roman(level)}: ready for the next step</h3>
         <strong class="ui">{Math.round(r.value * 100)}%</strong>
       </div>
-      <Mosaic value={r.value} tiles={10} />
+      <div style={{ maxWidth: "360px" }}>
+        <Mosaic value={r.value} tiles={10} />
+      </div>
       {r.ready && nextLesson && p.focusLesson === level ? (
         <div class="row">
           <span class="small">These rules are solid now.</span>
@@ -698,12 +709,19 @@ function Summary({ s }: { s: Session }) {
   touched.sort((a, b) => mastery(p.skills[a]) - mastery(p.skills[b]));
   return (
     <div class="stack-lg" style={{ maxWidth: "980px", margin: "0 auto" }}>
-      <div class="stack" style={{ gap: "6px" }}>
-        <span class="eyebrow">{modeLabel(s.mode)}</span>
-        <h1>{right + almost === s.attempts.length && s.attempts.length ? "Optimē!" : "Bene labōrāvistī!"}</h1>
-        <p class="muted">
-          {right} correct, {almost} almost, {wrong.length} to review, out of {s.attempts.length}.
-        </p>
+      <div class="summary-head">
+        {/* a victor's wreath round the number of right answers */}
+        <div class="wreath" title={`${right} right`}>
+          <Laurel />
+          <span>{right ? roman(right) : "–"}</span>
+        </div>
+        <div class="stack" style={{ gap: "6px" }}>
+          <span class="eyebrow">{modeLabel(s.mode)}</span>
+          <h1>{right + almost === s.attempts.length && s.attempts.length ? "Optimē!" : "Bene labōrāvistī!"}</h1>
+          <p class="muted">
+            {right} correct, {almost} almost, {wrong.length} to review, out of {s.attempts.length}.
+          </p>
+        </div>
       </div>
       {(s.mode.kind === "step" || s.mode.kind === "lesson") && <StepProgress level={s.level} />}
       {touched.length > 0 && (

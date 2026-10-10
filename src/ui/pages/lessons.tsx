@@ -117,7 +117,7 @@ export function LessonPage({ n }: { n: number }) {
         <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "lessons" })}>← All lessons</button>
         <span class="eyebrow">Lectiō {roman(l.n)}</span>
         <h1>{l.title}</h1>
-        <p class="muted prose">{l.summary}</p>
+        <p class="muted prose dropcap">{l.summary}</p>
         <div class="row small ui">
           <a href={videoUrl(l.videoId)} target="_blank" rel="noopener">▶ Watch the video</a>
           <a href={videoUrl(l.newVideoId)} target="_blank" rel="noopener">▶ 2025 re-recording</a>

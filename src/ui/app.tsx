@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { AskDrawer, onPractice, openAsk } from "./ask";
-import { Icon, Toaster } from "./components";
+import { Hedera, Icon, Toaster } from "./components";
+import { roman } from "../latin/text";
 import { go, Route, useRoute } from "./nav";
 import { Discover } from "./pages/discover";
 import { Home } from "./pages/home";
@@ -70,7 +71,7 @@ export function App() {
       <header class="topbar">
         <div class="topbar-inner">
           <button class="brand" onClick={() => go({ page: "home" })}>
-            TABVLA<span class="dot">·</span>LATINA
+            TABVLA<span class="dot" aria-hidden="true" />LATINA
           </button>
           <nav class="nav" aria-label="Sections">
             {TABS.map((t) => (
@@ -91,6 +92,14 @@ export function App() {
       </header>
 
       <main class={`page${route.page === "train" ? " wide" : ""}`} id="main">{page}</main>
+
+      {route.page !== "train" && (
+        <footer class="site-foot" aria-label={`Tabula Latina, ${new Date().getFullYear()}`}>
+          <Hedera />
+          <span>{roman(new Date().getFullYear())}</span>
+          <Hedera flip />
+        </footer>
+      )}
 
       <nav class="bottomnav" aria-label="Sections">
         {TABS.map((t) => (

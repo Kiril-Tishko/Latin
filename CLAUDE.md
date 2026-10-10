@@ -132,5 +132,10 @@ Italian and a Spanish voice to exercise the audio paths.
   analyzer before adding it.
 - Each case owns one color (see `src/styles.css`); nothing else in the UI uses
   those hues.
+- Roman touches, in gold and brown only: the hedera (ivy-leaf mark, `Hedera`),
+  diamond interpuncts, tabula ansata plaques (`.ansata`) for verdicts and
+  notices, tesserae (`Mosaic`, the session strip), the laurel wreath, Roman
+  numerals for counts, years, lessons and conjugations, a stylus cursor over
+  the wax. Keep them small and quiet.
 - Known content gaps: story lines marked `unverified` were rebuilt from the
   narration; Lesson 1's student may be *discipulus* rather than *discipula*.

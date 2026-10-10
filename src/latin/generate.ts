@@ -77,6 +77,8 @@ export interface Clause {
   pp?: { prep: "in" | "ad"; case: "abl" | "acc"; np: NP };
   adv?: "bene" | "nunc";
   skills: string[];
+  /** Which sentence pattern built it. */
+  template?: string;
 }
 
 const MOTION = new Set(["ambulo", "fugito", "porto"]);
@@ -431,6 +433,7 @@ export function generate(k: Knowledge, r: Rand, focus: string[] = [], templates:
       if (fails[name] >= 6) alive = alive.filter((t) => t !== name);
       continue;
     }
+    c.template = name;
     const hits = focus.filter((f) => c.skills.includes(f)).length;
     const score = hits + r() * 0.5;
     if (score > bestScore) {
@@ -687,7 +690,7 @@ function ppEnglish(c: Clause, twins: Set<string>): EnPhrase {
     shown = "into";
   } else {
     preps = ["in", "on", "at", "inside"];
-    shown = tags.includes("name") && pp.np.noun.id === "olympus" ? "on" : "in";
+    shown = tags.includes("on") ? "on" : "in";
   }
   return { text: `${shown} ${np.text}`, re: `${alt(preps.map(reEscape))} ${np.re}` };
 }

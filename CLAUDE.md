@@ -1,0 +1,95 @@
+# Tabula Latina
+
+A Latin trainer that follows the YouTube playlist **Easy Latin Lessons**
+(https://www.youtube.com/playlist?list=PLjqqMkeHFt1E_lRi9nQvtmP9Od2JokI1J),
+published as a private claude.ai artifact.
+
+## The learner
+
+- Native in English, Russian and Ukrainian. Explanations are in English;
+  comparisons with Russian / Ukrainian cases are welcome.
+- Finished Lessons 1-4 (October 2026); Lesson 4 still felt shaky.
+- Wants: only words and constructions from the videos (plus words they open
+  in Discover), lots of written exercises, colored endings, Roman classic look,
+  silly sentences allowed, light motivation (daily goal + streak).
+- Follows the original playlist, with corrections from the 2025 "New Easy
+  Latin Lessons" playlist (PLjqqMkeHFt1FjCaUrdcdMxF15sKUk9rHs) where they differ.
+
+## Commands
+
+```sh
+npm install
+npm test            # engine, content and exercise self-tests (vitest)
+npm run typecheck
+npm run build       # -> dist/tabula-latina.html (the artifact page) and dist/preview.html
+npm run smoke       # clicks through the built page in Chromium, saves screenshots to dist/screens
+node scripts/build.mjs --dev   # unminified build for debugging
+```
+
+## Publishing
+
+The page is `dist/tabula-latina.html`: no doctype/head/body of its own (the
+artifact publisher adds the skeleton), `<title>` and `<style>` first, all JS
+inlined. Publish with the Artifact tool:
+
+- first publish: `file_path: dist/tabula-latina.html`, `icon: "scroll"`,
+  `capabilities: {sample: {}, db: {}, user: {}}`
+- updates: same `file_path` plus `url: <artifact url>`, and omit
+  `capabilities` so the stored ones are kept.
+
+Artifact URL: https://claude.ai/artifact/3cvi4ofuaPLg6LfXXf7efX (also in README.md).
+
+Runtime capabilities used:
+- `sample`: the Ask Claude drawer and "I think my answer is right" (judge).
+- `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
+  The page also keeps a copy in localStorage; the newer `updatedAt` wins.
+
+## Adding a lesson (e.g. "add lesson 5")
+
+1. **Get the content.** YouTube blocks video downloads from cloud IPs, but
+   auto-captions work with yt-dlp's embedded web client (needs youtube.com and
+   GitHub allowed in the environment's network settings):
+
+   ```sh
+   python3 -m venv /tmp/venv && /tmp/venv/bin/pip install yt-dlp
+   /tmp/venv/bin/yt-dlp --js-runtimes node --remote-components ejs:github \
+     --extractor-args youtube:player_client=web_embedded --ignore-no-formats-error \
+     --skip-download --write-auto-subs --sub-langs en-orig --sub-format vtt \
+     -o "lesson5.%(ext)s" https://www.youtube.com/watch?v=GnoqpwWFjQA
+   python3 -I scripts/content/vtt2txt.py lesson5.en-orig.vtt > lesson5.txt
+   ```
+
+   Captions carry the English narration well but garble the Latin; rebuild the
+   Latin from context and mark anything uncertain (`unverified: true` on story
+   lines). Stories are read in Latin without narration, so ask the learner for
+   a screenshot or text. Also check the 2025 re-recording for corrections.
+   Lesson video ids: 5 GnoqpwWFjQA, 6 rP9X3gaD0uY, 7 -Dn--UN-PSA, 8 CSCfD1yiG5I,
+   9 etJy99U1YBc, 10 _O360QTciZo, 11 Z6YCvOnWyi4, 12 ARW59NnVttE.
+2. **Words**: add them to `LESSON_WORDS[n]` in `src/content/words.ts` with
+   full grammar (`noun`, `verb`, `adj`, `adj3`, `fixed`). Story-only words go
+   in `STORY_ONLY`.
+3. **Skills**: new endings or constructions get ids in `src/latin/skills.ts`
+   (e.g. `n1.acc.pl`, `v.1pl`, `n3.nom.sg`). The generator only uses a form when
+   its skill is unlocked; add templates in `src/latin/generate.ts` for new
+   constructions, and teach `english()` to render them.
+4. **Lesson page**: add the lesson to `src/content/lessons.ts`: sentences from
+   the video, story, phrases, rules as What / How / When with examples, a
+   Russian / Ukrainian comparison where it helps, and `fixes` where this site
+   departs from the video.
+5. **Discover**: cards in `src/content/deck.ts` unlock by grammar; nouns of a
+   new declension become usable once its skills exist. Every relative must be
+   correct: `from` = borrowed from Latin, `kin` = same ancient root.
+6. Run `npm test` (the content test fails on any misspelled form or missing
+   long mark), `npm run build`, `npm run smoke`, then republish to the same URL.
+   The learner ticks the new lesson under Settings > Lessons watched (their
+   saved progress keeps its own list).
+
+## Conventions
+
+- Latin is stored with long marks (macrons); typing never requires them.
+- In content strings, `«…»` marks Latin to color, `word#gen.sg` forces a
+  reading of an ambiguous form.
+- Each case owns one color (see `src/styles.css`); nothing else in the UI uses
+  those hues.
+- Known content gaps: story lines marked `unverified` were rebuilt from the
+  narration; Lesson 1's student may be *discipulus* rather than *discipula*.

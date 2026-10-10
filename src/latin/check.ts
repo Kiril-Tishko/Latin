@@ -222,6 +222,17 @@ export function checkLatin(answer: string, slots: Slot[], lex: Lexicon): CheckRe
     }
   });
 
+  // a different sentence altogether: one calm note instead of a list of every word
+  const required = slots.filter((s) => !s.optional).length;
+  const offTrack = tokens.filter((t) => t.status === "word" || t.status === "extra").length + missing.length;
+  if (required >= 3 && offTrack >= Math.max(3, Math.ceil(required * 0.6))) {
+    const blame = issues.filter((x) => x.skill);
+    issues.splice(0, issues.length, {
+      kind: "word",
+      message: "This is quite different from the expected sentence. Compare it with the correct answer, and ask Claude if the difference is unclear.",
+    });
+    for (const b of blame) issues.push({ kind: "missing", message: "", skill: b.skill });
+  }
   const serious = issues.some((x) => x.kind === "form" || x.kind === "missing" || x.kind === "extra" || x.kind === "word");
   const minor = issues.some((x) => x.kind === "typo" || x.kind === "order");
   return {

@@ -18,7 +18,8 @@ export const KIND_WEIGHTS: [ExerciseKind, number][] = [
   ["vocab", 6],
 ];
 
-function weighted<T>(r: Rand, items: [T, number][]): T {
+function weighted<T>(r: Rand, items: [T, number][]): T | undefined {
+  if (!items.length) return undefined;
   const total = items.reduce((s, [, w]) => s + w, 0);
   let roll = r() * total;
   for (const [x, w] of items) if ((roll -= w) < 0) return x;
@@ -35,10 +36,10 @@ export function pickFocus(p: Progress, k: Knowledge, r: Rand, only?: string[]): 
     const recent = Date.now() - (p.skills[s]?.last ?? 0) < 60_000 ? 0.5 : 1;
     return [s, ((1 - m) * 2 + 0.25) * (lessonSkills.has(s) ? 2.2 : 1) * recent];
   });
-  const first = weighted(r, items);
-  if (r() < 0.4) return [first];
-  const second = weighted(r, items.filter(([s]) => s !== first));
-  return second ? [first, second] : [first];
+  const first = weighted(r, items)!;
+  const rest = items.filter(([s]) => s !== first);
+  if (!rest.length || r() < 0.4) return [first];
+  return [first, weighted(r, rest)!];
 }
 
 export interface SessionOpts {
@@ -54,6 +55,7 @@ export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set
   const kinds = KIND_WEIGHTS.filter(([kind]) => !opts.kinds || opts.kinds.includes(kind));
   for (let attempt = 0; attempt < 12; attempt++) {
     const kind = weighted(ctx.r, kinds);
+    if (!kind) return null;
     let ex: Exercise | null;
     if (kind === "vocab") {
       const pool = opts.vocab ?? [];
@@ -124,7 +126,7 @@ export function applyResult(p: Progress, ex: Exercise, res: Result, answer: stri
       answer,
       expected: res.expected,
       skills: Object.entries(res.credit).filter(([, v]) => v < 0.5).map(([s]) => s),
-      notes: res.issues.map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9.]+/g, "")),
+      notes: res.issues.filter((i) => i.message).map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9.]+/g, "")),
     });
   }
   p.updatedAt = now;

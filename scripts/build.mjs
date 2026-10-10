@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = resolve(root, "dist");
 const watch = process.argv.includes("--watch");
+const dev = watch || process.argv.includes("--dev");
 
 const TITLE = "Tabula Latina";
 const FONTS =
@@ -65,7 +66,7 @@ const options = {
   outdir: outDir,
   format: "iife",
   target: "es2020",
-  minify: !watch,
+  minify: !dev,
   sourcemap: false,
   jsx: "automatic",
   jsxImportSource: "preact",

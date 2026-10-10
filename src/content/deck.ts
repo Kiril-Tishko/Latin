@@ -75,7 +75,7 @@ export const CARDS: Card[] = [
     hook: "Ukrainian окуляри (glasses) come straight from oculus: things for the eyes. Око is its ancient cousin.",
   }),
   n("lūna, lūnae, f", "moon", {
-    tags: ["nature", "thing", "place"],
+    tags: ["nature", "thing", "place", "on"],
     from: { en: ["lunar", "lunatic"] },
     kin: { ru: ["луна"], uk: ["луна (echo)"] },
     hook: "Луна! Latin and Russian kept the same old word for 'the shining one'. In Ukrainian луна drifted to mean an echo.",

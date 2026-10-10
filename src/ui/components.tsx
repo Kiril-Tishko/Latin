@@ -2,6 +2,7 @@
 import { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Case, CASE_NAMES } from "../latin/types";
+import { roman } from "../latin/text";
 
 const P = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -50,7 +51,7 @@ export function CaseChip({ c, label }: { c: Case | "verb"; label?: string }) {
   return <span class={`chip case c-${c}`}>{label ?? (c === "verb" ? "verb ending" : CASE_NAMES[c])}</span>;
 }
 
-export function Modal({ onClose, children, label, wide }: { onClose: () => void; children: ComponentChildren; label: string; wide?: boolean }) {
+export function Modal({ onClose, children, label, wide, className = "" }: { onClose: () => void; children: ComponentChildren; label: string; wide?: boolean; className?: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -59,10 +60,59 @@ export function Modal({ onClose, children, label, wide }: { onClose: () => void;
   return (
     <>
       <div class="scrim" onClick={onClose} />
-      <div class={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div class={`modal${wide ? " wide" : ""} ${className}`} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.target === e.currentTarget && onClose()}>
         <div class="panel frame">{children}</div>
       </div>
     </>
+  );
+}
+
+// ------------------------------------------------------------ card back
+
+/** A laurel wreath: two branches of leaves, open at the top. */
+export function Laurel({ cls = "laurel" }: { cls?: string }) {
+  const R = 33;
+  const C = 50;
+  const at = (deg: number, r: number): [number, number] => [C + r * Math.cos((deg * Math.PI) / 180), C + r * Math.sin((deg * Math.PI) / 180)];
+  const leaves: [number, number, number][] = [];
+  const N = 7;
+  for (let i = 0; i < N; i++) {
+    // from the bottom (100°) round the left side towards the top (238°); y points down
+    const deg = 100 + (i / (N - 1)) * 138;
+    for (const side of [-1, 1]) {
+      const d = deg + (side > 0 ? 9 : 0);
+      if (d > 242) continue;
+      const [x, y] = at(d, R + side * 4.6);
+      leaves.push([x, y, d + 90 - side * 32]);
+    }
+  }
+  const [x1, y1] = at(98, R);
+  const [x2, y2] = at(240, R);
+  const branch = (mirror: boolean) => (
+    <g transform={mirror ? "translate(100 0) scale(-1 1)" : undefined}>
+      <path d={`M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`} fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+      {leaves.map(([x, y, rot], i) => (
+        <ellipse key={i} cx={x.toFixed(1)} cy={y.toFixed(1)} rx="6.4" ry="2.5" transform={`rotate(${rot.toFixed(0)} ${x.toFixed(1)} ${y.toFixed(1)})`} fill="currentColor" />
+      ))}
+    </g>
+  );
+  return (
+    <svg class={cls} viewBox="0 0 100 100" aria-hidden="true">
+      {branch(false)}
+      {branch(true)}
+      <path d="M44 88.5 Q50 84 56 88.5 M47 85 L44.5 92 M53 85 L55.5 92" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+/** The back of a Discover card: dark, framed in gold, a wreath round a question mark. */
+export function CardBack({ n }: { n?: number }) {
+  return (
+    <span class="card-back" aria-hidden="true">
+      <Laurel />
+      <span class="q">?</span>
+      {n !== undefined && <span class="num">{roman(n)}</span>}
+    </span>
   );
 }
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { nuclei, respell, respellWord, stressIndex } from "../src/audio/pronounce";
+import { DECK_CARDS } from "../src/content/deck";
+import { LESSONS } from "../src/content/lessons";
+import { dictionaryForm } from "../src/latin/morph";
 
 const stressed = (w: string) => {
   const n = nuclei(w);
@@ -37,41 +40,52 @@ describe("Latin stress", () => {
   });
 });
 
-describe("respelling for an Italian voice", () => {
-  it("keeps c and g hard, v as w, ae as 'eye', and marks stress", () => {
-    expect(respellWord("discipula", "it")).toBe("dischìpula");
-    expect(respellWord("magistra", "it")).toBe("maghìstra");
-    expect(respellWord("vīnum", "it")).toBe("uìnum");
-    expect(respellWord("puellae", "it")).toBe("puèllai");
-    expect(respellWord("Caesar", "it")).toBe("càisar");
-    expect(respellWord("cīvis", "it")).toBe("chìuis");
-    expect(respellWord("magnus", "it")).toBe("màngnus");
-    expect(respellWord("est", "it")).toBe("est");
-    expect(respellWord("dux", "it")).toBe("ducs");
+describe("respelling for a Spanish voice", () => {
+  it("keeps c and g hard, v as w, ae as 'eye', and marks the Latin stress with an acute accent", () => {
+    expect(respellWord("discipula", "es")).toBe("disquípula");
+    expect(respellWord("magistra", "es")).toBe("maguístra");
+    expect(respellWord("vīnum", "es")).toBe("uínum");
+    expect(respellWord("videō", "es")).toBe("uídeo");
+    expect(respellWord("puella", "es")).toBe("puéla");
+    expect(respellWord("puellae", "es")).toBe("puélai");
+    expect(respellWord("Caesar", "es")).toBe("cáisar");
+    expect(respellWord("cīvis", "es")).toBe("quíuis");
+    expect(respellWord("magnus", "es")).toBe("mángnus");
+    expect(respellWord("aqua", "es")).toBe("ácua");
+    expect(respellWord("quī", "es")).toBe("cui");
+    expect(respellWord("sanguis", "es")).toBe("sángüis");
+    expect(respellWord("est", "es")).toBe("est");
+    expect(respellWord("dux", "es")).toBe("ducs");
   });
 
   it("respells whole sentences and drops ambiguity hints", () => {
-    expect(respell("Puella in silvā ambulat.", "it")).toBe("puèlla in sìlua àmbulat.");
-    expect(respell("Epistulam poētae#gen.sg legō.", "it")).toBe("epìstulam poètai lègo.");
+    expect(respell("Puella in silvā ambulat.", "es")).toBe("puéla in sílua ámbulat.");
+    expect(respell("Epistulam poētae#gen.sg legō.", "es")).toBe("epístulam poétai légo.");
   });
 });
 
-describe("respelling for a Spanish voice", () => {
-  it("uses Spanish spelling for hard c, g and qu", () => {
-    expect(respellWord("discipula", "es")).toBe("disquípula");
-    expect(respellWord("puella", "es")).toBe("puéla");
-    expect(respellWord("quī", "es")).toBe("cui");
+describe("respelling for an Italian voice", () => {
+  // an Italian voice read "uìdeo" as "u i accento grave deo"
+  it("keeps the classical sounds but writes no accent marks", () => {
+    expect(respellWord("videō", "it")).toBe("uideo");
+    expect(respellWord("discipula", "it")).toBe("dischipula");
+    expect(respellWord("magistra", "it")).toBe("maghistra");
+    expect(respellWord("puellae", "it")).toBe("puellai");
+    expect(respellWord("Caesar", "it")).toBe("caisar");
+    expect(respellWord("cīvis", "it")).toBe("chiuis");
+    expect(respellWord("magnus", "it")).toBe("mangnus");
+    expect(respell("Epistulam poētae#gen.sg legō.", "it")).toBe("epistulam poetai lego.");
+  });
+
+  it("never puts an accent into any lesson sentence", () => {
+    for (const l of LESSONS) for (const x of l.sentences) expect(respell(x.la, "it")).not.toMatch(/[àèìòùáéíóú]/);
   });
 });
-
-import { LESSONS } from "../src/content/lessons";
-import { DECK_CARDS } from "../src/content/deck";
-import { dictionaryForm } from "../src/latin/morph";
 
 describe("samples (for reading)", () => {
-  it("prints lesson sentences as the Italian voice will read them", () => {
-    const lines = LESSONS.flatMap((l) => l.sentences.slice(0, 6).map((s) => `${s.la.padEnd(48)} -> ${respell(s.la, "it")}`));
-    lines.push(...DECK_CARDS.slice(0, 12).map((c) => `${dictionaryForm(c.entry).padEnd(48)} -> ${respell(dictionaryForm(c.entry).replace(/, (m|f|n)\.$/, ""), "it")}`));
+  it("prints lesson sentences as the Spanish voice will read them", () => {
+    const lines = LESSONS.flatMap((l) => l.sentences.slice(0, 6).map((s) => `${s.la.padEnd(48)} -> ${respell(s.la, "es")}`));
+    lines.push(...DECK_CARDS.slice(0, 12).map((c) => `${dictionaryForm(c.entry).padEnd(48)} -> ${respell(dictionaryForm(c.entry).replace(/, (m|f|n)\.$/, ""), "es")}`));
     console.log(lines.join("\n"));
   });
 });

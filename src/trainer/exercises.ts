@@ -49,6 +49,8 @@ export interface Exercise {
   /** Token index shown as stem + blank. */
   blank?: number;
   english?: string;
+  /** English of the expected answer when it differs from `english` (transform). */
+  answerEnglish?: string;
   /** A short request line such as "puella → accusative singular". */
   ask?: string;
   askCase?: Case;
@@ -483,6 +485,7 @@ function transform(ctx: Ctx, focus: string[]): Exercise | null {
       latin: from,
       audio: latinText(from),
       english: english(c, ctx.k).text,
+      answerEnglish: english(out, ctx.k).text,
       hints: hintsFor(to),
       answer: "la",
       skills,
@@ -600,7 +603,7 @@ export function vocabExercise(_ctx: Ctx, entry: Entry, direction: "la2en" | "en2
       }
       return {
         verdict: ok ? "correct" : "wrong",
-        issues: ok ? [] : [{ kind: "word", message: direction === "la2en" ? `${hinted(entry.kind === "verb" ? entry.pp[0] : (entry as { lemma: string }).lemma)} means "${entry.en}".` : `It is ${hinted(dict)}.` }],
+        issues: ok ? [] : [{ kind: "word", message: direction === "la2en" ? `${hinted(entry.kind === "verb" ? entry.pp[0] : (entry as { lemma: string }).lemma)} means "${entry.en}".` : `It is ${hinted(dict)}${dict.endsWith(".") ? "" : "."}` }],
         expected: direction === "la2en" ? entry.en : dict,
         credit: {},
         wordCredit: { [entry.id]: ok },

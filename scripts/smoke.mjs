@@ -27,11 +27,21 @@ async function run(name, viewport, colorScheme) {
     await p.waitForTimeout(300);
     await p.screenshot({ path: `${out}/${name}-${file}.png`, fullPage: true });
   }
-  // open a mystery card
+  // open mystery cards: every card keeps its spot in the deck while others open
   await p.locator(nav, { hasText: "Inventiō" }).first().click();
-  await p.locator(".card-front").click();
-  await p.waitForTimeout(900);
+  // (the mouse is moved off the tiles first: a hovered tile lifts by 2px)
+  const spots = () => p.mouse.move(1, 1).then(() => p.waitForTimeout(300)).then(() => p.locator(".deck-tile").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return `${Math.round(r.x)},${Math.round(r.y + scrollY)}`; }).join(" ")));
+  const before = await spots();
+  await p.locator(".deck-head .btn").click();
+  await p.waitForTimeout(700);
   await p.screenshot({ path: `${out}/${name}-card.png` });
+  await p.locator("button", { hasText: "Next new card" }).click();
+  await p.waitForTimeout(500);
+  await p.locator(".card-modal button[aria-label='Close']").click();
+  await p.waitForTimeout(500);
+  if ((await spots()) !== before) errors.push(`${name}: deck tiles moved after opening cards`);
+  if ((await p.locator(".deck-tile.face").count()) < 2) errors.push(`${name}: opened cards are not shown face up`);
+  await p.screenshot({ path: `${out}/${name}-deck.png`, fullPage: true });
   // a lesson page
   await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();
   await p.locator(".lesson-card").nth(3).click();
@@ -53,18 +63,22 @@ async function run(name, viewport, colorScheme) {
     await p.locator("button", { hasText: "Next" }).click();
   }
   // ask drawer opens (no Claude outside claude.ai: shows the fallback)
-  await p.locator(".fab").click();
+  await p.locator(".ask-btn").click();
   await p.waitForTimeout(300);
   await p.screenshot({ path: `${out}/${name}-ask.png` });
   await ctx.close();
 }
 
-// Audio, with a fake Italian voice (headless Chromium has none): speaker buttons
-// appear, clicks speak the respelled Latin, listening exercises play by themselves.
+// Audio, with fake Italian and Spanish voices (headless Chromium has none): speaker
+// buttons appear, clicks speak the respelled Latin (Spanish preferred, stress marked
+// with acute accents only), listening exercises play by themselves.
 async function audio() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => {
-    const voices = [{ name: "Alice", lang: "it-IT", voiceURI: "alice", localService: true, default: false }];
+    const voices = [
+      { name: "Alice", lang: "it-IT", voiceURI: "alice", localService: true, default: false },
+      { name: "Mónica", lang: "es-ES", voiceURI: "monica", localService: true, default: false },
+    ];
     window.__spoken = [];
     const synth = {
       getVoices: () => voices,
@@ -98,7 +112,8 @@ async function audio() {
   await p.locator("button", { hasText: "Stop" }).first().click().catch(() => {});
   const spoken = await p.evaluate(() => window.__spoken);
   if (spoken.length < 3) errors.push(`audio: listen & repeat spoke ${spoken.length} lines`);
-  if (!spoken.some((t) => /dischìpula|maghìstra/.test(t))) errors.push(`audio: no respelled Latin in ${JSON.stringify(spoken.slice(0, 3))}`);
+  if (!spoken.some((t) => /disquípula|maguístra/.test(t))) errors.push(`audio: no respelled Latin in ${JSON.stringify(spoken.slice(0, 3))}`);
+  if (spoken.some((t) => /[àèìòù]/.test(t))) errors.push(`audio: grave accents would be spelled out: ${JSON.stringify(spoken.slice(0, 3))}`);
   await p.locator(".nav button", { hasText: "Exercitium" }).click();
   await p.locator("button", { hasText: "Listening" }).first().click();
   await p.waitForTimeout(400);

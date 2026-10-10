@@ -1,6 +1,6 @@
 // The trainer: one exercise at a time, written answers on a wax tablet,
 // detailed feedback with colored endings, and Claude on hand for "why?".
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { LESSON_BY_N } from "../../content/lessons";
 import { seeded } from "../../latin/generate";
 import { SKILL_BY_ID } from "../../latin/skills";
@@ -145,12 +145,12 @@ function Chooser() {
   ];
   return (
     <div class="stack-lg">
-      <div class="grid-2">
+      <div class="mode-grid">
         {modes.map((m) => (
-          <button key={m.title} class="panel frame stack" style={{ textAlign: "left", cursor: "pointer" }} onClick={() => startSession(m.mode)}>
+          <button key={m.title} class="panel frame mode-card" onClick={() => startSession(m.mode)}>
+            <span class="mode-icon"><Icon.play /></span>
             <h3>{m.title}</h3>
             <p class="muted small">{m.text}</p>
-            <span class="btn small" style={{ alignSelf: "flex-start" }}><Icon.play /> Start</span>
           </button>
         ))}
       </div>
@@ -180,11 +180,16 @@ function Runner({ s }: { s: Session }) {
   const [res, setRes] = useState<Result | null>(null);
   const [showHints, setShowHints] = useState(false);
   const [showColors, setShowColors] = useState(false);
+  const [showEnglish, setShowEnglish] = useState(false);
   const [judging, setJudging] = useState(false);
   const [judgement, setJudgement] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const sideRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // the exercise always fits the window: shrink it (never below a readable size) when it would scroll
+  useLayoutEffect(() => fitToWindow(panelRef.current, !!res), [ex.id, res, showHints, showEnglish, judgement, judging]);
 
   useEffect(() => {
     if (!res) inputRef.current?.focus();
@@ -266,11 +271,19 @@ function Runner({ s }: { s: Session }) {
         <button class="linkish" onClick={() => setSession({ ...s, index: s.items.length })}>End</button>
       </div>
 
-      <div class={`panel frame exercise${res ? " answered" : ""}`}>
+      <div class={`panel frame exercise${res ? " answered" : ""}`} ref={panelRef}>
         <div class="ex-main">
           <span class="eyebrow ex-instruction">{ex.instruction}</span>
           <div class="prompt">
-            <Prompt ex={ex} showColors={showColors || !!res} res={res} chosen={answer} onChoose={(id) => { setAnswer(id); check(id); }} />
+            <Prompt
+              ex={ex}
+              showColors={showColors || !!res}
+              res={res}
+              chosen={answer}
+              onChoose={(id) => { setAnswer(id); check(id); }}
+              english={showEnglish}
+              onEnglish={() => setShowEnglish(true)}
+            />
           </div>
 
           {ex.answer !== "choice" && (
@@ -367,7 +380,29 @@ function Runner({ s }: { s: Session }) {
   );
 }
 
-function Prompt({ ex, showColors, res, chosen, onChoose }: { ex: Exercise; showColors: boolean; res: Result | null; chosen: string; onChoose: (id: string) => void }) {
+/** The English of a Latin prompt, hidden behind a button so the meaning is worked out first. */
+function Translation({ text, shown, onShow }: { text?: string; shown: boolean; onShow: () => void }) {
+  if (!text) return null;
+  if (shown) return <p class="muted ex-english">{text}</p>;
+  return (
+    <button class="linkish ex-english" onClick={onShow} title="Show the English meaning">
+      Translate
+    </button>
+  );
+}
+
+function Prompt(props: {
+  ex: Exercise;
+  showColors: boolean;
+  res: Result | null;
+  chosen: string;
+  onChoose: (id: string) => void;
+  english: boolean;
+  onEnglish: () => void;
+}) {
+  const { ex, showColors, res, chosen, onChoose } = props;
+  // once answered, the translation of the correct answer is in the feedback
+  const translation = !res && <Translation text={ex.english} shown={props.english} onShow={props.onEnglish} />;
   switch (ex.kind) {
     case "en2la":
       return <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }}>{ex.english}</p>;
@@ -402,7 +437,7 @@ function Prompt({ ex, showColors, res, chosen, onChoose }: { ex: Exercise; showC
       return (
         <div class="stack" style={{ gap: "6px" }}>
           <p class="latin-lg"><LatinTokens tokens={ex.latin!} blank={res ? undefined : ex.blank} plain={!showColors} /></p>
-          <p class="muted">{ex.english}</p>
+          {translation}
         </div>
       );
     case "transform":
@@ -412,7 +447,7 @@ function Prompt({ ex, showColors, res, chosen, onChoose }: { ex: Exercise; showC
             <LatinTokens tokens={ex.latin!} plain={!showColors} />
             {ex.audio && <Speak text={ex.audio} id={`prompt-${ex.id}`} />}
           </p>
-          <p class="muted small">{ex.english}</p>
+          {translation}
         </div>
       );
     case "form":
@@ -443,6 +478,7 @@ function Prompt({ ex, showColors, res, chosen, onChoose }: { ex: Exercise; showC
 function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: string }) {
   const v = VERDICT[res.verdict];
   const latinAnswer = ex.answer === "la" && res.tokens;
+  const meaning = ex.kind === "transform" ? ex.answerEnglish : ex.kind === "ending" ? ex.english : undefined;
   return (
     <div class="stack" style={{ gap: "12px" }}>
       <div class={`verdict ${res.verdict}`} role="status">
@@ -482,9 +518,7 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
         ) : (
           <p class="latin-lg"><Inline text={`«${res.expected}»`} /></p>
         )}
-        {(ex.kind === "en2la" || ex.kind === "transform" || ex.kind === "ending") && ex.english && ex.kind !== "en2la" && (
-          <p class="muted small">{ex.english}</p>
-        )}
+        {meaning && <p class="muted small">{meaning}</p>}
       </div>
       {res.issues.some((i) => i.message) && (
         <ul class="issues">
@@ -553,6 +587,42 @@ function Summary({ s }: { s: Session }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Scales the exercise panel down (CSS zoom) until the page no longer scrolls.
+ * On narrow screens the answer sits below the sentence and the page scrolls to
+ * it, so only the question is fitted there.
+ */
+function fitToWindow(el: HTMLElement | null, answered: boolean) {
+  if (!el) return;
+  const run = () => {
+    el.style.removeProperty("zoom");
+    const wide = window.innerWidth > 980;
+    if (!wide && answered) return;
+    const min = wide ? 0.55 : 0.8;
+    const doc = document.documentElement;
+    let zoom = 1;
+    for (let i = 0; i < 8; i++) {
+      const over = doc.scrollHeight - window.innerHeight;
+      if (over <= 0 || zoom <= min) break;
+      const h = el.getBoundingClientRect().height;
+      zoom = Math.max(min, zoom * Math.min(0.97, (h - over - 2) / h));
+      el.style.setProperty("zoom", zoom.toFixed(3));
+    }
+  };
+  run();
+  let frame = 0;
+  const again = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(run);
+  };
+  window.addEventListener("resize", again);
+  void document.fonts?.ready.then(again);
+  return () => {
+    cancelAnimationFrame(frame);
+    window.removeEventListener("resize", again);
+  };
 }
 
 export function endSession() {

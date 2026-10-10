@@ -9,12 +9,15 @@ published as a private claude.ai artifact.
 - **Train**: written exercises built only from words and grammar already taught
   (translate both ways, fill in endings, build forms, transform sentences),
   with feedback that names the case or person you used and the one needed.
+  Each exercise fits the window; translations of Latin prompts stay hidden
+  until you press Translate.
 - **Words**: your dictionary with spaced repetition.
-- **Discover**: mystery cards of Latin words related to English, Russian or
-  Ukrainian words; add them and they join the exercises.
+- **Discover**: a deck of mystery cards, each in its own fixed spot, with Latin
+  words related to English, Russian or Ukrainian words; opened cards turn face
+  up where they lie; add them and they join the exercises.
 - **Rules**: color legend and ending tables.
 - **Audio**: every Latin sentence can be heard in classical pronunciation
-  (through the device's Italian voice), Listen & repeat on lesson pages, and a
+  (through the device's Spanish or Italian voice), Listen & repeat on lesson pages, and a
   Listen and write exercise.
 - **Ask Claude**: a tutor that sees your lessons, words and weak spots.
 

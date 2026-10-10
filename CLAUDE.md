@@ -46,14 +46,17 @@ Runtime capabilities used:
 
 ## Audio
 
-No browser has a Latin voice. `src/audio/pronounce.ts` respells Latin for an
-Italian voice (Spanish as fallback) so the device's own speech engine reads it
-with classical sounds: c and g hard (ch / gh), v as w (u), ae as "ai", gn as
-"ngn", and the Latin stress rule marked with an accent (penult if long, else
-antepenult). `src/audio/speech.ts` picks the best Italian voice and speaks;
-`speakSequence` drives Listen & repeat. Audio buttons are hidden when the
-device has no Italian or Spanish voice (Settings explains how to add one).
-The smoke test fakes an Italian voice to exercise the audio paths.
+No browser has a Latin voice. `src/audio/pronounce.ts` respells Latin for a
+Spanish voice (Italian as fallback) so the device's own speech engine reads it
+with classical sounds: c and g hard (Spanish qu / gu, Italian ch / gh), v as w
+(u), ae as "ai", gn as "ngn". For Spanish the Latin stress (penult if long, else
+antepenult) is marked with an acute accent, which Spanish voices follow anywhere
+in a word. Italian gets no accent marks: Italian voices spell out an accent in
+the middle of a word (*videō* came out as "u i accento grave deo").
+`src/audio/speech.ts` picks the best Spanish voice and speaks; `speakSequence`
+drives Listen & repeat. Audio buttons are hidden when the device has no Spanish
+or Italian voice (Settings explains how to add one). The smoke test fakes an
+Italian and a Spanish voice to exercise the audio paths.
 
 ## Adding a lesson (e.g. "add lesson 5")
 

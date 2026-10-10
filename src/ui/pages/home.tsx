@@ -1,3 +1,4 @@
+import { useState } from "preact/hooks";
 import { LESSONS } from "../../content/lessons";
 import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
@@ -5,15 +6,67 @@ import { nextCard } from "../../trainer/discover";
 import { mastery, streak, todayDone } from "../../trainer/progress";
 import { dueWords } from "../../trainer/srs";
 import { openAsk } from "../ask";
-import { Icon, Mosaic } from "../components";
+import { CardBack, Icon, Mosaic } from "../components";
+import { LatinText } from "../latin";
 import { go } from "../nav";
+import { Speak } from "../speak";
 import { derived, useProgress } from "../store";
+import { openCardOnArrival } from "./discover";
 import { startSession } from "./train";
 
 export function lessonMastery(n: number, skills: Record<string, Parameters<typeof mastery>[0]>): number {
   const l = LESSONS.find((x) => x.n === n);
   if (!l || !l.skills.length) return 0;
   return l.skills.reduce((s, id) => s + mastery(skills[id]), 0) / l.skills.length;
+}
+
+/** A bronze stylus: pointed for writing, flat at the other end for smoothing the wax. */
+function Stylus() {
+  return (
+    <svg class="stylus" viewBox="0 0 240 20" aria-hidden="true">
+      <defs>
+        <linearGradient id="bronze" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f0d590" />
+          <stop offset="0.45" stop-color="#b98a3a" />
+          <stop offset="1" stop-color="#6a4a17" />
+        </linearGradient>
+      </defs>
+      <path d="M2 4.5 L22 6.5 L22 13.5 L2 15.5 Q0 10 2 4.5 Z" fill="url(#bronze)" />
+      <rect x="22" y="7.2" width="8" height="5.6" rx="1.5" fill="url(#bronze)" />
+      <path d="M30 8.2 L212 8.8 L238 10 L212 11.2 L30 11.8 Z" fill="url(#bronze)" />
+      <rect x="44" y="7.4" width="3" height="5.2" rx="1" fill="#6a4a17" opacity="0.55" />
+      <rect x="196" y="7.9" width="3" height="4.2" rx="1" fill="#6a4a17" opacity="0.55" />
+    </svg>
+  );
+}
+
+/** Sentence of the day, written on a wax tablet: one short sentence from a lesson already watched. */
+function HeroTablet({ lessons }: { lessons: number[] }) {
+  const [english, setEnglish] = useState(false);
+  const pool = LESSONS.filter((l) => lessons.includes(l.n))
+    .flatMap((l) => l.sentences)
+    .filter((x) => /^[^.?!]+\.$/.test(x.la) && x.la.split(" ").length >= 3 && x.la.split(" ").length <= 5);
+  if (!pool.length) return null;
+  const s = pool[Math.floor(Date.now() / 86_400_000) % pool.length];
+  return (
+    <figure class="hero-art">
+      <div class="wax-tablet">
+        <span class="hinge" />
+        <span class="hinge" />
+        <div class="wax">
+          <span class="wax-label">Sententia diēī</span>
+          <p class="wax-text">
+            <LatinText text={s.la} />
+          </p>
+        </div>
+      </div>
+      <Stylus />
+      <figcaption class="row">
+        <Speak text={s.la} id="sentence-of-the-day" />
+        {english ? <span class="muted small">{s.en}</span> : <button class="linkish" onClick={() => setEnglish(true)}>Translate</button>}
+      </figcaption>
+    </figure>
+  );
 }
 
 export function Home() {
@@ -35,23 +88,22 @@ export function Home() {
 
   return (
     <div class="stack-lg">
-      <section class="panel frame stack" style={{ padding: "28px" }}>
-        <div class="spread" style={{ alignItems: "flex-start" }}>
-          <div class="stack" style={{ gap: "6px", flex: "1 1 320px" }}>
+      <section class="panel frame hero">
+        <div class="stack hero-text">
+          <div class="stack" style={{ gap: "6px" }}>
             <span class="eyebrow">Salvē!</span>
             <h1 class="hero-title">
               {done >= goal ? "Today's goal is done." : done > 0 ? "Keep going: the endings are settling in." : `Today: make Lesson ${roman(p.focusLesson)} automatic.`}
             </h1>
             {focus && <p class="muted prose">Focus: {focus.title}</p>}
           </div>
-          <div class="stack" style={{ gap: "6px", minWidth: "220px", flex: "0 1 280px" }}>
+          <div class="stack" style={{ gap: "6px", maxWidth: "360px" }}>
             <div class="spread small ui">
               <span><strong>{Math.min(done, goal)}</strong> / {goal} today</span>
               <span class="muted">{days > 0 ? `${days}-day streak` : "Start a streak"}</span>
             </div>
             <Mosaic value={done / goal} tiles={Math.min(goal, 20)} label={`${done} of ${goal} exercises today`} />
           </div>
-        </div>
         <div class="row">
           <button class="btn big" onClick={() => { startSession({ kind: "mixed" }); go({ page: "train" }); }}>
             <Icon.play /> Start practice
@@ -62,9 +114,11 @@ export function Home() {
             </button>
           )}
         </div>
+        </div>
+        <HeroTablet lessons={p.lessonsDone} />
       </section>
 
-      <div class="grid-2">
+      <div class="grid-2 home-grid">
         <section class="panel stack">
           <div class="spread">
             <h3>Weak spots</h3>
@@ -99,18 +153,37 @@ export function Home() {
           </div>
         </section>
 
-        <section class="panel stack">
-          <h3>Mystery card</h3>
-          <p class="muted small">
-            {card
-              ? "A new Latin word with relatives in English, Russian or Ukrainian is waiting."
-              : "You've opened every card available for now. New ones arrive with new grammar."}
-            {openedNotAdded > 0 ? ` ${openedNotAdded} opened card${openedNotAdded === 1 ? " is" : "s are"} not in your dictionary yet.` : ""}
-          </p>
-          <div>
-            <button class="btn small" onClick={() => go({ page: "discover" })}>
-              <Icon.card /> {card ? "Open a card" : "See your cards"}
-            </button>
+        <section class="panel mystery-panel">
+          <button
+            class="mini-card"
+            onClick={() => {
+              if (card) openCardOnArrival(card.id);
+              go({ page: "discover" });
+            }}
+            aria-label={card ? "Open a mystery card" : "See your cards"}
+          >
+            <CardBack />
+          </button>
+          <div class="stack" style={{ gap: "10px" }}>
+            <h3>Mystery card</h3>
+            <p class="muted small">
+              {card
+                ? "A new Latin word with relatives in English, Russian or Ukrainian is waiting."
+                : "You've opened every card available for now. New ones arrive with new grammar."}
+              {openedNotAdded > 0 ? ` ${openedNotAdded} opened card${openedNotAdded === 1 ? " is" : "s are"} not in your dictionary yet.` : ""}
+            </p>
+            <div class="row">
+              <button
+                class="btn small"
+                onClick={() => {
+                  if (card) openCardOnArrival(card.id);
+                  go({ page: "discover" });
+                }}
+              >
+                <Icon.card /> {card ? "Open a card" : "See your cards"}
+              </button>
+              {card && <button class="linkish" onClick={() => go({ page: "discover" })}>All cards</button>}
+            </div>
           </div>
         </section>
 

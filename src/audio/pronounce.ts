@@ -1,7 +1,9 @@
 // Classical Latin through a modern voice. Browsers have no Latin voice, so the
-// text is respelled for an Italian (or Spanish) voice in a way that keeps the
-// classical sounds the videos teach: c and g always hard, v as w, ae as "eye",
-// and the Latin stress rule marked with an accent.
+// text is respelled for a Spanish (or Italian) voice in a way that keeps the
+// classical sounds the videos teach: c and g always hard, v as w, ae as "eye".
+// Spanish spelling marks stress with an acute accent anywhere in a word, so a
+// Spanish voice gets the Latin stress exactly. Italian voices spell out an
+// accent in the middle of a word ("i accento grave"), so Italian gets no marks.
 
 const LONG = /[āēīōūȳ]/;
 const VOWEL = /[aeiouyāēīōūȳ]/;
@@ -62,19 +64,18 @@ export function stressIndex(word: string): number | null {
   return n[n.length - 2].long ? n.length - 2 : n.length - 3;
 }
 
-const GRAVE: Record<string, string> = { a: "à", e: "è", i: "ì", o: "ò", u: "ù" };
 const ACUTE: Record<string, string> = { a: "á", e: "é", i: "í", o: "ó", u: "ú" };
 const PLAIN: Record<string, string> = { ā: "a", ē: "e", ī: "i", ō: "o", ū: "u", ȳ: "i", y: "i" };
 
 type Target = "it" | "es";
 
-/** One Latin word respelled for an Italian or Spanish voice. */
+/** One Latin word respelled for a Spanish or Italian voice. */
 export function respellWord(word: string, target: Target): string {
   const lower = word.toLowerCase();
-  const stress = stressIndex(lower);
+  const stress = target === "es" ? stressIndex(lower) : null;
   const syl = nuclei(lower);
-  const accent = target === "it" ? GRAVE : ACUTE;
-  // 1. letters with stress, macrons dropped; diphthongs from the syllable analysis (po-ē-ta is not "oe")
+  // 1. letters (with the stress for Spanish), macrons dropped; diphthongs from
+  //    the syllable analysis (po-ē-ta is not "oe")
   const byStart = new Map(syl.map((x, idx) => [x.start, { ...x, idx }]));
   let s = "";
   for (let i = 0; i < lower.length; ) {
@@ -83,7 +84,7 @@ export function respellWord(word: string, target: Target): string {
       let letters = [...nuc.nucleus].map((ch) => PLAIN[ch] ?? ch).join("");
       if (letters === "ae") letters = "ai";
       else if (letters === "oe") letters = "oi";
-      if (nuc.idx === stress) letters = (accent[letters[0]] ?? letters[0]) + letters.slice(1);
+      if (nuc.idx === stress) letters = (ACUTE[letters[0]] ?? letters[0]) + letters.slice(1);
       s += letters;
       i = nuc.end;
     } else {
@@ -100,7 +101,7 @@ export function respellWord(word: string, target: Target): string {
     .replace(/ch/g, "c")
     .replace(/x/g, "cs")
     .replace(/v/g, "u");
-  const soft = target === "it" ? /[eièéìí]/ : /[eiéí]/;
+  const soft = /[eiéí]/;
   let out = "";
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
@@ -108,8 +109,11 @@ export function respellWord(word: string, target: Target): string {
     if (ch === "c" && soft.test(next)) out += target === "it" ? "ch" : "qu";
     else if (ch === "g" && soft.test(next)) out += target === "it" ? "gh" : "gu";
     else if (ch === "g" && next === "n") out += "ng"; // magnus: ng-n, not Italian gn
-    else if (target === "es" && ch === "q" && next === "u" && soft.test(s[i + 2] ?? "")) {
-      out += "cu"; // Spanish "qui" would lose the w sound
+    else if (target === "es" && ch === "q" && next === "u") {
+      out += "cu"; // Spanish qu is a plain k: aqua → ácua, quī → cui
+      i++;
+    } else if (target === "es" && ch === "g" && next === "u" && soft.test(s[i + 2] ?? "") && out.endsWith("n")) {
+      out += "gü"; // sanguis: the u is heard
       i++;
     } else if (target === "es" && ch === "l" && next === "l") {
       out += "l"; // Spanish ll is a different sound

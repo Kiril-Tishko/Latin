@@ -1,5 +1,6 @@
-// Speaking Latin with the device's own voices (Web Speech API). An Italian
-// voice reads the respelled text best; Spanish is the fallback.
+// Speaking Latin with the device's own voices (Web Speech API). A Spanish
+// voice reads the respelled text best (it follows the stress marks); Italian
+// is the fallback.
 import { useEffect, useState } from "preact/hooks";
 import { respell } from "./pronounce";
 
@@ -24,19 +25,17 @@ if (audioSupported()) {
 }
 
 const QUALITY = /(natural|neural|premium|enhanced|online|google|siri)/i;
-const KNOWN_IT = /(alice|federica|luca|paola|elsa|isabella|diego|giuseppe|cosimo|emma)/i;
 
 function score(v: SpeechSynthesisVoice): number {
-  const lang = v.lang.toLowerCase();
-  let s = lang.startsWith("it") ? 100 : lang.startsWith("es") ? 50 : 0;
+  const lang = v.lang.toLowerCase().replace("_", "-");
+  let s = lang.startsWith("es") ? 100 : lang.startsWith("it") ? 60 : 0;
   if (!s) return 0;
   if (QUALITY.test(v.name)) s += 10;
-  if (KNOWN_IT.test(v.name)) s += 3;
-  if (lang === "it-it" || lang === "es-es") s += 2;
+  if (lang === "es-es" || lang === "it-it") s += 2;
   return s;
 }
 
-/** Italian and Spanish voices, best first. */
+/** Spanish and Italian voices, best first. */
 export function latinVoices(): SpeechSynthesisVoice[] {
   return voices.filter((v) => score(v) > 0).sort((a, b) => score(b) - score(a));
 }
@@ -118,7 +117,7 @@ export function speak(latin: string, opts: { id?: string; rate?: number } = {}):
     if (voice) {
       u.voice = voice;
       u.lang = voice.lang;
-    } else u.lang = "it-IT";
+    } else u.lang = "es-ES";
     u.rate = opts.rate ?? prefs.rate;
     const done = (ok: boolean) => {
       if (generation === mine) setSpeaking(null);

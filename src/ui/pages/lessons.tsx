@@ -245,7 +245,7 @@ export function LessonPage({ n }: { n: number }) {
 
       {card && next && (
         <Modal onClose={() => setCard(false)} label="One more word" wide>
-          <CardView card={next} onDone={() => setCard(false)} />
+          <CardView card={next} onDone={() => setCard(false)} onClose={() => setCard(false)} />
         </Modal>
       )}
     </div>

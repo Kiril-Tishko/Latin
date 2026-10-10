@@ -79,13 +79,18 @@ export function App() {
               </button>
             ))}
           </nav>
-          <button class="btn ghost small" onClick={() => setSettings(true)} aria-label="Optiōnēs (settings)" title={`Optiōnēs (settings) · ${SYNC_TEXT[getSync()]}`} style={{ marginLeft: "auto" }}>
-            <Icon.gear />
-          </button>
+          <div class="top-actions">
+            <button class="btn gold small ask-btn" onClick={() => openAsk(null)} aria-label="Rogā Claudium (ask Claude)" title="Ask Claude">
+              <Icon.quill /> <span class="ask-label">Rogā Claudium</span><span class="ask-short">Rogā</span>
+            </button>
+            <button class="btn ghost small" onClick={() => setSettings(true)} aria-label="Optiōnēs (settings)" title={`Optiōnēs (settings) · ${SYNC_TEXT[getSync()]}`}>
+              <Icon.gear />
+            </button>
+          </div>
         </div>
       </header>
 
-      <main class="page" id="main">{page}</main>
+      <main class={`page${route.page === "train" ? " wide" : ""}`} id="main">{page}</main>
 
       <nav class="bottomnav" aria-label="Sections">
         {TABS.map((t) => (
@@ -96,9 +101,6 @@ export function App() {
         ))}
       </nav>
 
-      <button class="btn gold fab" onClick={() => openAsk(null)}>
-        <Icon.quill /> Ask Claude
-      </button>
       <AskDrawer />
       <Toaster />
       {settings && <Settings onClose={() => setSettings(false)} />}

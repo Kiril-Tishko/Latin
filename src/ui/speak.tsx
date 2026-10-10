@@ -3,7 +3,7 @@ import { audioSupported, hasLatinVoice, speak, stopSpeaking, useSpeaking, useVoi
 import { Icon } from "./components";
 import { getProgress } from "./store";
 
-/** Audio is offered when the device has an Italian or Spanish voice, or the learner picked one. */
+/** Audio is offered when the device has a Spanish or Italian voice, or the learner picked one. */
 export function audioReady(): boolean {
   return audioSupported() && (hasLatinVoice() || !!getProgress().settings.voice);
 }

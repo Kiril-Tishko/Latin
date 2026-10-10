@@ -137,7 +137,7 @@ function AudioSettings() {
         >
           <option value="">Best available{best ? ` (${best.name})` : ""}</option>
           {latin.length > 0 && (
-            <optgroup label="Italian and Spanish: best for Latin">
+            <optgroup label="Spanish and Italian: best for Latin">
               {latin.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} · {v.lang}</option>)}
             </optgroup>
           )}
@@ -162,15 +162,15 @@ function AudioSettings() {
       </label>
       {!hasLatinVoice() && (
         <p class="small well">
-          No Italian or Spanish voice was found on this device, so audio buttons are hidden. Add an Italian voice, then reload the page.
-          iPhone / iPad: Settings › Accessibility › Spoken Content › Voices › Italian. Mac: System Settings › Accessibility › Spoken Content ›
-          System voice › Manage Voices › Italian. Windows: Settings › Time &amp; language › Speech › Add voices › Italian. Android: Settings ›
-          Text-to-speech › Google › install Italian.
+          No Spanish or Italian voice was found on this device, so audio buttons are hidden. Add a Spanish voice, then reload the page.
+          iPhone / iPad: Settings › Accessibility › Spoken Content › Voices › Spanish. Mac: System Settings › Accessibility › Spoken Content ›
+          System voice › Manage Voices › Spanish. Windows: Settings › Time &amp; language › Speech › Add voices › Spanish. Android: Settings ›
+          Text-to-speech › Google › install Spanish.
         </p>
       )}
       <p class="small muted">
-        Latin is read by an Italian voice with the classical rules applied: hard c and g, v as w, ae as "eye", and the Latin stress. It is
-        close to the videos' pronunciation, not identical.
+        Latin is read by a Spanish voice with the classical rules applied: hard c and g, v as w, ae as "eye", and the Latin stress. An
+        Italian voice works too but guesses the stress. It is close to the videos' pronunciation, not identical.
       </p>
     </div>
   );

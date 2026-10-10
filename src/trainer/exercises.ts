@@ -1,0 +1,620 @@
+// Exercise factories. Each exercise carries its own checker and the skills
+// and words it practises, so the session can update mastery afterwards.
+import { Analysis, Lexicon } from "../latin/analyze";
+import { checkEnglish, checkLatin, CheckedToken, describe, hinted, Issue, slotsFor, Verdict } from "../latin/check";
+import { normalizeEnglish } from "../latin/english";
+import {
+  chance, Clause, english, generate, Knowledge, latinText, latinTokens, LToken, NP, pick, Rand, shuffle, swapRoles, verbUsable,
+  nounUsable, adjUsable,
+} from "../latin/generate";
+import { conjugate, declineAdj, declineNoun, dictionaryForm } from "../latin/morph";
+import { SKILL_BY_ID, adjDecl, declGroup, nounSkill } from "../latin/skills";
+import { latinKey, words } from "../latin/text";
+import { AdjEntry, Case, CASE_NAMES, Entry, full, NounKey, Num, PN, VerbEntry, VerbKey } from "../latin/types";
+
+export type ExerciseKind = "en2la" | "la2en" | "ending" | "form" | "transform" | "identify" | "vocab";
+
+export const KIND_LABEL: Record<ExerciseKind, string> = {
+  en2la: "Translate into Latin",
+  la2en: "Translate into English",
+  ending: "Fill in the ending",
+  form: "Build the form",
+  transform: "Change the sentence",
+  identify: "Find the word",
+  vocab: "Word recall",
+};
+
+export interface Result {
+  verdict: Verdict;
+  issues: Issue[];
+  /** The model answer as plain text. */
+  expected: string;
+  /** The model answer as Latin tokens (colored in the UI). */
+  expectedTokens?: LToken[];
+  /** The learner's Latin words with their status. */
+  tokens?: CheckedToken[];
+  /** Skill id -> score 0..1 for this attempt. */
+  credit: Record<string, number>;
+  /** Word id -> correct? */
+  wordCredit: Record<string, boolean>;
+}
+
+export interface Exercise {
+  id: string;
+  kind: ExerciseKind;
+  instruction: string;
+  /** Latin shown in the prompt. */
+  latin?: LToken[];
+  /** Token index shown as stem + blank. */
+  blank?: number;
+  english?: string;
+  /** A short request line such as "puella → accusative singular". */
+  ask?: string;
+  askCase?: Case;
+  askNum?: Num;
+  /** Dictionary forms that help, revealed on request. */
+  hints: string[];
+  answer: "la" | "en" | "ending" | "choice";
+  choices?: { id: string; label: string }[];
+  /** For "choice": the correct choice id. */
+  correctChoice?: string;
+  check: (answer: string) => Result;
+  skills: string[];
+  words: string[];
+  /** Plain-text summary for Ask Claude. */
+  context: string;
+}
+
+export interface Ctx {
+  k: Knowledge;
+  lex: Lexicon;
+  r: Rand;
+}
+
+let counter = 0;
+const nextId = () => `ex${Date.now().toString(36)}${(counter++).toString(36)}`;
+
+const plainText = (s: string) => s.replace(/«|»/g, "").replace(/#[a-z0-9.]+/g, "");
+
+function contentWords(tokens: LToken[]): Entry[] {
+  const seen = new Set<string>();
+  const out: Entry[] = [];
+  for (const t of tokens) {
+    const e = t.analysis?.entry;
+    if (!e || e.kind === "fixed" || seen.has(e.id)) continue;
+    seen.add(e.id);
+    out.push(e);
+  }
+  return out;
+}
+
+function wordIds(tokens: LToken[]): string[] {
+  return contentWords(tokens).map((e) => e.id);
+}
+
+function hintsFor(tokens: LToken[]): string[] {
+  return contentWords(tokens).map((e) => `${dictionaryForm(e)}: ${e.en}`);
+}
+
+/** Credit every skill in the sentence; skills blamed by an issue get 0. */
+function creditFrom(skills: string[], verdict: Verdict, issues: Issue[]): Record<string, number> {
+  const blamed = new Set(issues.filter((i) => i.kind !== "tip" && i.kind !== "typo").map((i) => i.skill).filter(Boolean) as string[]);
+  const base = verdict === "correct" ? 1 : verdict === "almost" ? 0.85 : 0.55;
+  const out: Record<string, number> = {};
+  for (const s of skills) out[s] = blamed.has(s) ? 0 : base;
+  for (const s of blamed) out[s] = 0;
+  return out;
+}
+
+function wordsCredit(ids: string[], ok: boolean): Record<string, boolean> {
+  return Object.fromEntries(ids.map((id) => [id, ok]));
+}
+
+// ---------------------------------------------------------- translate
+
+function en2la(ctx: Ctx, focus: string[]): Exercise | null {
+  const c = generate(ctx.k, ctx.r, focus);
+  if (!c) return null;
+  const tokens = latinTokens(c, ctx.k);
+  const en = english(c, ctx.k);
+  const slots = slotsFor(tokens, ctx.k);
+  const ids = wordIds(tokens);
+  return {
+    id: nextId(),
+    kind: "en2la",
+    instruction: KIND_LABEL.en2la,
+    english: en.text,
+    hints: hintsFor(tokens),
+    answer: "la",
+    skills: c.skills,
+    words: ids,
+    context: `Translate into Latin: "${en.text}". Model answer: ${latinText(tokens)}`,
+    check(answer) {
+      const r = checkLatin(answer, slots, ctx.lex);
+      const blamedWords = new Set(r.tokens.filter((t) => t.status === "word").map((t) => t.slot?.analysis?.entry.id));
+      return {
+        verdict: r.verdict,
+        issues: r.issues,
+        expected: latinText(tokens),
+        expectedTokens: tokens,
+        tokens: r.tokens,
+        credit: creditFrom(c.skills, r.verdict, r.issues),
+        wordCredit: Object.fromEntries(ids.map((id) => [id, !blamedWords.has(id)])),
+      };
+    },
+  };
+}
+
+function la2en(ctx: Ctx, focus: string[]): Exercise | null {
+  const c = generate(ctx.k, ctx.r, focus);
+  if (!c) return null;
+  const tokens = latinTokens(c, ctx.k);
+  const en = english(c, ctx.k);
+  const swapped = swapRoles(c);
+  const swappedEn = swapped ? english(swapped, ctx.k) : undefined;
+  const ids = wordIds(tokens);
+  return {
+    id: nextId(),
+    kind: "la2en",
+    instruction: KIND_LABEL.la2en,
+    latin: tokens,
+    hints: hintsFor(tokens),
+    answer: "en",
+    skills: c.skills,
+    words: ids,
+    context: `Translate into English: ${latinText(tokens)} Model answer: "${en.text}"`,
+    check(answer) {
+      const r = checkEnglish(answer, en, swappedEn);
+      const roleSkills =
+        r.issues.some((i) => i.message.includes("swapped"))
+          ? tokens.filter((t) => t.role === "subj" || t.role === "obj").map((t) => t.skill!).filter(Boolean)
+          : [];
+      const credit = creditFrom(c.skills, r.verdict, r.issues);
+      for (const s of roleSkills) credit[s] = 0;
+      return {
+        verdict: r.verdict,
+        issues: r.issues,
+        expected: en.text,
+        expectedTokens: tokens,
+        credit,
+        wordCredit: wordsCredit(ids, r.verdict !== "wrong"),
+      };
+    },
+  };
+}
+
+// --------------------------------------------------------------- ending
+
+function ending(ctx: Ctx, focus: string[]): Exercise | null {
+  const c = generate(ctx.k, ctx.r, focus);
+  if (!c) return null;
+  const tokens = latinTokens(c, ctx.k);
+  const candidates = tokens
+    .map((t, i) => ({ t, i }))
+    .filter(({ t }) => t.analysis && t.analysis.entry.kind !== "fixed" && t.analysis.form.ending && t.analysis.form.stem);
+  if (!candidates.length) return null;
+  const focused = candidates.filter(({ t }) => t.skill && focus.includes(t.skill));
+  const { t: target, i: blank } = pick(ctx.r, focused.length ? focused : candidates);
+  const a = target.analysis!;
+  const en = english(c, ctx.k);
+  const skills = [target.skill!].filter(Boolean);
+  return {
+    id: nextId(),
+    kind: "ending",
+    instruction: KIND_LABEL.ending,
+    latin: tokens,
+    blank,
+    english: en.text,
+    hints: [`${dictionaryForm(a.entry)}: ${a.entry.en}`],
+    answer: "ending",
+    skills,
+    words: [a.entry.id],
+    context: `Fill in the ending of "${a.form.stem}___" in: ${latinText(tokens)} ("${en.text}"). Answer: -${a.form.ending}`,
+    check(answer) {
+      const typed = latinKey(answer.trim().replace(/^-/, ""));
+      const end = latinKey(a.form.ending);
+      const whole = latinKey(full(a.form));
+      const ok = typed === end || typed === whole;
+      const issues: Issue[] = [];
+      if (!ok) {
+        const attempt = typed.startsWith(latinKey(a.form.stem)) ? answer.trim() : a.form.stem + answer.trim().replace(/^-/, "");
+        const mine = ctx.lex.analyzeAs(attempt, a.entry.id)[0];
+        issues.push({
+          kind: "form",
+          message: mine
+            ? `${hinted(attempt, mine)} would be the ${describe(mine)}. Here it must be the ${describe(a)}: ${hinted(full(a.form), a)}.`
+            : `The ending is -${a.form.ending}: ${hinted(full(a.form), a)} (${describe(a)}).`,
+          skill: target.skill,
+        });
+      }
+      return {
+        verdict: ok ? "correct" : "wrong",
+        issues,
+        expected: `-${a.form.ending} → ${full(a.form)}`,
+        expectedTokens: tokens,
+        credit: Object.fromEntries(skills.map((s) => [s, ok ? 1 : 0])),
+        wordCredit: { [a.entry.id]: ok },
+      };
+    },
+  };
+}
+
+// ----------------------------------------------------------------- form
+
+const ROLE_OF_CASE: Partial<Record<Case, string>> = {
+  nom: "subject",
+  acc: "object",
+  gen: "of / 's",
+  abl: "place: in …",
+  dat: "to / for",
+};
+
+function nounFormExercise(ctx: Ctx, skillId: string): Exercise | null {
+  const [group, c, n] = skillId.split(".") as [string, Case, Num];
+  const pool = ctx.k.nouns.filter((x) => declGroup(x.decl) === group && nounUsable(ctx.k, x, c, n));
+  if (!pool.length) return null;
+  const noun = pick(ctx.r, pool);
+  const key = `${c}.${n}` as NounKey;
+  const form = declineNoun(noun)[key]!;
+  let adj: AdjEntry | undefined;
+  if (chance(ctx.r, 0.35)) {
+    const adjs = ctx.k.adjs.filter((x) => x.id !== "meus" && adjUsable(ctx.k, x, noun, c, n) && adjUsable(ctx.k, x, noun, "nom", "sg"));
+    if (adjs.length) adj = pick(ctx.r, adjs);
+  }
+  const nounNom = full(declineNoun(noun)["nom.sg"] ?? form);
+  const adjNom = adj ? full(declineAdj(adj, noun.gender)["nom.sg"]) : "";
+  const adjForm = adj ? declineAdj(adj, noun.gender)[key] : undefined;
+  const target: LToken[] = [
+    ...(adjForm ? [{ text: full(adjForm), role: "subj-adj" as const, analysis: { entry: adj!, key, gender: noun.gender, form: adjForm } }] : []),
+    { text: full(form), role: "subj", analysis: { entry: noun, key, gender: noun.gender, form }, skill: skillId },
+  ];
+  const expected = target.map((t) => t.text).join(" ");
+  const skills = [skillId, ...(adj ? ["adj.agree", nounSkill(adjDecl(noun.gender), c, n)] : [])];
+  const label = `${CASE_NAMES[c]} ${n === "pl" ? "plural" : "singular"}`;
+  return {
+    id: nextId(),
+    kind: "form",
+    instruction: KIND_LABEL.form,
+    ask: `${adj ? adjNom + " " : ""}${nounNom} → ${label} (${ROLE_OF_CASE[c] ?? ""})`,
+    askCase: c,
+    askNum: n,
+    hints: [SKILL_BY_ID.get(skillId)?.hint ?? "", `${dictionaryForm(noun)}: ${noun.en}`],
+    answer: "la",
+    skills: [...new Set(skills)],
+    words: [noun.id, ...(adj ? [adj.id] : [])],
+    context: `Put "${adj ? adjNom + " " : ""}${nounNom}" into the ${label}. Answer: ${expected}`,
+    check(answer) {
+      const typed = words(answer);
+      const want = target.map((t) => latinKey(t.text));
+      const keys = typed.map(latinKey);
+      const ok = keys.length === want.length && want.every((w) => keys.includes(w));
+      const issues: Issue[] = [];
+      if (!ok) {
+        for (const t of target) {
+          if (keys.includes(latinKey(t.text))) continue;
+          const mineWord = typed.find((w) => ctx.lex.analyzeAs(w, t.analysis!.entry.id).length);
+          const mine = mineWord ? ctx.lex.analyzeAs(mineWord, t.analysis!.entry.id)[0] : undefined;
+          issues.push({
+            kind: "form",
+            message: mine
+              ? `${hinted(mineWord!, mine)} is the ${describe(mine)}. The ${label} is ${hinted(t.text, t.analysis)}.`
+              : `The ${label} is ${hinted(t.text, t.analysis)}.`,
+            skill: t.skill ?? skillId,
+          });
+        }
+      }
+      return {
+        verdict: ok ? "correct" : "wrong",
+        issues,
+        expected,
+        expectedTokens: target,
+        credit: Object.fromEntries(skills.map((s) => [s, ok ? 1 : 0])),
+        wordCredit: { [noun.id]: ok },
+      };
+    },
+  };
+}
+
+function verbFormExercise(ctx: Ctx, skillId: string): Exercise | null {
+  let verb: VerbEntry | undefined;
+  let key: VerbKey;
+  let label: string;
+  if (skillId === "v.inf") {
+    const pool = ctx.k.verbs.filter((v) => !v.irregular);
+    if (!pool.length) return null;
+    verb = pick(ctx.r, pool);
+    key = "inf";
+    label = "infinitive (to …)";
+  } else {
+    let pn: PN;
+    if (skillId === "v.sum" || skillId === "v.possum") {
+      verb = ctx.k.verbs.find((v) => v.irregular === (skillId === "v.sum" ? "sum" : "possum"));
+      pn = pick(ctx.r, ["1sg", "2sg", "3sg"] as PN[]);
+    } else {
+      pn = skillId.slice(2) as PN;
+      const pool = ctx.k.verbs.filter((v) => !v.irregular && verbUsable(ctx.k, v, pn));
+      if (!pool.length) return null;
+      verb = pick(ctx.r, pool);
+    }
+    if (!verb || !verbUsable(ctx.k, verb, pn)) return null;
+    key = `pres.${pn}` as VerbKey;
+    const who = pn === "1sg" ? "ego (I)" : pn === "2sg" ? "tū (you)" : pn === "3sg" ? "he / she / it" : "they";
+    label = who;
+  }
+  const form = conjugate(verb)[key]!;
+  const expected = full(form);
+  const shown = key === "inf" ? verb.pp[0] : full(conjugate(verb).inf!);
+  const token: LToken = { text: expected, role: "verb", analysis: { entry: verb, key, form }, skill: skillId };
+  return {
+    id: nextId(),
+    kind: "form",
+    instruction: KIND_LABEL.form,
+    ask: `${shown} → ${label}`,
+    hints: [SKILL_BY_ID.get(skillId)?.hint ?? "", `${dictionaryForm(verb)}: ${verb.en}`],
+    answer: "la",
+    skills: [skillId],
+    words: [verb.id],
+    context: `Give the form of "${shown}" for ${label}. Answer: ${expected}`,
+    check(answer) {
+      const typed = words(answer).map(latinKey).filter((w) => w !== "ego" && w !== "tu");
+      const ok = typed.length === 1 && typed[0] === latinKey(expected);
+      const issues: Issue[] = [];
+      if (!ok && typed.length) {
+        const mine = ctx.lex.analyzeAs(typed[0], verb!.id)[0];
+        issues.push({
+          kind: "form",
+          message: mine
+            ? `${hinted(words(answer).at(-1)!)} is ${describe(mine)}. For ${label} it is ${hinted(expected)}.`
+            : `For ${label} the form is ${hinted(expected)}.`,
+          skill: skillId,
+        });
+      }
+      return {
+        verdict: ok ? "correct" : "wrong",
+        issues,
+        expected,
+        expectedTokens: [token],
+        credit: { [skillId]: ok ? 1 : 0 },
+        wordCredit: { [verb!.id]: ok },
+      };
+    },
+  };
+}
+
+function formEx(ctx: Ctx, focus: string[]): Exercise | null {
+  const formSkills = [...ctx.k.skills].filter((s) => /^n\d|^v\./.test(s));
+  const focused = focus.filter((s) => formSkills.includes(s));
+  const skillId = pick(ctx.r, focused.length ? focused : formSkills);
+  if (!skillId) return null;
+  return skillId.startsWith("v.") ? verbFormExercise(ctx, skillId) : nounFormExercise(ctx, skillId);
+}
+
+// ------------------------------------------------------------ transform
+
+interface Transform {
+  name: string;
+  instruction: string;
+  skill: string;
+  apply: (c: Clause, k: Knowledge) => Clause | null;
+}
+
+const TRANSFORMS: Transform[] = [
+  {
+    name: "plural",
+    instruction: "Make the subject plural.",
+    skill: "s.pl",
+    apply: (c, k) => {
+      if (c.subj.kind !== "np" || c.subj.np.num !== "sg" || c.pred || c.verb.irregular) return null;
+      const np: NP = { ...c.subj.np, num: "pl", poss: undefined };
+      if (!nounUsable(k, np.noun, "nom", "pl") || np.noun.tags.includes("mass") || np.noun.proper) return null;
+      if (np.adj && !adjUsable(k, np.adj, np.noun, "nom", "pl")) return null;
+      if (!verbUsable(k, c.verb, "3pl")) return null;
+      if (c.obj?.poss) return null;
+      return { ...c, subj: { kind: "np", np }, num: "pl", skills: [...c.skills, "s.pl", "v.3pl", nounSkill(np.noun.decl, "nom", "pl")] };
+    },
+  },
+  {
+    name: "swap",
+    instruction: "Swap who does what (the object becomes the subject).",
+    skill: "s.svo",
+    apply: (c, k) => {
+      const s = swapRoles(c);
+      if (!s || s.subj.kind !== "np" || !s.obj) return null;
+      if (!nounUsable(k, s.subj.np.noun, "nom", "sg") || !nounUsable(k, s.obj.noun, "acc", "sg")) return null;
+      if (s.subj.np.adj && !adjUsable(k, s.subj.np.adj, s.subj.np.noun, "nom", "sg")) return null;
+      if (s.obj.adj && !adjUsable(k, s.obj.adj, s.obj.noun, "acc", "sg")) return null;
+      if (s.subj.np.poss || s.obj.poss || s.inf) return null;
+      return s;
+    },
+  },
+  {
+    name: "ego",
+    instruction: "Say it about yourself (I …).",
+    skill: "v.1sg",
+    apply: (c, k) => {
+      if (c.subj.kind !== "np" || c.num !== "sg" || c.pred || c.verb.irregular === "sum") return null;
+      if (!verbUsable(k, c.verb, "1sg")) return null;
+      return { ...c, subj: { kind: "pron", person: 1, shown: false }, person: 1, skills: [...c.skills, "v.1sg"] };
+    },
+  },
+  {
+    name: "tu",
+    instruction: "Say it to a friend (you …).",
+    skill: "v.2sg",
+    apply: (c, k) => {
+      if (c.subj.kind !== "np" || c.num !== "sg" || c.pred || c.verb.irregular === "sum") return null;
+      if (!verbUsable(k, c.verb, "2sg")) return null;
+      return { ...c, subj: { kind: "pron", person: 2, shown: false }, person: 2, skills: [...c.skills, "v.2sg"] };
+    },
+  },
+  {
+    name: "negate",
+    instruction: "Make it negative (add 'not').",
+    skill: "s.non",
+    apply: (c, k) => (c.neg || !k.skills.has("s.non") || c.subj.kind === "nemo" ? null : { ...c, neg: true, skills: [...c.skills, "s.non"] }),
+  },
+];
+
+function transform(ctx: Ctx, focus: string[]): Exercise | null {
+  const usable = TRANSFORMS.filter((t) => ctx.k.skills.has(t.skill));
+  if (!usable.length) return null;
+  const preferred = usable.filter((t) => focus.includes(t.skill));
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const t = pick(ctx.r, preferred.length && chance(ctx.r, 0.7) ? preferred : usable);
+    const c = generate(ctx.k, ctx.r, focus, t.name === "swap" ? ["svo"] : undefined);
+    if (!c) continue;
+    const out = t.apply(c, ctx.k);
+    if (!out) continue;
+    const from = latinTokens(c, ctx.k);
+    const to = latinTokens(out, ctx.k);
+    const slots = slotsFor(to, ctx.k);
+    const skills = [...new Set(out.skills)];
+    const ids = wordIds(to);
+    return {
+      id: nextId(),
+      kind: "transform",
+      instruction: t.instruction,
+      latin: from,
+      english: english(c, ctx.k).text,
+      hints: hintsFor(to),
+      answer: "la",
+      skills,
+      words: ids,
+      context: `${t.instruction} Start: ${latinText(from)}. Model answer: ${latinText(to)} ("${english(out, ctx.k).text}")`,
+      check(answer) {
+        const r = checkLatin(answer, slots, ctx.lex);
+        return {
+          verdict: r.verdict,
+          issues: r.issues,
+          expected: latinText(to),
+          expectedTokens: to,
+          tokens: r.tokens,
+          credit: creditFrom(skills, r.verdict, r.issues),
+          wordCredit: wordsCredit(ids, r.verdict !== "wrong"),
+        };
+      },
+    };
+  }
+  return null;
+}
+
+// ------------------------------------------------------------- identify
+
+const QUESTIONS: { roles: string[]; ask: string }[] = [
+  { roles: ["subj"], ask: "Which word is the subject (who does it)?" },
+  { roles: ["obj"], ask: "Which word is the object (what the action is done to)?" },
+  { roles: ["pp"], ask: "Which word says where?" },
+  { roles: ["subj-poss", "obj-poss", "pp-poss", "pred-poss"], ask: "Which word says whose?" },
+];
+
+function identify(ctx: Ctx, focus: string[]): Exercise | null {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const c = generate(ctx.k, ctx.r, focus, ["svo", "loc", "motion"]);
+    if (!c) continue;
+    const tokens = latinTokens(c, ctx.k);
+    const options = QUESTIONS.filter((q) => tokens.filter((t) => q.roles.includes(t.role)).length === 1);
+    if (!options.length) continue;
+    const q = pick(ctx.r, options);
+    const idx = tokens.findIndex((t) => q.roles.includes(t.role));
+    const target = tokens[idx];
+    const skills = [target.skill, c.skills.includes("s.svo") ? "s.svo" : undefined].filter(Boolean) as string[];
+    return {
+      id: nextId(),
+      kind: "identify",
+      instruction: q.ask,
+      latin: tokens,
+      hints: target.skill ? [SKILL_BY_ID.get(target.skill)?.hint ?? ""] : [],
+      answer: "choice",
+      choices: tokens.map((t, i) => ({ id: String(i), label: t.text })),
+      correctChoice: String(idx),
+      skills,
+      words: wordIds(tokens),
+      context: `${q.ask} Sentence: ${latinText(tokens)}. Answer: ${target.text}`,
+      check(answer) {
+        const ok = answer === String(idx);
+        const chosen = tokens[Number(answer)];
+        const issues: Issue[] = [];
+        if (!ok && chosen) {
+          const a: Analysis | undefined = chosen.analysis;
+          issues.push({
+            kind: "form",
+            message: `${hinted(chosen.text, a)}${a && a.entry.kind !== "fixed" ? ` is the ${describe(a)}` : ""}. The answer is ${hinted(target.text, target.analysis)}${target.analysis ? ` (${describe(target.analysis)})` : ""}.`,
+            skill: target.skill,
+          });
+        }
+        return {
+          verdict: ok ? "correct" : "wrong",
+          issues,
+          expected: target.text,
+          expectedTokens: tokens,
+          credit: Object.fromEntries(skills.map((s) => [s, ok ? 1 : 0])),
+          wordCredit: {},
+        };
+      },
+    };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- vocab
+
+const stripArticle = (s: string) => s.replace(/^(the|a|an|to) /, "");
+
+export function vocabExercise(_ctx: Ctx, entry: Entry, direction: "la2en" | "en2la"): Exercise {
+  const meanings = [entry.en, ...(entry.alt ?? [])].map((m) => stripArticle(normalizeEnglish(m)));
+  const latinForms = new Set<string>();
+  if (entry.kind === "noun") latinForms.add(latinKey(entry.lemma));
+  else if (entry.kind === "adj") latinForms.add(latinKey(entry.lemma)).add(latinKey(entry.fem));
+  else if (entry.kind === "verb") {
+    latinForms.add(latinKey(entry.pp[0]));
+    const inf = conjugate(entry).inf;
+    if (inf) latinForms.add(latinKey(full(inf)));
+  } else latinForms.add(latinKey(entry.lemma));
+  const dict = dictionaryForm(entry);
+  const gender = entry.kind === "noun" && ["discipulus", "discipula", "amicus", "amica"].includes(entry.id) ? (entry.gender === "f" ? " (f)" : " (m)") : "";
+  return {
+    id: nextId(),
+    kind: "vocab",
+    instruction: direction === "la2en" ? "What does it mean?" : "How do you say it in Latin?",
+    ask: direction === "la2en" ? dict : `${entry.en}${gender}`,
+    hints: entry.note ? [entry.note] : [],
+    answer: direction === "la2en" ? "en" : "la",
+    skills: [],
+    words: [entry.id],
+    context: direction === "la2en" ? `Meaning of ${dict}? Answer: ${entry.en}` : `Latin for "${entry.en}"? Answer: ${dict}`,
+    check(answer) {
+      let ok: boolean;
+      if (direction === "la2en") {
+        const a = stripArticle(normalizeEnglish(answer));
+        ok = meanings.some((m) => m === a || a.split(/ ?[,/;] ?| or /).includes(m));
+      } else {
+        const first = latinKey(words(answer)[0] ?? "");
+        ok = latinForms.has(first);
+      }
+      return {
+        verdict: ok ? "correct" : "wrong",
+        issues: ok ? [] : [{ kind: "word", message: direction === "la2en" ? `${hinted(entry.kind === "verb" ? entry.pp[0] : (entry as { lemma: string }).lemma)} means "${entry.en}".` : `It is ${hinted(dict)}.` }],
+        expected: direction === "la2en" ? entry.en : dict,
+        credit: {},
+        wordCredit: { [entry.id]: ok },
+      };
+    },
+  };
+}
+
+// ---------------------------------------------------------------- entry
+
+const FACTORIES: Record<Exclude<ExerciseKind, "vocab">, (ctx: Ctx, focus: string[]) => Exercise | null> = {
+  en2la,
+  la2en,
+  ending,
+  form: formEx,
+  transform,
+  identify,
+};
+
+export function makeExercise(kind: Exclude<ExerciseKind, "vocab">, ctx: Ctx, focus: string[]): Exercise | null {
+  return FACTORIES[kind](ctx, focus);
+}
+
+export { shuffle, plainText };

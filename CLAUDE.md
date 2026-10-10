@@ -50,6 +50,12 @@ Runtime capabilities used:
   function given to a state setter, which once broke every question.
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
+  Ask Claude conversations: one private doc each at
+  `data/users/<id>/chats/threads/<chatId>` (src/ui/chats.ts), followed live with
+  `onSnapshot`, so a conversation continues on any device; the question is
+  saved before the answer arrives. localStorage keeps a copy of the list, the
+  unsent text per conversation and whether the drawer was open, so a reload
+  loses nothing. Each saved answer records the model tier that gave it.
 
 ## Practice, step by step
 

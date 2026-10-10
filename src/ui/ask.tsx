@@ -1,14 +1,17 @@
 // Ask Claude: a chat drawer that always knows where the learner is (lessons,
 // skills with mastery, known words, recent mistakes, the current exercise).
+// Conversations are saved (see chats.ts) and can be continued on any device;
+// what is typed in the box survives a reload.
 import { useEffect, useRef, useState } from "preact/hooks";
 import { LESSONS } from "../content/lessons";
 import { dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, SKILLS } from "../latin/skills";
 import { Exercise, Result } from "../trainer/exercises";
 import { mastery } from "../trainer/progress";
+import { Chat, deleteChat, getChat, getChats, newChatId, saveChat, useChats } from "./chats";
 import { Icon, toast } from "./components";
 import { Markup } from "./markup";
-import { SampleFn, sampleErrorText, sampler } from "./platform";
+import { SampleFn, sampleErrorText, sampler, storage } from "./platform";
 import { derived, getProgress } from "./store";
 
 export interface AskContext {
@@ -18,39 +21,72 @@ export interface AskContext {
   detail: string;
 }
 
-interface Turn {
-  role: "user" | "assistant";
-  content: string;
-  practice?: string[];
-  error?: boolean;
-  /** For a failed answer: the error code and message, to report if it keeps happening. */
-  detail?: string;
-}
-
 interface AskState {
   open: boolean;
+  /** The conversation on screen; null for a new one that has not been sent yet. */
+  chatId: string | null;
+  /** What a new conversation is about (a saved one carries its own). */
   context: AskContext | null;
-  turns: Turn[];
-  /** A suggested question: put in the box for the learner to change or send. Never sent by itself. */
+  /** A suggested question for the box (never sent by itself). */
   draft?: string;
+  /** Showing the list of saved conversations. */
+  history: boolean;
 }
 
-let state: AskState = { open: false, context: null, turns: [] };
+// the drawer comes back as it was after a reload: open or closed, on the same conversation
+const UI_KEY = "tabula-latina-ask-ui";
+const DRAFTS_KEY = "tabula-latina-ask-drafts";
+
+function loadUi(): Pick<AskState, "open" | "chatId"> {
+  try {
+    const raw = JSON.parse(storage.get(UI_KEY) ?? "{}");
+    return { open: !!raw.open, chatId: typeof raw.chatId === "string" ? raw.chatId : null };
+  } catch {
+    return { open: false, chatId: null };
+  }
+}
+
+let state: AskState = { ...loadUi(), context: null, history: false };
 const listeners = new Set<() => void>();
 const set = (s: Partial<AskState>) => {
   state = { ...state, ...s };
+  storage.set(UI_KEY, JSON.stringify({ open: state.open, chatId: state.chatId }));
   listeners.forEach((l) => l());
 };
+
+/** Unsent text in the box, per conversation ("new" for one not started), kept in this browser. */
+let drafts: Record<string, string> = (() => {
+  try {
+    const d = JSON.parse(storage.get(DRAFTS_KEY) ?? "{}");
+    return d && typeof d === "object" ? d : {};
+  } catch {
+    return {};
+  }
+})();
+let draftTimer: ReturnType<typeof setTimeout> | undefined;
+function keepDraft(key: string, text: string) {
+  if (text) drafts[key] = text;
+  else delete drafts[key];
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => storage.set(DRAFTS_KEY, JSON.stringify(drafts)), 250);
+}
+window.addEventListener("pagehide", () => storage.set(DRAFTS_KEY, JSON.stringify(drafts)));
 
 let practiceHandler: ((skills: string[]) => void) | null = null;
 export function onPractice(fn: (skills: string[]) => void) {
   practiceHandler = fn;
 }
 
-/** Opens the drawer about the current screen, with a suggested question in the box (the learner sends it). */
+/**
+ * Opens the drawer. From a screen with its own context (an exercise, a word)
+ * that differs from the conversation on screen, a new conversation starts;
+ * otherwise the current one continues. A suggestion goes into the box.
+ */
 export function openAsk(context: AskContext | null, suggestion?: string) {
-  const sameContext = state.context?.detail === context?.detail;
-  set({ open: true, context: context ?? state.context, turns: sameContext ? state.turns : [], draft: suggestion ?? "" });
+  const current = getChat(state.chatId);
+  const about = current ? current.context : state.context;
+  if (context && about?.detail !== context.detail) set({ open: true, chatId: null, context, draft: suggestion, history: false });
+  else set({ open: true, draft: suggestion, history: false });
 }
 
 // ------------------------------------------------------------- prompts
@@ -129,15 +165,54 @@ Reply with only JSON: {"correct": true or false, "explanation": "one or two sent
 
 const QUICK = ["Why is this the right ending?", "Explain this rule simply", "Give me a memory trick", "Compare it with Russian or Ukrainian"];
 
+const TIER_NAME: Record<string, string> = { quick: "quick model", default: "balanced model", complex: "most capable model" };
+
+/** The turns Claude reads: the conversation so far (last few), the first carrying the instructions and the learner's profile. */
+function toMessages(chat: Chat): { role: "user" | "assistant"; content: string }[] {
+  let hist = chat.turns.filter((t) => t.content.trim()).map((t) => ({ role: t.role, content: t.content }));
+  while (hist.length > 9) hist = hist.slice(2);
+  while (hist.length && hist[0].role !== "user") hist = hist.slice(1);
+  if (!hist.length) return [];
+  return [{ role: "user", content: fullPrompt(hist[0].content, chat.context) }, ...hist.slice(1)];
+}
+
+function when(t: number): string {
+  const d = new Date(t);
+  const today = new Date();
+  const yesterday = new Date(Date.now() - 86_400_000);
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === today.toDateString()) return `today, ${time}`;
+  if (d.toDateString() === yesterday.toDateString()) return `yesterday, ${time}`;
+  return d.toLocaleDateString([], { day: "numeric", month: "short", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+
+interface Failure {
+  text: string;
+  detail?: string;
+}
+
 export function AskDrawer() {
   const [, setTick] = useState(0);
-  const [input, setInput] = useState("");
+  const chats = useChats();
+  const [input, setInputState] = useState("");
   const [suggested, setSuggested] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyChat, setBusyChat] = useState<string | null>(null);
+  const [streaming, setStreaming] = useState("");
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [sample, setSample] = useState<SampleFn | null | undefined>(undefined);
   const ctl = useRef<AbortController | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const shownKey = useRef<string | null>(null);
+
+  const chat = getChat(state.chatId);
+  const key = state.chatId ?? "new";
+  const busy = busyChat !== null;
+  const setInput = (text: string) => {
+    setInputState(text);
+    keepDraft(key, text);
+  };
 
   useEffect(() => {
     const l = () => setTick((t) => t + 1);
@@ -150,20 +225,29 @@ export function AskDrawer() {
     if (state.open && sample === undefined) void sampler().then((fn) => setSample(() => fn));
   }, [state.open, sample]);
 
-  // a suggested question goes into the box, ready to edit or send
+  // switching conversations brings back what was being typed there; a suggestion goes into the box
   useEffect(() => {
-    if (!state.open || state.draft === undefined) return;
-    const draft = state.draft;
-    set({ draft: undefined });
-    if (draft) {
-      setInput(draft);
-      setSuggested(draft);
+    if (!state.open) return;
+    if (state.draft !== undefined) {
+      const draft = state.draft;
+      set({ draft: undefined });
+      if (draft) {
+        setInputState(draft);
+        keepDraft(key, draft);
+        setSuggested(draft);
+      } else if (shownKey.current !== key) setInputState(drafts[key] ?? "");
+      shownKey.current = key;
+      setTimeout(() => {
+        const el = inputRef.current;
+        el?.focus();
+        el?.setSelectionRange(el.value.length, el.value.length);
+      }, 30);
+    } else if (shownKey.current !== key) {
+      shownKey.current = key;
+      setInputState(drafts[key] ?? "");
+      setSuggested("");
+      setFailure(null);
     }
-    setTimeout(() => {
-      const el = inputRef.current;
-      el?.focus();
-      el?.setSelectionRange(el.value.length, el.value.length);
-    }, 30);
   });
 
   useEffect(() => {
@@ -172,65 +256,90 @@ export function AskDrawer() {
 
   if (!state.open) return null;
 
-  async function send(question: string) {
-    const q = question.trim();
-    if (!q || busy) return;
-    setInput("");
-    setSuggested("");
-    // earlier turns as context: never a failed or empty one (an empty turn is refused)
-    const prior = state.turns.filter((t) => !t.error && t.content.trim());
-    const turns: Turn[] = [...state.turns, { role: "user", content: q }];
-    set({ turns: [...turns, { role: "assistant", content: "" }] });
+  async function answer(c: Chat) {
+    setFailure(null);
     if (!sample) {
-      set({ turns: [...turns, { role: "assistant", content: "Asking Claude works when this page is open on claude.ai. You can copy the question with your progress and paste it into a Claude chat.", error: true }] });
+      setFailure({ text: "Asking Claude works when this page is open on claude.ai. You can copy the question with your progress and paste it into a Claude chat." });
       return;
     }
-    setBusy(true);
+    const messages = toMessages(c);
+    if (!messages.length || messages[messages.length - 1].role !== "user") return;
+    setBusyChat(c.id);
+    setStreaming("");
     ctl.current = new AbortController();
-    // keep the last few turns; the first kept turn must be the learner's, and it carries the instructions
-    let hist = prior.map((t) => ({ role: t.role, content: t.content }));
-    while (hist.length > 8) hist = hist.slice(2);
-    if (hist.length && hist[0].role !== "user") hist = hist.slice(1);
-    // a first question goes as one prompt; a follow-up as the conversation so far
-    const ask = hist.length
-      ? [{ role: "user" as const, content: fullPrompt(hist[0].content, state.context) }, ...hist.slice(1), { role: "user" as const, content: q }]
-      : fullPrompt(q, state.context);
     try {
-      const { text } = await sample(ask, {
+      const res = await sample(messages, {
         cache: false,
         signal: ctl.current.signal,
-        onText: ({ text }: { text: string }) => set({ turns: [...turns, { role: "assistant", content: text }] }),
+        onText: ({ text }: { text: string }) => setStreaming(text),
       });
-      const { body, practice } = splitPractice(text);
-      set({ turns: [...turns, { role: "assistant", content: body, practice }] });
+      const { body, practice } = splitPractice(res.text);
+      const latest = getChat(c.id) ?? c;
+      saveChat({
+        ...latest,
+        turns: [...latest.turns, { role: "assistant", content: body || res.text, practice, tier: (res as { modelTierApplied?: string }).modelTierApplied, at: Date.now() }],
+        updatedAt: Date.now(),
+      });
     } catch (e) {
       const err = (e ?? {}) as { code?: string; text?: string; message?: string };
-      const msg = sampleErrorText(err.code);
+      if (err.code === "cancelled" && !err.text) return;
       const kept = err.text ? splitPractice(err.text).body : "";
-      const detail = err.code === "cancelled" ? undefined : `${err.code ?? "no code"}${err.message ? `: ${err.message}` : ""}`;
-      set({ turns: [...turns, { role: "assistant", content: [kept, msg].filter(Boolean).join("\n\n") || "Stopped.", error: !kept, detail }] });
+      if (kept) {
+        // part of an answer arrived before the failure: keep it in the conversation
+        const latest = getChat(c.id) ?? c;
+        saveChat({ ...latest, turns: [...latest.turns, { role: "assistant", content: `${kept}\n\n*(The answer was cut off.)*`, at: Date.now() }], updatedAt: Date.now() });
+      } else {
+        setFailure({ text: sampleErrorText(err.code) || "Stopped.", detail: `${err.code ?? "no code"}${err.message ? `: ${err.message}` : ""}` });
+      }
     } finally {
-      setBusy(false);
+      setBusyChat(null);
+      setStreaming("");
       ctl.current = null;
     }
   }
 
+  async function send(question: string) {
+    const q = question.trim();
+    if (!q || busy) return;
+    const now = Date.now();
+    const base: Chat = chat ?? { id: newChatId(), title: q.slice(0, 80), context: state.context, turns: [], createdAt: now, updatedAt: now };
+    const next: Chat = { ...base, turns: [...base.turns, { role: "user", content: q, at: now }], updatedAt: now };
+    // the question is saved before Claude answers, so a reload or another device never loses it
+    saveChat(next);
+    keepDraft(key, "");
+    setInputState("");
+    setSuggested("");
+    shownKey.current = next.id;
+    set({ chatId: next.id });
+    await answer(next);
+  }
+
   async function copyPrompt() {
-    const q = input.trim() || state.turns.filter((t) => t.role === "user").at(-1)?.content || "Explain where I am and what to practise next.";
-    const text = fullPrompt(q, state.context);
+    const q = input.trim() || chat?.turns.filter((t) => t.role === "user").at(-1)?.content || "Explain where I am and what to practise next.";
+    const text = fullPrompt(q, chat?.context ?? state.context);
     try {
       await navigator.clipboard.writeText(text);
       toast("Copied. Paste it into a Claude chat.");
     } catch {
       toast("Copying is blocked here. Select the text in the box and copy it.");
-      setInput(text);
+      setInputState(text);
     }
   }
 
-  const close = () => {
-    ctl.current?.abort();
-    set({ open: false });
+  // closing keeps a running answer going: it is saved when it arrives
+  const close = () => set({ open: false });
+  const startNew = () => {
+    set({ chatId: null, context: null, history: false });
   };
+
+  const turns = chat?.turns ?? [];
+  const last = turns[turns.length - 1];
+  const thisBusy = busyChat !== null && busyChat === chat?.id;
+  // a question with no answer: one still on its way on another device, or one whose answer was lost
+  const unanswered = !thisBusy && !failure && last?.role === "user";
+  const fresh = unanswered && Date.now() - last.at < 3 * 60_000;
+  const latestOther = chats.find((c) => c.id !== chat?.id);
+  const about = chat ? chat.context : state.context;
 
   return (
     <>
@@ -241,116 +350,170 @@ export function AskDrawer() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ fontFamily: "var(--f-display)", letterSpacing: "0.06em" }}>Ask Claude</h3>
             <div class="small muted ui" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {state.context ? state.context.label : "Knows your lessons, words and weak spots"}
+              {state.history ? "Your conversations, on every device" : about ? about.label : chat ? chat.title : "Knows your lessons, words and weak spots"}
             </div>
           </div>
+          <button class="btn ghost small" aria-pressed={state.history} onClick={() => set({ history: !state.history })} title="Saved conversations">
+            <Icon.scroll /> <span class="wide-only">Conversations</span>
+          </button>
+          <button class="btn ghost small" onClick={startNew} title="New conversation" aria-label="New conversation">
+            <Icon.quill /> <span class="wide-only">New</span>
+          </button>
           <button class="btn ghost small" onClick={close} aria-label="Close"><Icon.close /></button>
         </div>
-        <div class="drawer-body" ref={bodyRef}>
-          {state.turns.length === 0 && (
-            <div class="stack small">
-              <p class="muted ui">Ask anything about the rule, the word or your answer. Claude sees what you have learned, your weak spots and the exercise on screen.</p>
-              <div class="row" style={{ gap: "6px" }}>
-                {QUICK.map((q) => (
-                  <button
-                    key={q}
-                    class="btn ghost small"
-                    disabled={busy}
-                    onClick={() => {
-                      setInput(q);
-                      setSuggested(q);
-                      inputRef.current?.focus();
-                    }}
-                  >
-                    {q}
-                  </button>
-                ))}
+
+        {state.history ? (
+          <div class="drawer-body">
+            {chats.length === 0 && <p class="muted ui small">No conversations yet. They are saved here as you ask, and appear on your phone and computer alike.</p>}
+            {chats.map((c) => (
+              <div key={c.id} class={`chat-row${c.id === state.chatId ? " current" : ""}`}>
+                <button class="chat-open" onClick={() => set({ chatId: c.id, history: false })}>
+                  <span class="chat-title">{c.title}</span>
+                  <span class="small muted ui">
+                    {when(c.updatedAt)} · {c.turns.filter((t) => t.role === "user").length} question{c.turns.filter((t) => t.role === "user").length === 1 ? "" : "s"}
+                    {c.context ? ` · ${c.context.label}` : ""}
+                  </span>
+                </button>
+                {confirmDelete === c.id ? (
+                  <span class="row" style={{ gap: "6px" }}>
+                    <button class="btn small" onClick={() => { deleteChat(c.id); setConfirmDelete(null); if (state.chatId === c.id) set({ chatId: null }); }}>Delete</button>
+                    <button class="linkish" onClick={() => setConfirmDelete(null)}>Keep</button>
+                  </span>
+                ) : (
+                  <button class="btn ghost small" onClick={() => setConfirmDelete(c.id)} aria-label={`Delete "${c.title}"`} title="Delete"><Icon.close /></button>
+                )}
               </div>
-            </div>
-          )}
-          {state.turns.map((t, i) => (
-            <div key={i} class={`msg ${t.role}`}>
-              {t.role === "assistant" ? (
-                t.content ? <Markup text={t.content} /> : <span class="thinking" role="status" aria-label="Thinking"><i /><i /><i /></span>
-              ) : (
-                t.content
-              )}
-              {t.error && t.detail && (
+            ))}
+          </div>
+        ) : (
+          <div class="drawer-body" ref={bodyRef}>
+            {turns.length === 0 && !thisBusy && (
+              <div class="stack small">
+                <p class="muted ui">Ask anything about the rule, the word or your answer. Claude sees what you have learned, your weak spots and the exercise on screen. Conversations are saved and you can continue them on any device.</p>
+                <div class="row" style={{ gap: "6px" }}>
+                  {QUICK.map((q) => (
+                    <button
+                      key={q}
+                      class="btn ghost small"
+                      disabled={busy}
+                      onClick={() => {
+                        setInput(q);
+                        setSuggested(q);
+                        inputRef.current?.focus();
+                      }}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+                {latestOther && (
+                  <button class="linkish" style={{ alignSelf: "flex-start", textAlign: "left" }} onClick={() => set({ chatId: latestOther.id })}>
+                    Continue “{latestOther.title}” ({when(latestOther.updatedAt)})
+                  </button>
+                )}
+              </div>
+            )}
+            {turns.map((t, i) => (
+              <div key={i} class={`msg ${t.role}`}>
+                {t.role === "assistant" ? <Markup text={t.content} /> : t.content}
+                {t.role === "assistant" && t.tier && <div class="msg-meta">{TIER_NAME[t.tier] ?? t.tier}</div>}
+                {t.practice && t.practice.length > 0 && (
+                  <div class="row" style={{ marginTop: "10px" }}>
+                    <button
+                      class="btn gold small"
+                      onClick={() => {
+                        close();
+                        practiceHandler?.(t.practice!);
+                      }}
+                    >
+                      <Icon.stylus /> Practice: {t.practice.map((s) => SKILL_BY_ID.get(s)?.title).join(", ")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {thisBusy && (
+              <div class="msg assistant">
+                {streaming ? <Markup text={streaming} /> : <span class="thinking" role="status" aria-label="Thinking"><i /><i /><i /></span>}
+              </div>
+            )}
+            {unanswered && (
+              <div class="msg assistant">
+                {fresh ? (
+                  <span class="muted ui small">Waiting for the answer…</span>
+                ) : (
+                  <div class="stack" style={{ gap: "6px" }}>
+                    <span class="muted ui small">No answer was saved for this question.</span>
+                    <div>
+                      <button class="btn ghost small" disabled={busy} onClick={() => chat && void answer(chat)}>Ask again</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {failure && chat && (
+              <div class="msg assistant">
+                <p>{failure.text}</p>
                 <div class="stack" style={{ gap: "6px", marginTop: "8px" }}>
                   <div class="row" style={{ gap: "8px" }}>
-                    {i === state.turns.length - 1 && i > 0 && state.turns[i - 1].role === "user" && (
-                      <button
-                        class="btn ghost small"
-                        disabled={busy}
-                        onClick={() => {
-                          const q = state.turns[i - 1].content;
-                          set({ turns: state.turns.slice(0, i - 1) });
-                          void send(q);
-                        }}
-                      >
+                    {failure.detail && (
+                      <button class="btn ghost small" disabled={busy} onClick={() => void answer(chat)}>
                         Try again
                       </button>
                     )}
                     <button class="linkish" onClick={copyPrompt}>Copy the question for a Claude chat</button>
                   </div>
-                  <span class="small muted ui">Details: {t.detail}</span>
+                  {failure.detail && <span class="small muted ui">Details: {failure.detail}</span>}
                 </div>
-              )}
-              {t.practice && t.practice.length > 0 && (
-                <div class="row" style={{ marginTop: "10px" }}>
-                  <button
-                    class="btn gold small"
-                    onClick={() => {
-                      close();
-                      practiceHandler?.(t.practice!);
-                    }}
-                  >
-                    <Icon.stylus /> Practice: {t.practice.map((s) => SKILL_BY_ID.get(s)?.title).join(", ")}
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        <div class="drawer-foot">
-          <form
-            class="ask-input"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void send(input);
-            }}
-          >
-            <textarea
-              id="ask-input"
-              ref={inputRef}
-              rows={2}
-              value={input}
-              placeholder="Why… / How… / What does…"
-              onInput={(e) => setInput((e.target as HTMLTextAreaElement).value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void send(input);
-                }
-              }}
-            />
-            {busy ? (
-              <button type="button" class="btn ghost" onClick={() => ctl.current?.abort()}>Stop</button>
-            ) : (
-              <button type="submit" class="btn" disabled={!input.trim()}>Ask</button>
+              </div>
             )}
-          </form>
-          {suggested && input === suggested && !busy && (
-            <span class="small muted ui">A suggested question: change it or press Ask.</span>
-          )}
-          {sample === null && (
-            <div class="row small">
-              <span class="muted ui">Claude answers here when this page is open on claude.ai.</span>
-              <button class="linkish" onClick={copyPrompt}>Copy question with my progress</button>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {!state.history && (
+          <div class="drawer-foot">
+            <form
+              class="ask-input"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void send(input);
+              }}
+            >
+              <textarea
+                id="ask-input"
+                ref={inputRef}
+                rows={2}
+                value={input}
+                placeholder="Why… / How… / What does…"
+                onInput={(e) => setInput((e.target as HTMLTextAreaElement).value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void send(input);
+                  }
+                }}
+              />
+              {thisBusy ? (
+                <button type="button" class="btn ghost" onClick={() => ctl.current?.abort()}>Stop</button>
+              ) : (
+                <button type="submit" class="btn" disabled={!input.trim() || busy}>Ask</button>
+              )}
+            </form>
+            {suggested && input === suggested && !busy && (
+              <span class="small muted ui">A suggested question: change it or press Ask.</span>
+            )}
+            {sample === null && (
+              <div class="row small">
+                <span class="muted ui">Claude answers here when this page is open on claude.ai.</span>
+                <button class="linkish" onClick={copyPrompt}>Copy question with my progress</button>
+              </div>
+            )}
+          </div>
+        )}
       </aside>
     </>
   );
 }
+
+/** The last conversations, for anything else that wants them. */
+export const recentChats = () => getChats().slice(0, 5);

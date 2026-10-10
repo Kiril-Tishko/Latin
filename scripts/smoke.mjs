@@ -181,6 +181,88 @@ async function askClaude() {
   await ctx.close();
 }
 
+// Saved conversations, with a fake account store shared by two "devices": the draft
+// survives a reload, a conversation started on one device continues on the other
+// (and shows up there live), and a deletion reaches both.
+async function conversations() {
+  const shared = new Map();
+  const runtime = () => {
+    const sample = (input, opts) => new Promise((res) => setTimeout(() => {
+      const text = "An answer.";
+      opts?.onText?.({ text, delta: text });
+      res({ text, truncated: false, modelTierApplied: "default" });
+    }, 100));
+    sample.json = async () => ({});
+    const docRef = (path) => ({
+      get: async () => { const d = await window.__dbGet(path); return { exists: !!d, data: () => d ?? undefined }; },
+      set: async (data) => void (await window.__dbSet(path, JSON.parse(JSON.stringify(data)))),
+      delete: async () => void (await window.__dbDel(path)),
+      collection: (sub) => colRef(`${path}/${sub}`),
+      onSnapshot: () => () => {},
+    });
+    const colRef = (path) => ({
+      doc: (id) => docRef(`${path}/${id}`),
+      orderBy: () => ({ limit: (n) => ({ onSnapshot: (next) => {
+        let last = "";
+        const tick = async () => {
+          const docs = await window.__dbList(path);
+          const sig = JSON.stringify(docs);
+          if (sig === last) return;
+          last = sig;
+          next({ docs: docs.slice(0, n).map((d) => ({ id: d.id, data: () => d.data })) });
+        };
+        void tick();
+        const t = setInterval(tick, 150);
+        return () => clearInterval(t);
+      } }) }),
+    });
+    const db = { doc: docRef, collection: colRef };
+    window.claude = { use: async (n) => (n === "sample" ? sample : n === "db" ? db : n === "user" ? { id: async () => "u1" } : null) };
+  };
+  const device = async (name) => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.addInitScript(runtime);
+    const p = await ctx.newPage();
+    p.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
+    await p.exposeFunction("__dbGet", (path) => shared.get(path) ?? null);
+    await p.exposeFunction("__dbSet", (path, data) => void shared.set(path, data));
+    await p.exposeFunction("__dbDel", (path) => void shared.delete(path));
+    await p.exposeFunction("__dbList", (col) => [...shared.entries()].filter(([k]) => k.startsWith(col + "/") && !k.slice(col.length + 1).includes("/")).map(([k, data]) => ({ id: k.slice(col.length + 1), data })));
+    await p.goto(`file://${page}`);
+    await p.waitForTimeout(700);
+    return { p, ctx };
+  };
+  const pc = await device("pc");
+  await pc.p.locator(".ask-btn").click();
+  await pc.p.locator("#ask-input").fill("Why -t?");
+  await pc.p.waitForTimeout(400);
+  await pc.p.reload();
+  await pc.p.waitForTimeout(900);
+  if ((await pc.p.locator("#ask-input").inputValue()) !== "Why -t?") errors.push("conversations: the typed question was lost on reload");
+  await pc.p.locator("#ask-input").press("Enter");
+  await pc.p.waitForTimeout(600);
+  const phone = await device("phone");
+  await phone.p.locator(".ask-btn").click();
+  await phone.p.locator("button", { hasText: "Conversations" }).click();
+  await phone.p.waitForTimeout(300);
+  if ((await phone.p.locator(".chat-title").allTextContents())[0] !== "Why -t?") errors.push("conversations: the other device does not list the conversation");
+  await phone.p.locator(".chat-open").first().click();
+  await phone.p.locator("#ask-input").fill("And with tū?");
+  await phone.p.locator("#ask-input").press("Enter");
+  await pc.p.waitForTimeout(900);
+  const onPc = await pc.p.locator(".msg.user").allTextContents();
+  if (!onPc.includes("And with tū?")) errors.push(`conversations: the follow-up did not reach the first device (${JSON.stringify(onPc)})`);
+  await phone.p.locator("button", { hasText: "Conversations" }).click();
+  await phone.p.locator(".chat-row button[title='Delete']").first().click();
+  await phone.p.locator(".chat-row button", { hasText: "Delete" }).click();
+  await pc.p.waitForTimeout(700);
+  await pc.p.locator("button", { hasText: "Conversations" }).click();
+  if (await pc.p.locator(".chat-title").count()) errors.push("conversations: a deleted conversation stayed on the other device");
+  await pc.ctx.close();
+  await phone.ctx.close();
+}
+
+await conversations();
 await askClaude();
 await audio();
 await run("desktop-light", { width: 1280, height: 900 }, "light");

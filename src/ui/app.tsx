@@ -11,6 +11,7 @@ import { startSession, Train } from "./pages/train";
 import { Words } from "./pages/words";
 import { Settings } from "./settings";
 import { connect, getSync, useProgress } from "./store";
+import { connectChats } from "./chats";
 import { SKILL_BY_ID } from "../latin/skills";
 import { setSpeechPrefs } from "../audio/speech";
 
@@ -36,6 +37,7 @@ export function App() {
 
   useEffect(() => {
     void connect();
+    void connectChats();
     onPractice((skills) => {
       startSession({ kind: "skills", skills, label: skills.map((s) => SKILL_BY_ID.get(s)?.title).join(", ") });
       go({ page: "train" });

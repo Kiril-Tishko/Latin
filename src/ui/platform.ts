@@ -34,6 +34,38 @@ export async function progressDoc(): Promise<DocRef | null> {
   }
 }
 
+/** A stored document as snapshots deliver it. */
+export interface DocSnap {
+  id: string;
+  data(): Record<string, unknown> | undefined;
+}
+
+/** The viewer's private collection of saved conversations (data/users/<id>/chats/threads). */
+export interface ChatCollection {
+  doc(id: string): { set(data: Record<string, unknown>): Promise<void>; delete(): Promise<void> };
+  orderBy(
+    field: string,
+    dir: "asc" | "desc",
+  ): {
+    limit(n: number): {
+      onSnapshot(next: (snap: { docs: DocSnap[] }) => void, error?: (e: { code?: string }) => void): () => void;
+    };
+  };
+}
+
+/** Saved Ask Claude conversations, or null when the account store is unavailable. */
+export async function chatCollection(): Promise<ChatCollection | null> {
+  const [db, user] = await Promise.all([use("db"), use("user")]);
+  if (!db || !user) return null;
+  const id: string | null = await user.id().catch(() => null);
+  if (!id) return null;
+  try {
+    return db.doc(`data/users/${id}/chats`).collection("threads") as ChatCollection;
+  } catch {
+    return null;
+  }
+}
+
 export async function sampler(): Promise<SampleFn | null> {
   return (await use("sample")) as SampleFn | null;
 }

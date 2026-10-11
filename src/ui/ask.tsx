@@ -3,7 +3,7 @@
 // when a question is asked (see screen.ts), so "here" and "this" make sense.
 // Conversations are saved (see chats.ts) and can be continued on any device;
 // what is typed in the box survives a reload.
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { LESSONS } from "../content/lessons";
 import { dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, SKILLS } from "../latin/skills";
@@ -303,9 +303,70 @@ export function AskDrawer() {
     }
   });
 
-  useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
+  // The conversation never moves by itself while you read or type. It opens at
+  // the latest message; a question you send glides up to the top, with room
+  // below it that its answer fills; anything new below the screen shows a
+  // "New message" button instead.
+  const [below, setBelow] = useState(false);
+  const [unseen, setUnseen] = useState(false);
+  const spaceRef = useRef<HTMLDivElement>(null);
+  const lastEnd = useRef(0);
+  const glideTo = useRef<string | null>(null);
+  /** Where the last message ends, measured in the scrolled content. */
+  const contentEnd = (b: HTMLElement) => {
+    const last = spaceRef.current?.previousElementSibling;
+    return last ? last.getBoundingClientRect().bottom - b.getBoundingClientRect().top + b.scrollTop : 0;
+  };
+  const space = (px: number) => {
+    if (spaceRef.current) spaceRef.current.style.height = `${Math.max(0, px)}px`;
+  };
+
+  useLayoutEffect(() => {
+    const b = bodyRef.current;
+    if (!state.open || state.history || !b || glideTo.current === key) return;
+    space(0);
+    b.scrollTop = b.scrollHeight;
+    lastEnd.current = contentEnd(b);
+    setBelow(false);
+    setUnseen(false);
+  }, [state.open, state.history, key]);
+
+  useLayoutEffect(() => {
+    const b = bodyRef.current;
+    if (!state.open || state.history || !b) return;
+    const end = contentEnd(b);
+    if (glideTo.current) {
+      glideTo.current = null;
+      const asked = [...b.querySelectorAll<HTMLElement>(".msg.user")].pop();
+      if (asked) {
+        space(0);
+        const top = asked.getBoundingClientRect().top - b.getBoundingClientRect().top + b.scrollTop - 12;
+        space(top + b.clientHeight - b.scrollHeight);
+        b.scrollTo({ top, behavior: motion() });
+      }
+      setUnseen(false);
+    } else if (end !== lastEnd.current) {
+      // the room under a question shrinks as the answer fills it (and grows back if it shrinks), so nothing moves
+      space((parseFloat(spaceRef.current?.style.height ?? "") || 0) - (end - lastEnd.current));
+      if (end > lastEnd.current + 2 && end - (b.scrollTop + b.clientHeight) > 24) {
+        setBelow(true);
+        setUnseen(true);
+      }
+    }
+    lastEnd.current = end;
   });
+
+  const onScroll = () => {
+    const b = bodyRef.current;
+    if (!b) return;
+    const away = contentEnd(b) - (b.scrollTop + b.clientHeight) > 24;
+    setBelow(away);
+    if (!away) setUnseen(false);
+  };
+  const toLatest = () => {
+    const b = bodyRef.current;
+    if (b) b.scrollTo({ top: Math.max(0, contentEnd(b) + 16 - b.clientHeight), behavior: motion() });
+  };
 
   // with the drawer open, a dialog behind it moves aside (wide screens) and Escape closes the drawer first
   useEffect(() => {
@@ -375,6 +436,7 @@ export function AskDrawer() {
     const asked: ChatTurn = { role: "user", content: q, at: now, ...(screen ? { screen } : shared ? {} : { noScreen: true }) };
     const next: Chat = { ...base, ...(chat ? {} : { share: state.share ?? undefined }), turns: [...earlier, asked], updatedAt: now };
     // the question is saved before Claude answers, so a reload or another device never loses it
+    glideTo.current = next.id;
     saveChat(next);
     keepDraft(key, "");
     setInputState("");
@@ -478,7 +540,8 @@ export function AskDrawer() {
             ))}
           </div>
         ) : (
-          <div class="drawer-body" ref={bodyRef}>
+          <div class="drawer-scroll">
+          <div class="drawer-body" ref={bodyRef} onScroll={onScroll}>
             {turns.length === 0 && !thisBusy && (
               <div class="stack small">
                 <p class="muted ui">Ask anything about the rule, the word or your answer. Claude sees what you have learned, your weak spots and what is on your screen (the exercise, the part of the lesson in view, the word or card you opened), so you can say “here” or “this sentence”. Conversations are saved and you can continue them on any device.</p>
@@ -561,6 +624,14 @@ export function AskDrawer() {
                 </div>
               </div>
             )}
+            <div ref={spaceRef} class="chat-space" aria-hidden="true" />
+          </div>
+          {below ? (
+            <button class={`to-latest${unseen ? " new" : ""}`} onClick={toLatest} aria-label={unseen ? "New message: go down to it" : "Go down to the latest message"}>
+              <Icon.arrow />
+              {unseen ? "New message" : null}
+            </button>
+          ) : null}
           </div>
         )}
 
@@ -607,6 +678,11 @@ export function AskDrawer() {
       </aside>
     </>
   );
+}
+
+/** Smooth scrolling, unless the device asks for less motion. */
+function motion(): ScrollBehavior {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 
 /** The last conversations, for anything else that wants them. */

@@ -61,6 +61,10 @@ Runtime capabilities used:
   as general: no screen, no "asked on" notes, and Claude is told not to steer
   back to the screen. Asking from a thing's own button (Why?, a word, a card)
   switches sharing on.
+  The chat never scrolls by itself while the learner reads or types: it opens
+  at the latest message, a sent question glides to the top with room below
+  that its answer fills (`.chat-space`), and anything new below the screen
+  shows a "New message" button.
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
   Ask Claude conversations: one private doc each at

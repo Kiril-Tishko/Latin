@@ -336,7 +336,58 @@ async function conversations() {
   await phone.ctx.close();
 }
 
+// The chat never jumps while reading or typing: a sent question glides to the top
+// and its answer fills the room below; anything new below the screen shows a
+// "New message" button instead of moving the view.
+async function chatScroll() {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 700 } });
+  await ctx.addInitScript(() => {
+    window.__delay = 120;
+    const long = Array.from({ length: 16 }, (_, i) => `Line ${i + 1}: the ending «-am» marks the object, so the words can come in any order.`).join("\n\n");
+    const sample = (input, opts) => new Promise((res) => setTimeout(() => {
+      opts?.onText?.({ text: long, delta: long });
+      res({ text: long, truncated: false });
+    }, window.__delay));
+    sample.json = async () => ({});
+    window.claude = { use: async (n) => (n === "sample" ? sample : null) };
+  });
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => errors.push(`scroll: ${e.message}`));
+  await p.goto(`file://${page}`);
+  await p.waitForTimeout(700);
+  await p.locator(".ask-btn").click();
+  for (const q of ["One?", "Two?"]) {
+    await p.locator("#ask-input").fill(q);
+    await p.locator("#ask-input").press("Enter");
+    await p.waitForTimeout(700);
+  }
+  const body = p.locator(".drawer-body");
+  // typing while reading higher up leaves the conversation where it is
+  await body.evaluate((b) => b.scrollTo({ top: 0 }));
+  await p.waitForTimeout(100);
+  await p.locator("#ask-input").pressSequentially("abc");
+  await p.waitForTimeout(200);
+  if ((await body.evaluate((b) => b.scrollTop)) !== 0) errors.push("scroll: typing moved the conversation");
+  // a question glides to the top; its long answer arrives without moving the view
+  await p.evaluate(() => { window.__delay = 1600; });
+  await p.locator("#ask-input").fill("Three?");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(1100);
+  const at = () => body.evaluate((b) => { const q = [...b.querySelectorAll(".msg.user")].pop(); return Math.round(q.getBoundingClientRect().top - b.getBoundingClientRect().top); });
+  const glided = await at();
+  if (Math.abs(glided - 12) > 30) errors.push(`scroll: the sent question did not glide to the top (${glided}px)`);
+  await p.waitForTimeout(1000);
+  if (Math.abs((await at()) - glided) > 2) errors.push("scroll: the arriving answer moved the conversation");
+  if (!(await p.locator(".to-latest.new").count())) errors.push("scroll: no New message button for an answer below the screen");
+  await p.screenshot({ path: `${out}/ask-new-message.png` });
+  await p.locator(".to-latest").click();
+  await p.waitForTimeout(900);
+  if (await p.locator(".to-latest").count()) errors.push("scroll: the New message button does not go down to the message");
+  await ctx.close();
+}
+
 await conversations();
+await chatScroll();
 await askClaude();
 await audio();
 await run("desktop-light", { width: 1280, height: 900 }, "light");

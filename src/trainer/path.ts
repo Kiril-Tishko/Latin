@@ -1,14 +1,16 @@
 // The learner's way through the lessons' rules, one small part at a time
 // (content/parts.ts). A part is first explained and checked with two open
-// questions; then it is "seen" and its rules may appear in exercises. It is
-// practised from simple exercises to harder ones until it holds ("learned"),
-// and then the next part is offered. Practice never uses a rule of a part the
-// learner has not seen.
+// questions; then it is "seen" and its rules may appear in exercises. Every
+// right answer on its rules adds one: the first five come from simple
+// exercises, the next from harder ones, and at ten the part is learned and the
+// next one is offered. Practice never uses a rule of a part not seen.
 import { Part, PARTS } from "../content/parts";
-import { mastery, Progress } from "./progress";
+import { Phase, Progress } from "./progress";
 
-/** A part holds after this many exercises on it, with its rules known this well. */
-export const SOLID = { done: 8, average: 0.85, min: 0.65 };
+/** Right answers that make a part learned. */
+export const PART_GOAL = 10;
+/** Simple exercises until this many right answers, the hardest from the second number. */
+export const PART_PHASES = { mixedFrom: 5, hardFrom: 8 };
 
 const watched = (p: Progress, part: Part) => p.lessonsDone.includes(part.lesson);
 
@@ -26,26 +28,24 @@ export function partState(p: Progress, part: Part): PartState {
   return st?.learned ? "learned" : st ? "practising" : "new";
 }
 
-/** How well a part's rules are known: their average mastery, and the weakest one. */
-export function partMastery(p: Progress, part: Part): { value: number; min: number } {
-  const ms = (part.practised ?? part.skills).map((s) => mastery(p.skills[s]));
-  return { value: ms.reduce((a, b) => a + b, 0) / ms.length, min: Math.min(...ms) };
+/** Right answers on a part so far (a learned part counts as full). */
+export function partRight(p: Progress, part: Part): number {
+  const st = p.parts[part.id];
+  return st?.learned ? PART_GOAL : Math.min(PART_GOAL, st?.right ?? 0);
 }
 
-/** 0..1 on the way to holding: as far as the weakest of the three conditions. */
-export function partProgress(p: Progress, part: Part): number {
-  const st = p.parts[part.id];
-  if (!st) return 0;
-  if (st.learned) return 1;
-  const m = partMastery(p, part);
-  return Math.min(1, st.done / SOLID.done, m.value / SOLID.average, m.min / SOLID.min);
+/** 0..1: right answers out of the ten that make the part learned. */
+export const partProgress = (p: Progress, part: Part) => partRight(p, part) / PART_GOAL;
+
+/** Which exercises a part gets now: simple for its first five right answers, then harder. */
+export function partPhase(p: Progress, part: Part): Phase {
+  const n = partRight(p, part);
+  return n < PART_PHASES.mixedFrom ? "simple" : n < PART_PHASES.hardFrom ? "mixed" : "hard";
 }
 
-function holds(p: Progress, part: Part): boolean {
-  const st = p.parts[part.id];
-  if (!st) return false;
-  const m = partMastery(p, part);
-  return st.done >= SOLID.done && m.value >= SOLID.average && m.min >= SOLID.min;
+/** Whether an answer adds one to a part: it was right, and the part's rule in it was right. */
+export function countsFor(part: Part, res: { verdict: string; credit: Record<string, number> }): boolean {
+  return res.verdict !== "wrong" && part.skills.some((s) => (res.credit[s] ?? 0) >= 0.85);
 }
 
 /** 0..1: how far a lesson's rules are learned (each part counts as far as it has come). */
@@ -68,17 +68,18 @@ export function nextNewPart(p: Progress): Part | undefined {
 export const partsInPractice = (p: Progress) => PARTS.filter((part) => watched(p, part) && partState(p, part) === "practising");
 
 /**
- * After an exercise: counts it for each part in practice whose rules it used,
- * marks the parts that now hold as learned (for good), and keeps the step
- * (focusLesson) on the current part's lesson. Returns the parts just learned.
+ * After an exercise: adds one to each part in practice whose rule the answer
+ * got right (in any kind of practice), marks the parts that reach ten as
+ * learned (for good), and keeps the step (focusLesson) on the current part's
+ * lesson. Returns the parts just learned.
  */
-export function updatePath(p: Progress, used: string[] = [], now = Date.now()): Part[] {
+export function updatePath(p: Progress, res?: { verdict: string; credit: Record<string, number> }, now = Date.now()): Part[] {
   const learned: Part[] = [];
   for (const part of PARTS) {
     const st = p.parts[part.id];
     if (!st || st.learned) continue;
-    if (part.skills.some((s) => used.includes(s))) st.done++;
-    if (holds(p, part)) {
+    if (res && countsFor(part, res)) st.right = (st.right ?? 0) + 1;
+    if ((st.right ?? 0) >= PART_GOAL) {
       st.learned = now;
       learned.push(part);
     }
@@ -89,8 +90,8 @@ export function updatePath(p: Progress, used: string[] = [], now = Date.now()): 
 
 /** The explanation and its questions are done: the part's rules may now be practised. */
 export function markSeen(p: Progress, id: string, now = Date.now()) {
-  if (!p.parts[id]) p.parts[id] = { seen: now, done: 0 };
-  updatePath(p, [], now);
+  if (!p.parts[id]) p.parts[id] = { seen: now, right: 0 };
+  updatePath(p, undefined, now);
 }
 
 // ------------------------------------------------------- open questions

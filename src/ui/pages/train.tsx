@@ -2,20 +2,21 @@
 // detailed feedback with colored endings, and Claude on hand for "why?".
 // Every round uses only the rules of the parts the learner has seen.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { Part, PART_BY_ID, partsOf } from "../../content/parts";
+import { Part, PART_BY_ID, PARTS, partsOf } from "../../content/parts";
 import { STORY_ONLY } from "../../content/words";
 import { STORIES, STORY_BY_ID } from "../../content/stories";
 import { latinText, seeded } from "../../latin/generate";
 import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
 import { Exercise, ExerciseKind, KIND_LABEL, plainText, Result } from "../../trainer/exercises";
-import { currentPart, nextNewPart, partProgress, partState, seenSkills } from "../../trainer/path";
-import { dayKey, mastery } from "../../trainer/progress";
-import { applyResult, buildSession, mistakesSession, mistakesToFix, nextExercise, partSession } from "../../trainer/session";
+import { countsFor, currentPart, nextNewPart, PART_GOAL, PART_PHASES, partPhase, partRight, partsInPractice, partState, seenSkills } from "../../trainer/path";
+import { dayKey, Progress } from "../../trainer/progress";
+import { applyResult, buildSession, mistakesSession, mistakesToFix, nextExercise, partExercise } from "../../trainer/session";
+import { Line } from "../../trainer/lines";
 import { practiceLines, storyOpen, storySession } from "../../trainer/stories";
 import { videoSession } from "../../trainer/video";
 import { openAsk, judge } from "../ask";
-import { CaseChip, Icon, Laurel, Mosaic, toast } from "../components";
+import { CaseChip, Icon, Laurel, toast } from "../components";
 import { LatinTokens } from "../latin";
 import { Inline, Markup } from "../markup";
 import { go } from "../nav";
@@ -25,7 +26,7 @@ import { derived, getProgress, update, useProgress } from "../store";
 import { speak, stopSpeaking } from "../../audio/speech";
 import { audioReady, Speak } from "../speak";
 import { useScreen } from "../screen";
-import { partName, PartRecap, PartsStrip } from "./learn";
+import { PartDots, partName, PartRecap, PartsStrip, rightWords } from "./learn";
 
 export type Mode =
   | { kind: "part"; id: string }
@@ -60,7 +61,22 @@ interface Session {
   showRecap?: boolean;
   /** Parts that came to hold during the round. */
   learned: string[];
+  /**
+   * A round on a part grows one exercise at a time, each made for the learner's
+   * progress at that moment: `plan` exercises in all, `made` so far.
+   */
+  plan?: number;
+  made?: number;
+  /** The fixed sentences a part's round can draw on. */
+  lines?: Line[];
+  /** The part's right answers when the round began. */
+  startRight?: number;
 }
+
+/** Exercises in the round: those made, and those a part's round will still make. */
+const roundSize = (s: Session) => s.items.length + Math.max(0, (s.plan ?? 0) - (s.made ?? 0));
+/** Exercises of a round on one part. */
+const PART_ROUND = 12;
 
 let session: Session | null = null;
 const sessionListeners = new Set<() => void>();
@@ -136,8 +152,12 @@ export function startSession(mode: Mode): boolean {
       const part = PART_BY_ID.get(mode.id);
       if (!part) return false;
       if (!p.parts[part.id]) return unseen(part.skills);
-      items = partSession(p, c, part, practiceLines(c.lex, c.k), { ...adaptive, focusLesson: part.lesson, review: 0.2 }, 12);
-      break;
+      // one exercise now; the next ones are made as the round goes, for the progress at that moment
+      const lines = practiceLines(c.lex, c.k);
+      const first = partExercise(p, c, part, lines, STEPWISE, new Set());
+      if (!first) return unseen(part.skills);
+      setSession({ mode, items: [first], index: 0, attempts: [], size: PART_ROUND, part: part.id, showRecap: recapDue(p, part.id), learned: [], plan: PART_ROUND, made: 1, lines, startRight: partRight(p, part) });
+      return true;
     }
     case "lesson":
     case "skills": {
@@ -183,12 +203,12 @@ export function startSession(mode: Mode): boolean {
     toast(seen.size ? "Nothing to practise there yet: its sentences need rules you haven't learned." : "Learn the first rule first: it takes two minutes.");
     return false;
   }
-  const part = mode.kind === "part" ? mode.id : undefined;
-  // a part learned on an earlier day is recalled once a day before its exercises
-  const showRecap = !!part && p.rulesShown[part] !== dayKey() && dayKey(p.parts[part]?.seen) !== dayKey();
-  setSession({ mode, items, index: 0, attempts: [], size: items.length, part, showRecap, learned: [] });
+  setSession({ mode, items, index: 0, attempts: [], size: items.length, learned: [] });
   return true;
 }
+
+/** A part learned on an earlier day is recalled once a day before its exercises. */
+const recapDue = (p: Progress, id: string) => p.rulesShown[id] !== dayKey() && dayKey(p.parts[id]?.seen) !== dayKey();
 
 function useSession() {
   const [, setT] = useState(0);
@@ -238,7 +258,6 @@ function PathPanel() {
     );
   }
   const state = partState(p, part);
-  const value = partProgress(p, part);
   return (
     <section class="panel frame step-panel">
       <div class="stack" style={{ gap: "10px" }}>
@@ -266,14 +285,14 @@ function PathPanel() {
         <PartsStrip lesson={part.lesson} />
         {state === "practising" && (
           <>
-            <div class="spread small ui">
-              <span>On the way to holding</span>
-              <strong>{Math.round(value * 100)}%</strong>
+            <div class="spread small ui" style={{ maxWidth: "360px" }}>
+              <span>Right answers</span>
+              <strong>{partRight(p, part)} / {PART_GOAL}</strong>
             </div>
-            <div style={{ maxWidth: "360px" }}>
-              <Mosaic value={value} tiles={10} label={`${Math.round(value * 100)}% on the way`} />
-            </div>
-            <span class="small muted">When it holds, the next rule is offered.</span>
+            <PartDots part={part} big />
+            <span class="small muted">
+              Each right answer adds one. Simple exercises until {PART_PHASES.mixedFrom}, then harder ones; at {PART_GOAL} the rule is learned.
+            </span>
           </>
         )}
         {state === "practising" && upcoming && upcoming.id !== part.id && (
@@ -309,7 +328,7 @@ function Chooser() {
       ];
   useScreen("page", "Practice: choosing", () =>
     [
-      part ? `The practice page, choosing what to practise. The learner is on ${partName(part)} of Lesson ${part.lesson}, "${part.title}" (${partState(p, part) === "new" ? "not learned yet: they read it and answer two questions first" : `in practice, ${Math.round(partProgress(p, part) * 100)}% of the way to holding`}).` : "The practice page. Every rule of the lessons watched is learned.",
+      part ? `The practice page, choosing what to practise. The learner is on ${partName(part)} of Lesson ${part.lesson}, "${part.title}" (${partState(p, part) === "new" ? "not learned yet: they read it and answer two questions first" : `in practice: ${rightWords(p, part)}, ten make it learned`}).` : "The practice page. Every rule of the lessons watched is learned.",
       `On offer: ${modes.map((m) => `${m.title} (${m.text})`).join("; ")}. Every exercise uses only rules the learner has learned.`,
     ].join("\n"),
   );
@@ -385,7 +404,8 @@ function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
     meaning: `the Latin sentence "${shownLatin(ex, true)}", with English meanings to choose from: ${ex.choices?.map((c) => c.label).join(" / ")}.`,
   };
   const lines = [
-    `Practising: ${modeLabel(s.mode)} (only the rules of the parts the learner has seen). Exercise ${s.index + 1} of ${s.items.length}, "${ex.instruction}".`,
+    `Practising: ${modeLabel(s.mode)} (only the rules of the parts the learner has seen). Exercise ${s.index + 1} of ${roundSize(s)}, "${ex.instruction}".`,
+    s.part && PART_BY_ID.get(s.part) ? `Progress on ${partName(PART_BY_ID.get(s.part)!)}: ${partRight(getProgress(), PART_BY_ID.get(s.part)!)} of ${PART_GOAL} right answers (each right answer on the rule adds one; simple exercises until ${PART_PHASES.mixedFrom}, then harder ones).` : "",
     ex.video ? `A sentence from the video of Lesson ${ex.video}.` : "",
     ex.story ? `A sentence from the story "${ex.story}" (the learner may have read it on the Stories page).` : "",
     ex.fixes !== undefined ? "This exercise brings back one of the learner's earlier mistakes." : "",
@@ -462,7 +482,7 @@ function Runner({ s }: { s: Session }) {
   const nextRef = useRef<HTMLButtonElement>(null);
   const sideRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  useScreen("page", `Exercise ${s.index + 1} of ${s.items.length}: ${KIND_LABEL[ex.kind]}`, () =>
+  useScreen("page", `Exercise ${s.index + 1} of ${roundSize(s)}: ${KIND_LABEL[ex.kind]}`, () =>
     describeExercise(s, ex, { answer, res, showHints, showRule, showEnglish, judgement }),
   );
 
@@ -537,8 +557,14 @@ function Runner({ s }: { s: Session }) {
       learned = applyResult(p, ex, res, answer);
     });
     // a rule that now holds: say so at once, and offer the next one at the end of the round
-    if (learned.length) toast(`Rēctē! ${partName(learned[0])} holds now: ${learned[0].title}.`);
+    if (learned.length) toast(`Rēctē! ${partName(learned[0])} is learned: ${PART_GOAL} right answers.`);
     const attempts = [...s.attempts, { ex, answer, res }];
+    const done = [...s.learned, ...learned.map((x) => x.id)];
+    // the round's own rule is learned: the round ends here, with the way to the next rule
+    if (s.part && done.includes(s.part)) {
+      setSession({ ...s, attempts, index: s.items.length, learned: done, plan: s.made });
+      return;
+    }
     let items = s.items;
     // a wrong sentence comes back once more at the end of the round
     if (res.verdict === "wrong" && ex.kind !== "identify" && s.items.length < s.size + 4) {
@@ -546,7 +572,17 @@ function Runner({ s }: { s: Session }) {
       if (again && ex.fixes !== undefined) again.fixes = ex.fixes;
       if (again) items = [...items, again];
     }
-    setSession({ ...s, items, attempts, index: s.index + 1, learned: [...s.learned, ...learned.map((x) => x.id)] });
+    // a part's round: the next exercise is made now, for the progress just reached (before any retries)
+    let made = s.made;
+    const part = s.part ? PART_BY_ID.get(s.part) : undefined;
+    if (part && s.plan !== undefined && (s.made ?? 0) < s.plan) {
+      const fresh = partExercise(getProgress(), ctx(), part, s.lines ?? [], STEPWISE, new Set(items.map((e) => e.context)));
+      if (fresh) {
+        items = [...items.slice(0, s.index + 1), fresh, ...items.slice(s.index + 1)];
+        made = (made ?? 0) + 1;
+      } else made = s.plan;
+    }
+    setSession({ ...s, items, attempts, index: s.index + 1, learned: done, made });
   }
 
   async function dispute() {
@@ -574,8 +610,13 @@ function Runner({ s }: { s: Session }) {
       res && res.verdict !== "correct" ? "Why is my answer wrong, and how do I get it right next time?" : res ? "Why is this the right form here?" : "Which rule do I need here? Give me a hint, not the answer.",
     );
 
-  const progress = s.index / s.items.length;
+  const total = roundSize(s);
+  const progress = s.index / total;
   const isLatinAnswer = ex.answer === "la";
+  const roundPart = s.part ? PART_BY_ID.get(s.part) : undefined;
+  // the parts this answer adds one to (in any kind of practice)
+  const pp = getProgress();
+  const counted = res ? partsInPractice(pp).filter((x) => countsFor(x, res)) : [];
 
   return (
     <div class="trainer">
@@ -583,18 +624,19 @@ function Runner({ s }: { s: Session }) {
         <span class="eyebrow">{modeLabel(s.mode)}</span>
         {/* the session as a strip of tesserae: gold when right, pale when almost, dark when wrong */}
         <div class="session-mosaic" role="img" aria-label={`${Math.round(progress * 100)}% of the round done`}>
-          {s.items.map((item, i) => (
-            <i key={item.id} class={s.attempts[i] ? s.attempts[i].res.verdict : i === s.index ? "current" : ""} />
+          {Array.from({ length: total }, (_, i) => (
+            <i key={s.items[i]?.id ?? `next-${i}`} class={s.attempts[i] ? s.attempts[i].res.verdict : i === s.index ? "current" : ""} />
           ))}
         </div>
-        <span class="counter" title={`Exercise ${s.index + 1} of ${s.items.length}`}>
-          <span class="counter-roman">{roman(s.index + 1)} / {roman(s.items.length)}</span>
+        <span class="counter" title={`Exercise ${s.index + 1} of ${total}`}>
+          <span class="counter-roman">{roman(s.index + 1)} / {roman(total)}</span>
           <span class="counter-words">
-            Exercise <strong>{s.index + 1}</strong> of {s.items.length}
+            Exercise <strong>{s.index + 1}</strong> of {total}
             {s.attempts.length > 0 && <> · {s.attempts.filter((a) => a.res.verdict === "correct").length} right</>}
           </span>
         </span>
-        <button class="linkish" onClick={() => setSession({ ...s, index: s.items.length })}>End</button>
+        <button class="linkish" onClick={() => setSession({ ...s, index: s.items.length, plan: s.made })}>End</button>
+        {roundPart && <PartCount part={roundPart} plus={counted.some((x) => x.id === roundPart.id)} />}
       </div>
 
       <div class={`panel frame exercise${res ? " answered" : ""}`} ref={panelRef}>
@@ -696,6 +738,14 @@ function Runner({ s }: { s: Session }) {
         {res && (
           <div class="ex-side" ref={sideRef}>
             <Feedback ex={ex} res={res} answer={answer} />
+            {counted.map((x) => (
+              <p key={x.id} class="part-plus" role="status">
+                <strong>+1</strong> {partName(x)}: {partRight(pp, x) + 1} of {PART_GOAL} right answers
+              </p>
+            ))}
+            {roundPart && !counted.some((x) => x.id === roundPart.id) && partState(pp, roundPart) === "practising" && (
+              <p class="part-plus none">{partName(roundPart)} stays at {partRight(pp, roundPart)} of {PART_GOAL}: only a right answer adds one.</p>
+            )}
             {judgement && <div class="well"><Markup text={judgement} /></div>}
             <div class="spread ex-next">
               <div class="row">
@@ -718,6 +768,24 @@ function Runner({ s }: { s: Session }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A part's exact progress, in the round's header: one dot per right answer,
+ * ten to learn it (a small gap marks where the harder exercises begin).
+ */
+function PartCount({ part, plus }: { part: Part; plus: boolean }) {
+  const p = useProgress();
+  const right = partRight(p, part);
+  const phase = partPhase(p, part);
+  return (
+    <div class="part-count" title={`Each right answer on ${partName(part).toLowerCase()} adds one; ${PART_GOAL} make it learned.`}>
+      <span class="part-count-label">{partName(part)}</span>
+      <PartDots part={part} plus={plus} />
+      <span class="part-count-num"><strong>{right}</strong> / {PART_GOAL} right</span>
+      <span class="part-count-phase">{phase === "simple" ? `simple exercises until ${PART_PHASES.mixedFrom}` : phase === "mixed" ? "harder exercises now" : "the hardest ones: almost there"}</span>
     </div>
   );
 }
@@ -1022,18 +1090,21 @@ function PartProgress({ s }: { s: Session }) {
       </div>
     );
   }
-  const value = partProgress(p, part!);
+  const now = partRight(p, part!);
+  const before = s.part === part!.id ? s.startRight ?? now : now;
   return (
     <div class="panel stack" style={{ gap: "8px" }}>
       <div class="spread">
         <h3>{partName(part!)}: {part!.title}</h3>
-        <strong class="ui">{Math.round(value * 100)}%</strong>
+        <strong class="ui">{now} / {PART_GOAL}</strong>
       </div>
-      <div style={{ maxWidth: "360px" }}>
-        <Mosaic value={value} tiles={10} label={`${Math.round(value * 100)}% on the way to holding`} />
-      </div>
-      <span class="small muted">
-        {partState(p, part!) === "learned" ? "This rule holds." : "On the way to holding. Another round brings it closer: the exercises get harder as it sinks in."}
+      <PartDots part={part!} big />
+      <span class="small">
+        {partState(p, part!) === "learned"
+          ? "This rule is learned."
+          : now > before
+            ? `This round: ${before} → ${now} right answers. ${PART_GOAL - now} more to learn it.`
+            : `${PART_GOAL - now} more right answers to learn it. Each right answer on this rule adds one.`}
       </span>
     </div>
   );
@@ -1044,12 +1115,13 @@ function Summary({ s }: { s: Session }) {
   const right = s.attempts.filter((a) => a.res.verdict === "correct").length;
   const almost = s.attempts.filter((a) => a.res.verdict === "almost").length;
   const wrong = s.attempts.filter((a) => a.res.verdict === "wrong");
-  const touched = [...new Set(s.attempts.flatMap((a) => Object.keys(a.res.credit)))].filter((id) => SKILL_BY_ID.has(id));
-  touched.sort((a, b) => mastery(p.skills[a]) - mastery(p.skills[b]));
+  // the rules the round practised (besides the round's own, shown above), with the same count of right answers
+  const used = new Set(s.attempts.flatMap((a) => Object.keys(a.res.credit)));
+  const touched = PARTS.filter((x) => x.id !== s.part && partState(p, x) !== "new" && x.skills.some((sk) => used.has(sk)));
   useScreen("page", "End of the round", () =>
     [
       `The end of a practice round (${modeLabel(s.mode)}): ${right} correct, ${almost} almost, ${wrong.length} wrong, out of ${s.attempts.length}.`,
-      touched.length ? `Skills practised: ${touched.slice(0, 8).map((id) => `${SKILL_BY_ID.get(id)!.title} (${Math.round(mastery(p.skills[id]) * 100)}%)`).join("; ")}.` : "",
+      touched.length ? `Rules practised: ${touched.slice(-6).map((x) => `${partName(x)} ${x.title} (${partState(p, x) === "learned" ? "learned" : rightWords(p, x)})`).join("; ")}.` : "",
       wrong.length ? `To review:\n${wrong.map((a) => `- ${plainText(a.ex.context)} | wrote: ${givenAnswer(a.ex, a.answer)}`).join("\n")}` : "",
     ]
       .filter(Boolean)
@@ -1074,11 +1146,13 @@ function Summary({ s }: { s: Session }) {
       <PartProgress s={s} />
       {touched.length > 0 && (
         <div class="panel stack">
-          <h3>Skills practised</h3>
-          {touched.slice(0, 8).map((id) => (
-            <div key={id} class="spread">
-              <span class="ui">{SKILL_BY_ID.get(id)!.title}</span>
-              <Mosaic value={mastery(p.skills[id])} thin />
+          <h3>Rules practised</h3>
+          {touched.slice(-6).map((x) => (
+            <div key={x.id} class="spread">
+              <button class="linkish part-row-title" onClick={() => { setSession(null); go({ page: "learn", id: x.id }); }}>
+                <span class="part-row-id">{x.id}</span> {x.title}
+              </button>
+              {partState(p, x) === "learned" ? <span class="story-read">learned</span> : <span class="row small ui" style={{ gap: "6px" }}><PartDots part={x} /> {partRight(p, x)}/{PART_GOAL}</span>}
             </div>
           ))}
         </div>

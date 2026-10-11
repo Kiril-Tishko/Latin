@@ -125,29 +125,41 @@ partly / wrong with a short feedback, balanced model at medium effort), and
 without Claude the learner compares with the good answer. With both questions
 answered the part is seen (`markSeen`) and its exercises open.
 
-`src/trainer/path.ts` keeps the path: `Progress.parts[id]` = `{ seen, done,
+`src/trainer/path.ts` keeps the path: `Progress.parts[id]` = `{ seen, right,
 learned? }`. Practice uses every known word but only the rules of the parts seen
-(`seenSkills`, `derived().seenKnowledge`). A part is learned (for good) after
-`SOLID.done` exercises on it with its rules' mastery averaging 0.85 and none
-under 0.65 (`updatePath`, called from `applyResult`); the current part is the
-first one not learned, and `focusLesson` follows it. The next part is offered,
-never forced ("Or learn the next one now"). Version 4 marked the lessons before
-the step as learned, so the learner went on from the first part of their step.
+(`seenSkills`, `derived().seenKnowledge`). The learner chose the count: every
+right answer on a part's rule adds one, in any kind of practice (`countsFor`:
+not wrong, and the rule's own credit at least 0.85), a wrong one adds nothing,
+and ten (`PART_GOAL`) make the part learned for good. The first five right
+answers come from simple exercises, then mixed ones, the last two from the
+hardest (`partPhase`, `PART_PHASES`). The current part is the first one not
+learned, and `focusLesson` follows it. The next part is offered, never forced
+("Or learn the next one now"). Version 4 marked the lessons before the step as
+learned; version 5 switched to counting right answers (parts in practice
+started from 0: the learner's 17 exercises on rule 3.2 had never shown its -ī).
 
-How hard the exercises are follows the mastery of the rule practised (`phaseOf`
-in progress.ts): simple while it is new (below 0.65, about five right answers:
-choose the word, pick the meaning, build from tiles, type an ending in the gap,
-with colors on and bare sentences, `sentenceStyle` richness 0), then mixed with
-whole sentences to write and change, and mostly hard ones from 0.9. A fixed
-sentence is as hard as its newest rule. A part's round (`partSession`) aims at
-its rules, takes about a third from the videos' and stories' sentences that show
-them (`practiceLines`; et between two verbs lives only there), and once the part
-is past its simple phase a fifth of the exercises review earlier parts. On a later
-day its round starts with a one-screen reminder of the part (`PartRecap`), and
-each exercise's Rule button shows the parts behind it (`RuleBox`). Home, the
-practice chooser and each lesson page show the parts as tiles (`PartsStrip`) and
-offer Learn or Practise. `tests/parts.test.ts` checks the content and that each
-part's practice needs only the rules seen and reaches every rule of the part.
+A part's round is made one exercise at a time (`partExercise`, from
+`Runner.next` in train.tsx), each for the progress at that moment, and every
+exercise shows the rule: its weakest piece first in the phase's kinds, a single
+form when only a form can show it (to …: -re; vīnī), the videos' and stories'
+sentences for et between two verbs (`practiceLines`). Past the simple phase one
+in five reviews earlier rules. The round's header shows the exact count
+(`PartCount`, ten dots `PartDots`); every answer says "+1 · Rule 3.2: 4 of 10" or
+that it stays; the round ends when the rule is learned, and its summary shows
+before → after. Home, the practice page, the rule page and the lesson pages show
+the same dots. On a later day a round starts with a one-screen reminder of the
+part (`PartRecap`), and each exercise's Rule button shows the parts behind it
+(`RuleBox`). `tests/parts.test.ts` plays a round of every part as the page does:
+each exercise must show the rule, add one when right, need only rules seen, and
+ten right answers must learn it.
+
+How rich a sentence is follows the same phases (`sentenceStyle`: bare while
+simple, colors on). Elsewhere (videos, stories, weak spots) the kinds follow the
+mastery of the skills (`phaseOf`); a fixed sentence is as hard as its newest
+rule. The generator makes an "of" phrase whenever s.gen or one of the genitive
+endings is the focus (`GEN_SKILLS`, the owner of the ending practised), and a
+describing word can be the gap or the choice (`tokenRules`; `wrongForms` offers
+its other cases and its other gender: magna for agricola's magnus).
 
 Exercise builders work on any sentence: `writeOn`, `endingOn`, `chooseOn`,
 `tilesOn`, `meaningOn` in `src/trainer/exercises.ts` take tokens and an English

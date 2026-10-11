@@ -7,9 +7,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { LESSON_BY_N } from "../../content/lessons";
 import { Part, PART_BY_ID, PartQuestion, PARTS, partsOf } from "../../content/parts";
 import { roman } from "../../latin/text";
-import { currentPart, markSeen, meetsKeys, partProgress, partState } from "../../trainer/path";
+import { currentPart, markSeen, meetsKeys, PART_GOAL, PART_PHASES, partProgress, partRight, partState } from "../../trainer/path";
+import { Progress } from "../../trainer/progress";
 import { checkUnderstanding, openAsk } from "../ask";
-import { Hedera, Icon, Laurel, Mosaic } from "../components";
+import { Hedera, Icon, Laurel } from "../components";
 import { fitToWindow } from "../fit";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
@@ -24,6 +25,26 @@ import { startSession } from "./train";
 export const partName = (part: Part) => `Rule ${part.id}`;
 
 const plain = (s: string) => s.replace(/«|»|\*\*/g, "").replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "");
+
+/** "3 of 10 right answers": a part's exact progress in words. */
+export const rightWords = (p: Progress, part: Part) => `${partRight(p, part)} of ${PART_GOAL} right answers`;
+
+/**
+ * A part's exact progress: one dot per right answer, ten to learn it, with a
+ * small gap where the harder exercises begin. `plus` marks the dot an answer
+ * on screen is about to add.
+ */
+export function PartDots({ part, plus, big }: { part: Part; plus?: boolean; big?: boolean }) {
+  const p = useProgress();
+  const right = partRight(p, part);
+  return (
+    <span class={`part-dots${big ? " big" : ""}`} role="img" aria-label={`${right} of ${PART_GOAL} right answers`}>
+      {Array.from({ length: PART_GOAL }, (_, i) => (
+        <i key={i} class={`${i < right ? "on" : plus && i === right ? "plus" : ""}${i === PART_PHASES.mixedFrom ? " step" : ""}`} />
+      ))}
+    </span>
+  );
+}
 
 /** The parts of a lesson as small tiles: gold when learned, half when in practice, the current one marked. */
 export function PartsStrip({ lesson, here }: { lesson: number; here?: string }) {
@@ -282,8 +303,8 @@ export function LearnPage({ id }: { id: string }) {
           )}
           {state === "practising" && (
             <span class="row small ui" style={{ gap: "8px" }}>
-              <Mosaic value={partProgress(p, part)} tiles={8} thin label={`${Math.round(partProgress(p, part) * 100)}% on the way`} />
-              in practice: {Math.round(partProgress(p, part) * 100)}% on the way to holding
+              <PartDots part={part} />
+              {rightWords(p, part)}
             </span>
           )}
         </div>

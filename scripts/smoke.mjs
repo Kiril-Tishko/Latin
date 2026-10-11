@@ -16,11 +16,11 @@ const errors = [];
 // earlier day, so its reminder comes first): most tests run as this learner.
 const LEARNED = ["1.1", "1.2", "1.3", "1.4", "1.5", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7"];
 const SEED = JSON.stringify({
-  version: 4,
+  version: 5,
   updatedAt: 1,
   lessonsDone: [1, 2, 3, 4],
   focusLesson: 3,
-  parts: Object.fromEntries([...LEARNED.map((id) => [id, { seen: 1, done: 8, learned: 1 }]), ["3.1", { seen: 1, done: 2 }]]),
+  parts: Object.fromEntries([...LEARNED.map((id) => [id, { seen: 1, right: 10, learned: 1 }]), ["3.1", { seen: 1, right: 2 }]]),
 });
 const seed = (ctx) =>
   ctx.addInitScript((data) => {
@@ -640,6 +640,7 @@ async function learnFlow(name, viewport, withClaude) {
   await p.locator(".learn-done button", { hasText: "Start practising" }).click();
   await p.waitForTimeout(300);
   if (await p.locator(".rule-intro").count()) errors.push(`${name}: a reminder right after learning the rule`);
+  if (!((await p.locator(".part-count").textContent()) ?? "").includes("0 / 10 right")) errors.push(`${name}: the round does not show the rule's exact progress`);
   for (let i = 0; i < 5; i++) {
     await p.waitForTimeout(150);
     const task = (await p.locator(".task-text").textContent()) ?? "";
@@ -654,10 +655,18 @@ async function learnFlow(name, viewport, withClaude) {
       await p.locator("#answer-input").press("Enter");
     }
     await p.waitForTimeout(150);
+    // every answer says what it did to the rule: +1, or why not
+    const note = (await p.locator(".part-plus").first().textContent().catch(() => "")) ?? "";
+    if (!/of 10/.test(note)) errors.push(`${name}: an answer does not say what it added to the rule (${note})`);
+    if (i === 0) await p.screenshot({ path: `${out}/${name}-learn-answered.png` });
     await p.locator("button", { hasText: "Next" }).click();
   }
+  const count = (await p.locator(".part-count-num").textContent()) ?? "";
   await p.locator(".trainer-top button", { hasText: "End" }).click();
+  await p.screenshot({ path: `${out}/${name}-learn-summary.png`, fullPage: true });
+  if (!((await p.locator(".panel h3", { hasText: "Rule 1.1" }).count()))) errors.push(`${name}: the end of the round does not show the rule's progress`);
   await p.locator("button", { hasText: "Choose another practice" }).click();
+  if (!((await p.locator(".step-panel").textContent()) ?? "").includes(`${count.split(" / ")[0].trim()} / 10`)) errors.push(`${name}: the practice page does not show the same count (${count})`);
   if (!(await p.locator(".mode-card", { hasText: "Sentences from the videos" }).count())) errors.push(`${name}: practice did not open after learning the rule`);
   if (!(await p.locator(".step-panel .btn.big", { hasText: "Practise rule 1.1" }).count())) errors.push(`${name}: the rule in practice is not offered`);
   await ctx.close();

@@ -12,7 +12,7 @@ import { Entry } from "../latin/types";
 import { dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, SKILLS } from "../latin/skills";
 import { Exercise, Result } from "../trainer/exercises";
-import { partState } from "../trainer/path";
+import { PART_GOAL, partRight, partState } from "../trainer/path";
 import { mastery } from "../trainer/progress";
 import { Chat, ChatTurn, deleteChat, getChat, getChats, newChatId, saveChat, useChats } from "./chats";
 import { Icon, toast } from "./components";
@@ -142,11 +142,15 @@ function profile(): string {
     return `- ${s.id}: ${s.title}. ${s.hint} (mastery ${Math.round(mastery(st) * 100)}% after ${st?.seen ?? 0} tries)`;
   });
   const path = PARTS.filter((x) => p.lessonsDone.includes(x.lesson));
-  const named = (state: string) => path.filter((x) => partState(p, x) === state).map((x) => `${x.id} ${x.title}`).join("; ") || "none";
+  const named = (state: string) =>
+    path
+      .filter((x) => partState(p, x) === state)
+      .map((x) => `${x.id} ${x.title}${state === "practising" ? ` (${partRight(p, x)} of ${PART_GOAL} right answers)` : ""}`)
+      .join("; ") || "none";
   const words = d.words.map((w) => `${dictionaryForm(w)} = ${w.en}`).join("; ");
   const mistakes = p.mistakes.slice(0, 8).map((m) => `- "${m.prompt}" | wrote: ${m.answer} | expected: ${m.expected}${m.notes.length ? ` | ${m.notes.join(" ")}` : ""}`);
   return [
-    `Lessons watched: ${lessons.join("; ")}. The learner remembers the words of these lessons but had forgotten most of the rules, so they learn the rules again in small parts, one at a time: a very simple explanation, two open questions, then exercises from simple to harder until the rule holds. Exercises use only the rules of the parts seen.`,
+    `Lessons watched: ${lessons.join("; ")}. The learner remembers the words of these lessons but had forgotten most of the rules, so they learn the rules again in small parts, one at a time: a very simple explanation, two open questions, then exercises from simple to harder: each right answer on the rule adds one, and ten make it learned. Exercises use only the rules of the parts seen.`,
     `Rules learned: ${named("learned")}.\nBeing practised now: ${named("practising")}.\nNot met yet: ${named("new")}.`,
     "Explain with the rules met so far unless the learner asks about later ones, and remind them of a rule plainly rather than assuming they remember it.",
     `Skills met, with the rule as this site teaches it (ids for PRACTICE):\n${skills.join("\n") || "none yet"}`,

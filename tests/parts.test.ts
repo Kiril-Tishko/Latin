@@ -9,9 +9,9 @@ import { full } from "../src/latin/types";
 import { Exercise, ExerciseKind } from "../src/trainer/exercises";
 import { buildKnowledge, fullLexicon } from "../src/trainer/knowledge";
 import { lineSkills, readLine } from "../src/trainer/lines";
-import { currentPart, markSeen, meetsKeys, nextNewPart, partProgress, partState, seenSkills, SOLID, updatePath } from "../src/trainer/path";
+import { currentPart, markSeen, meetsKeys, nextNewPart, PART_GOAL, partPhase, partProgress, partRight, partState, seenSkills, updatePath } from "../src/trainer/path";
 import { migrate, newProgress, Progress } from "../src/trainer/progress";
-import { applyResult, buildSession, partSession } from "../src/trainer/session";
+import { applyResult, partExercise } from "../src/trainer/session";
 import { practiceLines } from "../src/trainer/stories";
 
 const lex = fullLexicon();
@@ -140,9 +140,11 @@ describe("open answers", () => {
 });
 
 describe("the path through the parts", () => {
-  const solid = (p: Progress, part: Part) => {
-    for (const s of part.skills) p.skills[s] = { seen: 10, right: 10, ewma: 0.95, last: 0 };
-    for (let i = 0; i < SOLID.done; i++) updatePath(p, part.skills);
+  const RIGHT = (skills: string[]) => ({ verdict: "correct", credit: Object.fromEntries(skills.map((s) => [s, 1])) });
+  const WRONG = (skills: string[]) => ({ verdict: "wrong", credit: Object.fromEntries(skills.map((s) => [s, 0])) });
+  const learn = (p: Progress, part: Part) => {
+    markSeen(p, part.id);
+    for (let i = 0; i < PART_GOAL; i++) updatePath(p, RIGHT(part.skills));
   };
 
   it("starts at the first part, with no rules to practise until it is seen", () => {
@@ -158,50 +160,59 @@ describe("the path through the parts", () => {
     expect(nextNewPart(p)?.id).toBe("1.2");
   });
 
-  it("learns a part once a bunch of exercises on it went well, then moves on", () => {
+  it("adds one for every right answer on the rule, and learns it at ten", () => {
     const p = newProgress();
     markSeen(p, "1.1");
-    // the rules known from before do not make it learned at once: it needs practice
-    for (const s of PARTS[0].skills) p.skills[s] = { seen: 10, right: 10, ewma: 0.95, last: 0 };
-    updatePath(p, []);
-    expect(partState(p, PARTS[0])).toBe("practising");
-    expect(partProgress(p, PARTS[0])).toBe(0);
-    for (let i = 0; i < SOLID.done - 1; i++) expect(updatePath(p, ["v.3sg"])).toEqual([]);
-    expect(updatePath(p, ["v.3sg"]).map((x) => x.id)).toEqual(["1.1"]);
+    expect(partRight(p, PARTS[0])).toBe(0);
+    for (let i = 1; i < PART_GOAL; i++) {
+      expect(updatePath(p, RIGHT(["v.3sg"]))).toEqual([]);
+      expect(partRight(p, PARTS[0])).toBe(i);
+      expect(partProgress(p, PARTS[0])).toBeCloseTo(i / PART_GOAL);
+    }
+    expect(updatePath(p, RIGHT(["v.3sg"])).map((x) => x.id)).toEqual(["1.1"]);
     expect(partState(p, PARTS[0])).toBe("learned");
     expect(currentPart(p)?.id).toBe("1.2");
-    // and a learned part stays learned when a rule slips
-    p.skills["v.3sg"] = { seen: 12, right: 6, ewma: 0.3, last: 0 };
-    updatePath(p, ["v.3sg"]);
-    expect(partState(p, PARTS[0])).toBe("learned");
   });
 
-  it("does not learn a part while one of its rules is weak", () => {
+  it("adds nothing for a wrong answer, an answer that got the rule wrong, or one without the rule", () => {
     const p = newProgress();
     markSeen(p, "1.1");
-    for (const s of PARTS[0].skills) p.skills[s] = { seen: 10, right: 10, ewma: 0.95, last: 0 };
-    p.skills["n1.nom.sg"] = { seen: 10, right: 5, ewma: 0.5, last: 0 };
-    for (let i = 0; i < 20; i++) updatePath(p, PARTS[0].skills);
-    expect(partState(p, PARTS[0])).toBe("practising");
+    updatePath(p, WRONG(["v.3sg"]));
+    // the sentence was "almost" right, but the slip was in the rule's own ending
+    updatePath(p, { verdict: "almost", credit: { "v.3sg": 0, "s.sv": 0.85 } });
+    expect(partRight(p, PARTS[0])).toBe(1); // s.sv was right in it
+    updatePath(p, RIGHT(["v.1sg"]));
+    expect(partRight(p, PARTS[0])).toBe(1);
+  });
+
+  it("gives simple exercises for the first five right answers, then harder, then the hardest", () => {
+    const p = newProgress();
+    markSeen(p, "1.1");
+    const phases: string[] = [];
+    for (let i = 0; i < PART_GOAL; i++) {
+      phases.push(partPhase(p, PARTS[0]));
+      updatePath(p, RIGHT(["v.3sg"]));
+    }
+    expect(phases).toEqual(["simple", "simple", "simple", "simple", "simple", "mixed", "mixed", "mixed", "hard", "hard"]);
+  });
+
+  it("counts a right answer in any kind of practice, for every part in practice it shows", () => {
+    const p = newProgress();
+    markSeen(p, "1.1");
+    markSeen(p, "1.2");
+    updatePath(p, RIGHT(["v.1sg"]));
+    expect(partRight(p, PARTS[0])).toBe(0);
+    expect(partRight(p, PARTS[1])).toBe(1);
+    updatePath(p, RIGHT(["v.1sg", "v.3sg"]));
+    expect(partRight(p, PARTS[0])).toBe(1);
+    expect(partRight(p, PARTS[1])).toBe(2);
   });
 
   it("keeps the step on the lesson of the current part", () => {
     const p = newProgress();
-    for (const part of partsOf(1)) {
-      markSeen(p, part.id);
-      solid(p, part);
-    }
+    for (const part of partsOf(1)) learn(p, part);
     expect(currentPart(p)?.id).toBe("2.1");
     expect(p.focusLesson).toBe(2);
-  });
-
-  it("counts an exercise for a part only when it used the part's rules", () => {
-    const p = newProgress();
-    markSeen(p, "1.1");
-    markSeen(p, "1.2");
-    updatePath(p, ["v.1sg"]);
-    expect(p.parts["1.1"].done).toBe(0);
-    expect(p.parts["1.2"].done).toBe(1);
   });
 
   it("leaves out the parts of a lesson that is not ticked as watched", () => {
@@ -213,80 +224,81 @@ describe("the path through the parts", () => {
     expect(seenSkills(p).has("v.3sg")).toBe(true);
   });
 
-  it("moves saves from before the parts on: earlier lessons learned, the step's lesson from its first part", () => {
+  it("moves saves on: earlier lessons learned, the step's lesson from its first part, parts in practice counting from nothing", () => {
     const old = migrate({ version: 3, lessonsDone: [1, 2, 3, 4], focusLesson: 2, updatedAt: 5, skills: { "n1.acc.sg": { seen: 20, right: 19, ewma: 0.97, last: 0 } } });
-    expect(old.version).toBe(4);
+    expect(old.version).toBe(5);
     for (const part of partsOf(1)) expect(partState(old, part), part.id).toBe("learned");
     expect(partState(old, PARTS.find((x) => x.id === "2.1")!)).toBe("new");
     expect(currentPart(old)?.id).toBe("2.1");
     expect(seenSkills(old).has("n1.acc.sg")).toBe(false);
-    // a version 4 save keeps its parts
-    markSeen(old, "2.1");
-    expect(migrate(JSON.parse(JSON.stringify(old))).parts["2.1"]).toBeDefined();
+    // a version 4 save: learned parts stay learned, a part in practice counts from 0
+    const v4 = migrate({ version: 4, lessonsDone: [1, 2, 3, 4], focusLesson: 3, parts: { "3.1": { seen: 1, done: 11, learned: 2 }, "3.2": { seen: 3, done: 0 } } });
+    expect(v4.parts["3.1"]).toEqual({ seen: 1, right: 0, learned: 2 });
+    expect(v4.parts["3.2"]).toEqual({ seen: 3, right: 0 });
+    expect(partState(v4, PARTS.find((x) => x.id === "3.1")!)).toBe("learned");
+    expect(migrate(JSON.parse(JSON.stringify(v4))).parts).toEqual(v4.parts);
     expect(migrate({ version: 1, lessonsDone: [1, 2, 3, 4], focusLesson: 4 }).parts).toEqual({});
-  });
-
-  it("learns the first part in a round or two of right answers", () => {
-    const p = newProgress();
-    markSeen(p, "1.1");
-    const k = buildKnowledge([1, 2, 3, 4], [], 0, seenSkills(p));
-    const learned: string[] = [];
-    let done = 0;
-    for (let round = 1; round <= 3 && !learned.length; round++) {
-      for (const ex of buildSession(p, { k, lex, r: seeded(round) }, { size: 12, adaptive: true, skills: PARTS[0].skills, kinds: STEPWISE })) {
-        const answer = modelAnswer(ex);
-        learned.push(...applyResult(p, ex, ex.check(answer), answer).map((x) => x.id));
-        done++;
-        if (learned.length) break;
-      }
-    }
-    expect(learned).toEqual(["1.1"]);
-    expect(done).toBeGreaterThanOrEqual(SOLID.done);
-    expect(done).toBeLessThanOrEqual(24);
-    expect(currentPart(p)?.id).toBe("1.2");
   });
 });
 
-describe("practice of each part", () => {
-  /** A learner who has seen the parts up to this one: earlier rules solid, this one at mastery m. */
-  function learner(part: Part, m: number): Progress {
-    const p = newProgress();
-    for (const x of PARTS.slice(0, PARTS.indexOf(part) + 1)) {
-      p.parts[x.id] = { seen: 1, done: 0, learned: x === part ? undefined : 1 };
-      for (const s of x.skills) p.skills[s] = { seen: 10, right: 9, ewma: 0.95, last: 0 };
-    }
-    for (const s of part.skills) {
-      if (m === 0) delete p.skills[s];
-      else p.skills[s] = { seen: 10, right: 8, ewma: m, last: 0 };
-    }
-    return p;
+/** A learner who has learned the parts before this one and has `right` right answers on it. */
+function learner(part: Part, right: number): Progress {
+  const p = newProgress();
+  for (const x of PARTS.slice(0, PARTS.indexOf(part) + 1)) {
+    p.parts[x.id] = x === part ? { seen: 1, right } : { seen: 1, right: PART_GOAL, learned: 1 };
+    for (const s of x.skills) p.skills[s] = { seen: 10, right: 9, ewma: 0.95, last: 0 };
   }
+  for (const s of part.skills) delete p.skills[s];
+  return p;
+}
 
+/** A round on a part as the page plays it: one exercise at a time, each answered right. */
+function playRound(part: Part, seed: number, size = 12, startRight = 0) {
+  const p = learner(part, startRight);
+  const k = buildKnowledge([1, 2, 3, 4], [], 0, through(part));
+  const lines = practiceLines(lex, k);
+  const ctx = { k, lex, r: seeded(seed), audio: true };
+  const seen = new Set<string>();
+  const out: { ex: Exercise; phase: string; counted: boolean; right: number }[] = [];
+  for (let i = 0; i < size; i++) {
+    const phase = partPhase(p, part);
+    const ex = partExercise(p, ctx, part, lines, STEPWISE, seen);
+    if (!ex) break;
+    const answer = modelAnswer(ex);
+    const res = ex.check(answer);
+    const before = partRight(p, part);
+    applyResult(p, ex, res, answer);
+    out.push({ ex, phase, counted: partRight(p, part) > before || partState(p, part) === "learned", right: partRight(p, part) });
+    if (partState(p, part) === "learned") break;
+  }
+  return { p, out };
+}
+
+describe("practice of each part", () => {
   for (const part of PARTS) {
-    it(`${part.id} (${part.title}): only rules seen, every rule of the part practised, each answer accepted`, () => {
+    it(`${part.id} (${part.title}): every exercise shows the rule and adds one when right, only rules seen, learned in ten`, () => {
       const seen = through(part);
-      const k = buildKnowledge([1, 2, 3, 4], [], 0, seen);
-      const lines = practiceLines(lex, k);
-      const credited = new Set<string>();
       const problems: string[] = [];
-      for (const m of [0, 0.75, 0.95]) {
-        const p = learner(part, m);
-        for (let seed = 1; seed <= 4; seed++) {
-          const items = partSession(p, { k, lex, r: seeded(seed * 97 + Math.round(m * 10)), audio: true }, part, lines, { adaptive: true, focusLesson: part.lesson, kinds: STEPWISE, review: 0.2 }, 14);
-          expect(items.length, `${part.id} at ${m}`).toBeGreaterThanOrEqual(10);
-          for (const ex of items) {
-            for (const s of ex.skills) if (!seen.has(s)) problems.push(`${s} in ${ex.context}`);
-            const answer = modelAnswer(ex);
-            const res = ex.check(answer);
-            if (res.verdict !== "correct") problems.push(`not accepted: ${ex.context} | ${answer}`);
-            Object.keys(res.credit).forEach((s) => credited.add(s));
-            if (ex.kind !== "form") {
-              for (const tokens of [ex.latin, res.expectedTokens]) {
-                if (!tokens?.length) continue;
-                for (const s of lineSkills(tokens)) if (!seen.has(s)) problems.push(`${s} needed by ${ex.kind}: ${ex.context}`);
-              }
+      const credited = new Set<string>();
+      for (let seed = 1; seed <= 3; seed++) {
+        const { p, out } = playRound(part, seed * 31, 14);
+        // ten right answers learn it; a review exercise (past the simple ones) may come in between
+        if (partState(p, part) !== "learned") problems.push(`seed ${seed}: not learned after ${out.length} right answers (${partRight(p, part)})`);
+        const reviews = out.filter((x) => !x.counted).length;
+        if (reviews > 4) problems.push(`seed ${seed}: ${reviews} exercises did not count`);
+        for (const { ex, phase, counted } of out) {
+          if (phase === "simple" && !counted) problems.push(`a simple exercise that did not count: ${ex.context}`);
+          if (counted) ex.skills.filter((s) => part.skills.includes(s)).forEach((s) => credited.add(s));
+          for (const s of ex.skills) if (!seen.has(s)) problems.push(`${s} in ${ex.context}`);
+          const res = ex.check(modelAnswer(ex));
+          if (res.verdict !== "correct") problems.push(`not accepted: ${ex.context}`);
+          if (ex.kind !== "form") {
+            for (const tokens of [ex.latin, res.expectedTokens]) {
+              if (!tokens?.length) continue;
+              for (const s of lineSkills(tokens)) if (!seen.has(s)) problems.push(`${s} needed by ${ex.kind}: ${ex.context}`);
             }
           }
+          if (phase === "simple" && ["en2la", "transform", "listen"].includes(ex.kind)) problems.push(`a hard ${ex.kind} while the rule is new: ${ex.context}`);
         }
       }
       expect(problems).toEqual([]);
@@ -296,19 +308,17 @@ describe("practice of each part", () => {
 
   it("starts a new part with simple exercises only, and ends with the hard ones", () => {
     const part = PARTS.find((x) => x.id === "2.1")!;
-    const k = buildKnowledge([1, 2, 3, 4], [], 0, through(part));
-    const kinds = (m: number) => {
-      const out: string[] = [];
-      for (let seed = 1; seed <= 6; seed++) {
-        const p = learner(part, m);
-        out.push(...buildSession(p, { k, lex, r: seeded(seed), audio: true }, { size: 12, adaptive: true, skills: part.skills, focusLesson: 2, kinds: STEPWISE }).map((e) => e.kind));
-      }
-      return out;
-    };
+    const kinds = (startRight: number) => [1, 2, 3, 4, 5, 6].flatMap((seed) => playRound(part, seed, 4, startRight).out.map((x) => x.ex.kind));
     const fresh = kinds(0);
-    expect(fresh.every((kind) => ["choose", "meaning", "tiles", "ending", "la2en"].includes(kind))).toBe(true);
-    expect(fresh.filter((kind) => kind === "la2en").length).toBeLessThan(fresh.length * 0.2);
-    const late = kinds(0.95);
-    expect(late.filter((kind) => kind === "en2la" || kind === "transform").length).toBeGreaterThan(late.length * 0.35);
+    expect(fresh.every((kind) => ["choose", "meaning", "tiles", "ending", "la2en", "form"].includes(kind))).toBe(true);
+    const late = kinds(8);
+    expect(late.filter((kind) => kind === "en2la" || kind === "transform").length).toBeGreaterThan(late.length * 0.3);
+  });
+
+  it("rule 3.2: the -ī of an -us word is in every exercise (it once was in none)", () => {
+    const part = PARTS.find((x) => x.id === "3.2")!;
+    const { out } = playRound(part, 5, 5);
+    expect(out.length).toBe(5);
+    for (const { ex } of out) expect(ex.skills, ex.context).toContain("n2.gen.sg");
   });
 });

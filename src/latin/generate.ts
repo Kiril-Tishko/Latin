@@ -188,6 +188,9 @@ interface NPOpts {
 
 const rich = (k: Knowledge) => k.richness ?? 1;
 
+/** The rule of "of" and its endings: any of them in focus makes an "of" phrase the thing practised. */
+const GEN_SKILLS = ["s.gen", "n1.gen.sg", "n2.gen.sg", "n2n.gen.sg"];
+
 /**
  * Chance of an optional extra (an adjective, "of" phrase, nōn, a second
  * subject…). Scaled by richness; while a rule is new a sentence carries an
@@ -285,13 +288,19 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
   // whose: people own things and places, and are friends, students or teachers of someone (not "the poet's farmer", "the bull's student")
   const ownable = isPlace(noun) || noun.id === "vita" || noun.tags.some((t) => OWNED.has(t));
   const owned = k.silly > 0 || (!noun.proper && (isHuman(noun) ? RELATIONS.has(noun.id) : ownable));
-  if (owned && np.adj?.id !== "meus" && k.skills.has("s.gen") && takeExtra(k, r, ["s.gen"], o.possChance ?? 0.2)) {
+  // (an "of" phrase is what is practised when its rule or one of its endings is the focus)
+  if (owned && np.adj?.id !== "meus" && k.skills.has("s.gen") && takeExtra(k, r, GEN_SKILLS, o.possChance ?? 0.2)) {
     const owner = OWNERS[noun.id];
+    const allowed = k.silly === 0 && owner ? (n: NounEntry) => owner.includes(n.id) : undefined;
+    const someone = k.silly === 0 ? isHuman : isPerson;
+    // an owner whose ending is the one being practised (amīcī for -ī), when there is one
+    const wanted = (n: NounEntry) => someone(n) && !!k.focus?.includes(nounSkill(n.decl, "gen", "sg"));
+    const focused = k.nouns.some((n) => wanted(n) && nounUsable(k, n, "gen", "sg") && n.id !== noun.id && !n.proper && (allowed?.(n) ?? true));
     const poss = makeNP(k, r, {
       case: "gen",
       num: "sg",
-      prefer: k.silly === 0 ? isHuman : isPerson,
-      require: k.silly === 0 && owner ? (n) => owner.includes(n.id) : undefined,
+      prefer: focused ? wanted : someone,
+      require: allowed,
       exclude: [noun.id, ...(o.exclude ?? [])],
       adjChance: 0,
       possChance: 0,
@@ -337,7 +346,8 @@ function makeSubject(k: Knowledge, r: Rand, o: SubjectOpts = {}) {
         return np && { subj: { kind: "np", np }, person: 3, num: "pl", skills: ["s.sv", "s.pl", ...npSkills(np)] };
       },
     });
-    const coordW = extra(k, ["s.et"], 1);
+    // "X et Y" is also the way to a plural subject before the plural endings are met
+    const coordW = extra(k, ["s.et", "s.pl", "v.3pl"], 1);
     if (k.skills.has("s.et") && coordW > 0) {
       opts.push({
         w: coordW,

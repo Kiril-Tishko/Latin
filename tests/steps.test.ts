@@ -118,7 +118,7 @@ describe("step-by-step practice", () => {
   it("restarts saves from before the steps at Lesson I, and keeps later choices", () => {
     const old = migrate({ version: 1, lessonsDone: [1, 2, 3, 4], focusLesson: 4, updatedAt: 5 });
     expect(old.focusLesson).toBe(1);
-    expect(old.version).toBe(4);
+    expect(old.version).toBe(5);
     expect(old.rulesShown).toEqual({});
     const now = migrate({ ...old, focusLesson: 2 });
     expect(now.focusLesson).toBe(2);

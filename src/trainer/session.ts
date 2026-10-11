@@ -4,16 +4,15 @@
 // whole sentences come as it holds (phaseOf in progress.ts).
 import { LESSON_BY_N } from "../content/lessons";
 import { Lexicon } from "../latin/analyze";
-import { Knowledge, pick, Rand } from "../latin/generate";
+import { Knowledge, pick, Rand, shuffle } from "../latin/generate";
 import { latinKey } from "../latin/text";
 import { Entry } from "../latin/types";
-import { Ctx, deriveExercise, Exercise, ExerciseKind, makeExercise, Result, vocabExercise } from "./exercises";
+import { Ctx, deriveExercise, Exercise, ExerciseKind, MadeKind, makeExercise, Result, vocabExercise } from "./exercises";
 import { quizWords, wordInEnglish } from "../content/english";
-import { mastery, Mistake, phaseOf, Progress, recordDay, recordMistake, recordSkill } from "./progress";
-import { updatePath } from "./path";
+import { mastery, Mistake, Phase, phaseOf, Progress, recordDay, recordMistake, recordSkill } from "./progress";
+import { partPhase, updatePath } from "./path";
 import { Part } from "../content/parts";
-import { Line } from "./lines";
-import { linesSession } from "./video";
+import { kindsFor, Line, lineExercise } from "./lines";
 import { dueWords, exposeWord, reviewWord } from "./srs";
 
 export const KIND_WEIGHTS: [ExerciseKind, number][] = [
@@ -196,19 +195,63 @@ function deriveFrom(ctx: Ctx, vocab: Entry[]): Exercise | null {
   return deriveExercise(ctx, e, en, accept, wordInEnglish(e.id)?.note);
 }
 
+/** What a part's phase stands for when choosing exercise kinds and how rich a sentence is. */
+const PHASE_LEVEL: Record<Phase, number> = { simple: 0.3, mixed: 0.75, hard: 0.95 };
+
 /**
- * A round on one part of the rules: new sentences aimed at its rules, and about
- * a third from the videos and the stories that show them (some rules, like et
- * between two verbs, live only there).
+ * The next exercise of a round on one part, made for where the learner is right
+ * now: simple ones for its first five right answers, then harder ones. Every
+ * exercise shows the part's rule, its weakest piece first: a new sentence aimed
+ * at it, or about one in three from the videos and stories (some rules, like et
+ * between two verbs, live only there). A piece that only a single form can show
+ * (to …: -re; vīnī) gets one. Past the simple ones, one in five reviews earlier rules.
  */
-export function partSession(p: Progress, ctx: Ctx, part: Part, lines: Line[], opts: Omit<SessionOpts, "size" | "skills">, size = 12): Exercise[] {
-  const own = lines.filter((l) => l.skills.some((s) => part.skills.includes(s)) && l.skills.every((s) => ctx.k.skills.has(s)));
-  const fixed = own.length ? linesSession(p, ctx, own, Math.round(size / 3)) : [];
-  const made = buildSession(p, ctx, { ...opts, size: size - fixed.length, skills: part.skills });
-  // the fixed sentences spread through the round, never first
-  const out = [...made];
-  fixed.forEach((ex, i) => out.splice(Math.min(out.length, Math.round(((i + 1) * (made.length + fixed.length)) / (fixed.length + 1))), 0, ex));
-  return out;
+export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], kinds: ExerciseKind[], seen: Set<string>): Exercise | null {
+  const phase = partPhase(p, part);
+  const level = PHASE_LEVEL[phase];
+  const allowed = kinds.filter((kind) => kind !== "vocab" && kind !== "derive" && (kind !== "listen" || !!ctx.audio)) as MadeKind[];
+  const phaseKinds = kindWeights(level).filter(([kind]) => allowed.includes(kind as MadeKind));
+  const lineKinds = kindsFor(level);
+  const fits = (ex: Exercise | null, wanted: string[]): ex is Exercise => !!ex && !seen.has(ex.context) && ex.skills.some((s) => wanted.includes(s));
+  const done = (ex: Exercise) => {
+    seen.add(ex.context);
+    if (phase === "simple") ex.easy = true;
+    return ex;
+  };
+  if (phase !== "simple" && ctx.r() < 0.2) {
+    const review = nextExercise(p, ctx, { size: 1, adaptive: true, kinds }, seen);
+    if (review) return review;
+  }
+  const fixed = lines.filter((l) => l.skills.some((s) => part.skills.includes(s)) && l.skills.every((s) => ctx.k.skills.has(s)));
+  const c: Ctx = { ...ctx, k: { ...ctx.k, ...sentenceStyle(level, ctx.k.silly) } };
+  const focus = pickFocus(p, ctx.k, ctx.r, part.practised ?? part.skills, part.lesson);
+  // the weakest piece of the rule, in the phase's kinds of exercise
+  for (let attempt = 0; attempt < 12 && phaseKinds.length; attempt++) {
+    const ex =
+      fixed.length && ctx.r() < 1 / 3
+        ? lineExercise(c, pick(ctx.r, fixed), weighted(ctx.r, lineKinds) ?? "tiles", lines)
+        : makeExercise(weighted(ctx.r, phaseKinds) as MadeKind, c, focus);
+    if (fits(ex, focus)) return done(ex);
+  }
+  // a piece only a single form can show: the form first, then any kind
+  for (const kind of [...allowed.filter((k) => k === "form"), ...shuffle(ctx.r, allowed.filter((k) => k !== "form"))]) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const ex = makeExercise(kind, c, focus);
+      if (fits(ex, focus)) return done(ex);
+    }
+  }
+  // any piece of the rule: the fixed sentences (et between two verbs), then new ones
+  for (const line of shuffle(ctx.r, fixed)) {
+    for (const [kind] of shuffle(ctx.r, lineKinds)) {
+      const ex = lineExercise(c, line, kind, lines);
+      if (fits(ex, part.skills)) return done(ex);
+    }
+  }
+  for (let attempt = 0; attempt < 12 && phaseKinds.length; attempt++) {
+    const ex = makeExercise(weighted(ctx.r, phaseKinds) as MadeKind, c, part.skills);
+    if (fits(ex, part.skills)) return done(ex);
+  }
+  return null;
 }
 
 export function buildSession(p: Progress, ctx: Ctx, opts: SessionOpts): Exercise[] {
@@ -250,7 +293,7 @@ export function applyResult(p: Progress, ex: Exercise, res: Result, answer: stri
     });
   }
   p.updatedAt = now;
-  return updatePath(p, Object.keys(res.credit), now);
+  return updatePath(p, res, now);
 }
 
 export type { Lexicon };

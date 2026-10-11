@@ -6,7 +6,7 @@
 import { Analysis, annotate, caseOf, Lexicon, numOf } from "../latin/analyze";
 import { LToken, Rand, Role, shuffle } from "../latin/generate";
 import { adjDecl, nounSkill } from "../latin/skills";
-import { chooseOn, Ctx, endingOn, Exercise, ExerciseKind, meaningOn, tilesOn, writeOn } from "./exercises";
+import { chooseOn, Ctx, endingOn, Exercise, ExerciseKind, meaningOn, tilesOn, tokenRules, writeOn } from "./exercises";
 import { phaseOf } from "./progress";
 
 /** A sentence to read and practise. */
@@ -107,14 +107,7 @@ export function lineSkills(tokens: LToken[]): string[] {
     if (t.skill) out.add(t.skill);
     const e = t.analysis?.entry;
     if (e?.kind === "fixed" && WORD_RULES[e.id]) out.add(WORD_RULES[e.id]);
-    if (e?.kind === "adj") {
-      out.add("adj.agree");
-      // an adjective after est goes with the subject: agricola magnus est
-      const owner = t.role === "pred-adj" ? "subj" : t.role.replace("-adj", "");
-      const noun = tokens.find((n) => n.analysis?.entry.kind === "noun" && n.role === owner);
-      const g = noun?.analysis?.entry.kind === "noun" ? noun.analysis.entry : undefined;
-      if (g && ((g.decl === "1" && g.gender === "m") || (g.decl === "2" && g.gender === "f"))) out.add("adj.gender");
-    }
+    if (e?.kind === "adj") tokenRules(t, tokens).forEach((s) => out.add(s));
   }
   if (has((t) => t.role === "obj" && t.analysis?.entry.kind !== "fixed")) out.add("s.svo");
   if (has((t) => t.role.endsWith("-poss"))) out.add("s.gen");

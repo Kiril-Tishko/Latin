@@ -39,9 +39,9 @@ export interface Mistake {
 export interface PartStat {
   /** When its explanation and questions were done: its rules may be practised. */
   seen: number;
-  /** Exercises on its rules since then. */
-  done: number;
-  /** When practice made it hold (it stays learned). */
+  /** Right answers on its rules since then (ten make it learned). */
+  right: number;
+  /** When it reached ten (it stays learned). */
   learned?: number;
 }
 
@@ -62,7 +62,7 @@ export interface Settings {
 }
 
 export interface Progress {
-  version: 4;
+  version: 5;
   updatedAt: number;
   settings: Settings;
   /** Lessons the learner has watched; their words and rules are unlocked. */
@@ -90,7 +90,7 @@ export const DEFAULT_SETTINGS: Settings = { macrons: true, dailyGoal: 20, silly:
 
 export function newProgress(): Progress {
   return {
-    version: 4,
+    version: 5,
     updatedAt: 0,
     settings: { ...DEFAULT_SETTINGS },
     lessonsDone: [1, 2, 3, 4],
@@ -115,7 +115,7 @@ export function migrate(raw: unknown): Progress {
   const out = {
     ...base,
     ...p,
-    version: 4,
+    version: 5,
     settings: { ...base.settings, ...(p.settings ?? {}) },
     skills: p.skills ?? {},
     words: p.words ?? {},
@@ -137,8 +137,13 @@ export function migrate(raw: unknown): Progress {
   if ((p.version ?? 1) < 4) {
     const now = Date.now();
     out.parts = {};
-    for (const part of PARTS) if (part.lesson < out.focusLesson) out.parts[part.id] = { seen: now, done: 0, learned: now };
+    for (const part of PARTS) if (part.lesson < out.focusLesson) out.parts[part.id] = { seen: now, right: 0, learned: now };
   }
+  // Version 5 counts right answers per part (ten make it learned) instead of
+  // exercises and mastery: parts in practice start counting from nothing.
+  out.parts = Object.fromEntries(
+    Object.entries(out.parts).map(([id, st]) => [id, { seen: st.seen, right: st.right ?? 0, ...(st.learned ? { learned: st.learned } : {}) }]),
+  );
   return out;
 }
 

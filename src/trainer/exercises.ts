@@ -182,9 +182,9 @@ export function tilesOn(ctx: Ctx, tokens: LToken[], englishText: string, skills:
   if (tokens.length < 2 || tokens.length > 7) return null;
   const right = tokens.map((t) => latinKey(t.text));
   const candidates = tokens
-    .map((t) => ({ t, wrong: t.analysis && (t.analysis.entry.kind === "verb" || t.analysis.entry.kind === "noun") ? wrongForms(ctx.k, t).filter((w) => !right.includes(latinKey(w.text))) : [] }))
+    .map((t) => ({ t, wrong: t.analysis && ["verb", "noun", "adj"].includes(t.analysis.entry.kind) ? wrongForms(ctx.k, t).filter((w) => !right.includes(latinKey(w.text))) : [] }))
     .filter((x) => x.wrong.length > 0);
-  const focused = candidates.filter((x) => x.t.skill && focus.includes(x.t.skill));
+  const focused = candidates.filter((x) => tokenRules(x.t, tokens).some((s) => focus.includes(s)));
   const chosen = shuffle(ctx.r, focused.length ? focused : candidates).slice(0, tokens.length <= 3 ? 1 : 2);
   if (!chosen.length) return null;
   const tiles = shuffle(ctx.r, [...tokens.map((t) => t.text), ...chosen.map((x) => pick(ctx.r, x.wrong).text)]);
@@ -309,6 +309,22 @@ function ending(ctx: Ctx, focus: string[]): Exercise | null {
 }
 
 /** Fill in the ending of one word of a sentence (a generated one or one from a video). */
+/**
+ * The rules a word's ending tests: its own ending, and for a describing word
+ * the agreement with its noun (and the gender rule when the noun is a
+ * masculine -a word like agricola).
+ */
+export function tokenRules(t: LToken, tokens: LToken[]): string[] {
+  const out = t.skill ? [t.skill] : [];
+  if (t.analysis?.entry.kind !== "adj") return out;
+  out.push("adj.agree");
+  // after est it goes with the subject: agricola magnus est
+  const owner = t.role === "pred-adj" ? "subj" : t.role.replace("-adj", "");
+  const noun = tokens.find((n) => n.analysis?.entry.kind === "noun" && n.role === owner)?.analysis?.entry;
+  if (noun?.kind === "noun" && ((noun.decl === "1" && noun.gender === "m") || (noun.decl === "2" && noun.gender === "f"))) out.push("adj.gender");
+  return out;
+}
+
 export function endingOn(ctx: Ctx, tokens: LToken[], englishText: string, focus: string[]): Exercise | null {
   // before subject and object are told apart (Lesson II), a subject's ending is
   // just the dictionary form: blank something that tests a rule instead
@@ -318,10 +334,10 @@ export function endingOn(ctx: Ctx, tokens: LToken[], englishText: string, focus:
     .filter(({ t }) => t.analysis && t.analysis.entry.kind !== "fixed" && t.analysis.form.ending && t.analysis.form.stem);
   const candidates = all.some(({ t }) => !trivial(t)) ? all.filter(({ t }) => !trivial(t)) : all;
   if (!candidates.length) return null;
-  const focused = candidates.filter(({ t }) => t.skill && focus.includes(t.skill));
+  const focused = candidates.filter(({ t }) => tokenRules(t, tokens).some((s) => focus.includes(s)));
   const { t: target, i: blank } = pick(ctx.r, focused.length ? focused : candidates);
   const a = target.analysis!;
-  const skills = [target.skill!].filter(Boolean);
+  const skills = tokenRules(target, tokens);
   return {
     id: nextId(),
     kind: "ending",
@@ -392,6 +408,25 @@ function wrongForms(k: Knowledge, t: LToken): LToken[] {
       const form = declineNoun(e)[key];
       if (form) out.push({ text: full(form), role: t.role, analysis: { entry: e, key, gender: e.gender, form }, skill: nounSkill(e.decl, c, n) });
     }
+  } else if (e.kind === "adj" && e.cls === "12" && a.gender) {
+    const g = a.gender;
+    const adjForm = (gender: typeof g, key: NounKey): LToken => {
+      const [c, n] = key.split(".") as [Case, Num];
+      const form = declineAdj(e, gender)[key];
+      return { text: full(form), role: t.role, analysis: { entry: e, key, gender, form }, skill: nounSkill(adjDecl(gender), c, n) };
+    };
+    // the same gender in another case: magnam for magna
+    for (const key of NOUN_KEYS) {
+      const [c, n] = key.split(".") as [Case, Num];
+      if (key === a.key || !k.skills.has(nounSkill(adjDecl(g), c, n))) continue;
+      if (c === "gen" && !a.key.startsWith("gen")) continue;
+      if (t.role === "pp-adj" && (c === "acc" || c === "abl")) continue;
+      out.push(adjForm(g, key));
+    }
+    // the other gender in the same case: pulcher for pulchra, and magna for agricola's magnus
+    const other = g === "m" ? "f" : g === "f" ? "m" : undefined;
+    const [c, n] = a.key.split(".") as [Case, Num];
+    if (other && k.skills.has(nounSkill(adjDecl(other), c, n))) out.push(adjForm(other, a.key as NounKey));
   }
   // one option per spelling (puellae is both "of the girl" and "girls")
   const seen = new Set([latinKey(t.text)]);
@@ -416,15 +451,15 @@ function choose(ctx: Ctx, focus: string[]): Exercise | null {
 /** The right form for a gap in a sentence (a generated one or one from a video), out of two or three. */
 export function chooseOn(ctx: Ctx, tokens: LToken[], englishText: string, focus: string[]): Exercise | null {
   const options = tokens
-    .map((t, i) => ({ t, i, wrong: t.analysis && (t.analysis.entry.kind === "verb" || t.analysis.entry.kind === "noun") ? wrongForms(ctx.k, t) : [] }))
+    .map((t, i) => ({ t, i, wrong: t.analysis && ["verb", "noun", "adj"].includes(t.analysis.entry.kind) ? wrongForms(ctx.k, t) : [] }))
     .filter((x) => x.wrong.length > 0);
   if (!options.length) return null;
-  const focused = options.filter((x) => x.t.skill && focus.includes(x.t.skill));
+  const focused = options.filter((x) => tokenRules(x.t, tokens).some((s) => focus.includes(s)));
   const { t: target, i: blank, wrong } = pick(ctx.r, focused.length ? focused : options);
   const all = shuffle(ctx.r, [target, ...shuffle(ctx.r, wrong).slice(0, 2)]);
   const correct = String(all.indexOf(target));
   const a = target.analysis!;
-  const skills = [target.skill].filter(Boolean) as string[];
+  const skills = tokenRules(target, tokens);
   return {
     id: nextId(),
     kind: "choose",

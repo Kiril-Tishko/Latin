@@ -6,7 +6,7 @@ import { STORIES } from "../../content/stories";
 import { dictionaryForm, headword } from "../../latin/morph";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
-import { lessonProgress, partProgress, partState, seenSkills } from "../../trainer/path";
+import { lessonProgress, PART_GOAL, partRight, partState, seenSkills } from "../../trainer/path";
 import { storyOpen } from "../../trainer/stories";
 import { Part, partsOf } from "../../content/parts";
 import { openAsk } from "../ask";
@@ -17,7 +17,7 @@ import { go } from "../nav";
 import { derived, useProgress } from "../store";
 import { useScreen } from "../screen";
 import { CardView } from "./discover";
-import { partName, PartsStrip } from "./learn";
+import { PartDots, partName, PartsStrip } from "./learn";
 import { startSession } from "./train";
 
 export function Lessons() {
@@ -132,7 +132,6 @@ export { RuleView };
 function PartRow({ part }: { part: Part }) {
   const p = useProgress();
   const state = partState(p, part);
-  const value = partProgress(p, part);
   return (
     <div class={`part-row ${state}`}>
       <button class="linkish part-row-title" onClick={() => go({ page: "learn", id: part.id })}>
@@ -142,7 +141,7 @@ function PartRow({ part }: { part: Part }) {
         {state === "learned" ? (
           <span class="story-read">learned</span>
         ) : state === "practising" ? (
-          <Mosaic value={value} tiles={6} thin label={`${Math.round(value * 100)}% on the way to holding`} />
+          <span class="row" style={{ gap: "6px" }}><PartDots part={part} /> {partRight(p, part)}/{PART_GOAL}</span>
         ) : (
           <span class="muted">new</span>
         )}

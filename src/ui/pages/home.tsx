@@ -3,7 +3,7 @@ import { LESSONS } from "../../content/lessons";
 import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
-import { currentPart, lessonProgress, partProgress, partState } from "../../trainer/path";
+import { currentPart, lessonProgress, partState } from "../../trainer/path";
 import { mastery, streak, todayDone } from "../../trainer/progress";
 import { mistakesToFix } from "../../trainer/session";
 import { dueWords } from "../../trainer/srs";
@@ -18,7 +18,7 @@ import { Speak } from "../speak";
 import { derived, getProgress, useProgress } from "../store";
 import { useScreen } from "../screen";
 import { openCardOnArrival } from "./discover";
-import { partName, PartsStrip } from "./learn";
+import { PartDots, partName, PartsStrip, rightWords } from "./learn";
 import { startSession } from "./train";
 
 /** A bronze stylus: pointed for writing, flat at the other end for smoothing the wax. */
@@ -98,7 +98,7 @@ export function Home() {
     const sentence = sentenceOfTheDay();
     return [
       `The home page. Today: ${done} of ${goal} exercises done; ${days > 0 ? `a ${days}-day streak` : "no streak yet"}.`,
-      part ? `The rule the learner is on: ${partName(part)} of Lesson ${part.lesson}, "${part.title}" (${state === "new" ? "new: to read and answer two questions about before practising" : `in practice, ${Math.round(partProgress(p, part) * 100)}% of the way to holding`}).` : "Every rule of the lessons watched holds.",
+      part ? `The rule the learner is on: ${partName(part)} of Lesson ${part.lesson}, "${part.title}" (${state === "new" ? "new: to read and answer two questions about before practising" : `in practice: ${rightWords(p, part)}, ten make it learned`}).` : "Every rule of the lessons watched is learned.",
       weak.length ? `Weak spots listed: ${weak.map((id) => `${SKILL_BY_ID.get(id)!.title} (${Math.round(mastery(p.skills[id]) * 100)}%)`).join("; ")}.` : "",
       `Words due for review: ${due}.`,
       sentence ? `Sentence of the day, on the wax tablet: ${sentence.la} (${sentence.en})` : "",
@@ -115,15 +115,15 @@ export function Home() {
           <div class="stack" style={{ gap: "6px" }}>
             <span class="eyebrow">Salvē!</span>
             <h1 class="hero-title">
-              {done >= goal ? "Today's goal is done." : !part ? "Every rule you watched holds." : state === "new" ? "Today: a new rule." : done > 0 ? "Keep going: the rule is sinking in." : `Today: ${partName(part).toLowerCase()}, step by step.`}
+              {done >= goal ? "Today's goal is done." : !part ? "Every rule you watched is learned." : state === "new" ? "Today: a new rule." : done > 0 ? "Keep going: the rule is sinking in." : `Today: ${partName(part).toLowerCase()}, step by step.`}
             </h1>
             {part && (
               <p class="muted prose">
                 Lesson {roman(part.lesson)} · {partName(part)}: {part.title}
-                {state === "practising" ? ` · ${Math.round(partProgress(p, part) * 100)}% on the way to holding` : ""}
+                {state === "practising" ? ` · ${rightWords(p, part)}` : ""}
               </p>
             )}
-            {part && <PartsStrip lesson={part.lesson} />}
+            {part && state === "practising" ? <PartDots part={part} big /> : part ? <PartsStrip lesson={part.lesson} /> : null}
           </div>
           <div class="stack" style={{ gap: "6px", maxWidth: "360px" }}>
             <div class="spread small ui">

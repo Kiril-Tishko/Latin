@@ -7,7 +7,7 @@ import { Lexicon } from "../latin/analyze";
 import { Knowledge } from "../latin/generate";
 import { Ctx, Exercise } from "./exercises";
 import { kindsFor, Line, lineExercise, LineKind, makeLine, weighted } from "./lines";
-import { mastery, Progress } from "./progress";
+import { mastery, phaseOf, Progress } from "./progress";
 
 export type VideoLine = Line & { from: { kind: "video"; lesson: number } };
 
@@ -41,10 +41,14 @@ export function videoExercise(ctx: Ctx, line: Line, kind: LineKind, lines: Line[
   return lineExercise(ctx, line, kind, lines);
 }
 
-/** A round on fixed sentences: fresh ones first, the weakest rules' sentences more often. */
+/**
+ * A round on fixed sentences: fresh ones first, the weakest rules' sentences
+ * more often. A sentence is as hard as its newest rule: while that one is new,
+ * the exercises on it are simple ones.
+ */
 export function linesSession(p: Progress, ctx: Ctx, lines: Line[], size = 12): Exercise[] {
   if (!lines.length) return [];
-  const level = (line: Line) => line.skills.reduce((sum, s) => sum + mastery(p.skills[s]), 0) / line.skills.length;
+  const level = (line: Line) => Math.min(...line.skills.map((s) => mastery(p.skills[s])));
   const out: Exercise[] = [];
   const seen = new Set<string>();
   const used = new Map<Line, number>();
@@ -55,7 +59,7 @@ export function linesSession(p: Progress, ctx: Ctx, lines: Line[], size = 12): E
     used.set(line, (used.get(line) ?? 0) + 1);
     if (!ex || seen.has(ex.context)) continue;
     seen.add(ex.context);
-    if (level(line) < 0.4) ex.easy = true;
+    if (phaseOf(level(line)) === "simple") ex.easy = true;
     out.push(ex);
   }
   return out;

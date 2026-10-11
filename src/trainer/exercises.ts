@@ -669,7 +669,9 @@ const TRANSFORMS: Transform[] = [
     apply: (c, k) => {
       if (c.subj.kind !== "np" || c.num !== "sg" || c.pred || c.verb.irregular === "sum") return null;
       if (!verbUsable(k, c.verb, "1sg")) return null;
-      return { ...c, subj: { kind: "pron", person: 1, shown: false }, person: 1, skills: [...c.skills, "v.1sg"] };
+      // ego stays in sight until leaving it out has been learned
+      const shown = !k.skills.has("s.drop");
+      return { ...c, subj: { kind: "pron", person: 1, shown }, person: 1, skills: [...c.skills, "v.1sg", ...(shown ? [] : ["s.drop"])] };
     },
   },
   {
@@ -679,7 +681,8 @@ const TRANSFORMS: Transform[] = [
     apply: (c, k) => {
       if (c.subj.kind !== "np" || c.num !== "sg" || c.pred || c.verb.irregular === "sum") return null;
       if (!verbUsable(k, c.verb, "2sg")) return null;
-      return { ...c, subj: { kind: "pron", person: 2, shown: false }, person: 2, skills: [...c.skills, "v.2sg"] };
+      const shown = !k.skills.has("s.drop");
+      return { ...c, subj: { kind: "pron", person: 2, shown }, person: 2, skills: [...c.skills, "v.2sg", ...(shown ? [] : ["s.drop"])] };
     },
   },
   {

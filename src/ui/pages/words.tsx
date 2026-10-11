@@ -242,7 +242,7 @@ export function Words() {
           ))}
           <button aria-pressed={filter === "deck"} onClick={() => setFilter("deck")}>Discovered ({d.added.length})</button>
         </div>
-        <button class="btn" disabled={!due} onClick={() => { startSession({ kind: "words" }); go({ page: "train" }); }}>
+        <button class="btn" disabled={!due} onClick={() => startSession({ kind: "words" }) && go({ page: "train" })}>
           {due > 0 ? `Review ${due} word${due === 1 ? "" : "s"}` : "Nothing to review"}
         </button>
       </div>

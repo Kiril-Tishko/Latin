@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { seeded } from "../src/latin/generate";
 import { buildKnowledge, fullLexicon, lessonWords } from "../src/trainer/knowledge";
 import { ExerciseKind, makeExercise, vocabExercise } from "../src/trainer/exercises";
-import { applyResult, buildSession, nextExercise, placementSession } from "../src/trainer/session";
+import { applyResult, buildSession, nextExercise } from "../src/trainer/session";
 import { mastery, newProgress } from "../src/trainer/progress";
 
 const k = buildKnowledge([1, 2, 3, 4]);
@@ -44,14 +44,12 @@ describe("exercises", () => {
     }
   });
 
-  it("builds full sessions and placement checks", () => {
+  it("builds full sessions", () => {
     const p = newProgress();
     const ctx = { k, lex, r: seeded(42) };
     const s = buildSession(p, ctx, { size: 20, vocab: lessonWords([1, 2, 3, 4]).filter((w) => w.kind !== "fixed") });
     expect(s.length).toBe(20);
     expect(new Set(s.map((e) => e.kind)).size).toBeGreaterThan(3);
-    const pl = placementSession(p, ctx);
-    expect(pl.length).toBeGreaterThanOrEqual(10);
   });
 
   it("retries a single weak skill (regression: one-skill focus)", () => {

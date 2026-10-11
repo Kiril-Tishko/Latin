@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { DECK_CARDS } from "../src/content/deck";
 import { LESSONS } from "../src/content/lessons";
 import { seeded } from "../src/latin/generate";
-import { buildKnowledge, fullLexicon } from "../src/trainer/knowledge";
+import { buildKnowledge, fullLexicon, skillsUpTo } from "../src/trainer/knowledge";
 import { newProgress } from "../src/trainer/progress";
 import { videoExercise, videoLines, videoSession } from "../src/trainer/video";
 
 const lex = fullLexicon(DECK_CARDS.map((c) => c.entry));
 const all = buildKnowledge([1, 2, 3, 4]);
-const step1 = buildKnowledge([1, 2, 3, 4], [], 0, [1]);
+const step1 = buildKnowledge([1, 2, 3, 4], [], 0, skillsUpTo([1]));
 
 /** What a perfect student would answer. */
 function modelAnswer(ex: ReturnType<typeof videoExercise>): string {

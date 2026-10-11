@@ -1,4 +1,6 @@
 // The learner's saved state and the pure functions that update it.
+import { PARTS } from "../content/parts";
+
 export interface SkillStat {
   seen: number;
   right: number;
@@ -33,6 +35,16 @@ export interface Mistake {
   fixed?: boolean;
 }
 
+/** A part of a lesson's rules (content/parts.ts) on the learner's path. */
+export interface PartStat {
+  /** When its explanation and questions were done: its rules may be practised. */
+  seen: number;
+  /** Exercises on its rules since then. */
+  done: number;
+  /** When practice made it hold (it stays learned). */
+  learned?: number;
+}
+
 export interface Settings {
   /** Show long marks (ā) in Latin text. */
   macrons: boolean;
@@ -50,17 +62,16 @@ export interface Settings {
 }
 
 export interface Progress {
-  version: 3;
+  version: 4;
   updatedAt: number;
   settings: Settings;
   /** Lessons the learner has watched; their words and rules are unlocked. */
   lessonsDone: number[];
-  /**
-   * The step the learner is on: practice uses the rules of this lesson and the
-   * ones before it (with every known word), and concentrates on this lesson.
-   */
+  /** The lesson of the part the learner is on (kept by trainer/path.ts). */
   focusLesson: number;
-  /** Day (YYYY-MM-DD) each step's rule refresher was last shown, keyed by lesson. */
+  /** The parts of the rules seen and learned, keyed by part id ("2.1"). */
+  parts: Record<string, PartStat>;
+  /** Day (YYYY-MM-DD) each part's recap was last shown before practice, keyed by part id. */
   rulesShown: Record<string, string>;
   skills: Record<string, SkillStat>;
   words: Record<string, WordStat>;
@@ -70,7 +81,6 @@ export interface Progress {
   /** Exercises done per day, keyed YYYY-MM-DD (local time). */
   days: Record<string, { done: number; right: number }>;
   mistakes: Mistake[];
-  placementDone: boolean;
   /** Stories read to the end, keyed by id: when. */
   stories: Record<string, number>;
 }
@@ -80,11 +90,12 @@ export const DEFAULT_SETTINGS: Settings = { macrons: true, dailyGoal: 20, silly:
 
 export function newProgress(): Progress {
   return {
-    version: 3,
+    version: 4,
     updatedAt: 0,
     settings: { ...DEFAULT_SETTINGS },
     lessonsDone: [1, 2, 3, 4],
     focusLesson: 1,
+    parts: {},
     rulesShown: {},
     skills: {},
     words: {},
@@ -92,7 +103,6 @@ export function newProgress(): Progress {
     added: [],
     days: {},
     mistakes: [],
-    placementDone: false,
     stories: {},
   };
 }
@@ -105,7 +115,7 @@ export function migrate(raw: unknown): Progress {
   const out = {
     ...base,
     ...p,
-    version: 3,
+    version: 4,
     settings: { ...base.settings, ...(p.settings ?? {}) },
     skills: p.skills ?? {},
     words: p.words ?? {},
@@ -115,12 +125,20 @@ export function migrate(raw: unknown): Progress {
     mistakes: p.mistakes ?? [],
     rulesShown: p.rulesShown ?? {},
     stories: p.stories ?? {},
+    parts: p.parts ?? {},
   } as Progress;
   // Version 2 practises step by step. The learner remembered the words but not
   // the rules, so saves from version 1 start again at Lesson I.
   if ((p.version ?? 1) < 2) out.focusLesson = out.lessonsDone.length ? Math.min(...out.lessonsDone) : 1;
   // Version 3: sensible sentences only, as the learner asked (silly ones confused them).
   if ((p.version ?? 1) < 3) out.settings.silly = 0;
+  // Version 4 learns the rules in small parts. The lessons before the step are
+  // done; the step's own rules start again with their first part.
+  if ((p.version ?? 1) < 4) {
+    const now = Date.now();
+    out.parts = {};
+    for (const part of PARTS) if (part.lesson < out.focusLesson) out.parts[part.id] = { seen: now, done: 0, learned: now };
+  }
   return out;
 }
 
@@ -136,6 +154,16 @@ export function mastery(s?: SkillStat): number {
   if (!s || s.seen === 0) return 0;
   return Math.min(1, s.seen / MIN_SEEN) * s.ewma;
 }
+
+/**
+ * How far a rule has sunk in, by its mastery: simple exercises while it is new
+ * (about five right answers), then a mix with whole sentences to write, then
+ * mostly the hard ones.
+ */
+export type Phase = "simple" | "mixed" | "hard";
+export const SIMPLE_UNTIL = 0.65;
+export const HARD_FROM = 0.9;
+export const phaseOf = (m: number): Phase => (m < SIMPLE_UNTIL ? "simple" : m < HARD_FROM ? "mixed" : "hard");
 
 export function recordSkill(p: Progress, id: string, correct: number, now = Date.now()) {
   const s = p.skills[id] ?? { seen: 0, right: 0, ewma: 0.5, last: 0 };

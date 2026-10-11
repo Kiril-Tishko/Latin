@@ -6,6 +6,9 @@ import { STORIES } from "../../content/stories";
 import { dictionaryForm, headword } from "../../latin/morph";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
+import { lessonProgress, partProgress, partState, seenSkills } from "../../trainer/path";
+import { storyOpen } from "../../trainer/stories";
+import { Part, partsOf } from "../../content/parts";
 import { openAsk } from "../ask";
 import { Hedera, Icon, Modal, Mosaic } from "../components";
 import { LatinText } from "../latin";
@@ -14,13 +17,13 @@ import { go } from "../nav";
 import { derived, useProgress } from "../store";
 import { useScreen } from "../screen";
 import { CardView } from "./discover";
-import { lessonMastery } from "./home";
+import { partName, PartsStrip } from "./learn";
 import { startSession } from "./train";
 
 export function Lessons() {
   const p = useProgress();
   useScreen("page", "Lessons", () =>
-    `The list of lessons: ${LESSONS.map((l) => `${l.n}. ${l.title} (${p.lessonsDone.includes(l.n) ? `watched, ${Math.round(lessonMastery(l.n, p.skills) * 100)}% mastered` : "not watched yet"})`).join("; ")}.`,
+    `The list of lessons: ${LESSONS.map((l) => `${l.n}. ${l.title} (${p.lessonsDone.includes(l.n) ? `watched, ${partsOf(l.n).filter((x) => partState(p, x) === "learned").length} of ${partsOf(l.n).length} rules learned` : "not watched yet"})`).join("; ")}.`,
   );
   return (
     <div class="stack-lg">
@@ -33,10 +36,12 @@ export function Lessons() {
               <div class="stack" style={{ gap: "6px" }}>
                 <div class="spread">
                   <h2 style={{ fontSize: "1.3rem" }}>{l.title}</h2>
-                  {done ? <Mosaic value={lessonMastery(l.n, p.skills)} thin /> : <span class="chip">not watched yet</span>}
+                  {done ? <Mosaic value={lessonProgress(p, l.n)} thin label={`${Math.round(lessonProgress(p, l.n) * 100)}% of its rules learned`} /> : <span class="chip">not watched yet</span>}
                 </div>
                 <p class="muted small">{l.summary}</p>
-                <span class="small ui muted">{l.words.length} words · {l.rules.length} rules · {l.minutes} min video</span>
+                <span class="small ui muted">
+                  {l.words.length} words · {partsOf(l.n).length} rules{done ? `, ${partsOf(l.n).filter((x) => partState(p, x) === "learned").length} learned` : ""} · {l.minutes} min video
+                </span>
               </div>
             </button>
           );
@@ -46,9 +51,9 @@ export function Lessons() {
           <div class="stack" style={{ gap: "6px" }}>
             <div class="spread">
               <h2 style={{ fontSize: "1.3rem" }}>Fābulae: short stories</h2>
-              <span class="chip">{STORIES.filter((s) => s.step <= p.focusLesson && !p.stories[s.id]).length || "all"} {STORIES.some((s) => s.step <= p.focusLesson && !p.stories[s.id]) ? "to read" : "read"}</span>
+              <span class="chip">{STORIES.filter((s) => storyOpen(s, seenSkills(p)) && !p.stories[s.id]).length} to read</span>
             </div>
-            <p class="muted small">Stories made only of the words from the videos, with the rules of your step: read, listen, answer, practise.</p>
+            <p class="muted small">Stories made only of the words from the videos. Each opens when you have learned its rules: read, listen, answer, practise.</p>
             <span class="small ui muted">{STORIES.length} stories, three for each step.</span>
           </div>
         </button>
@@ -70,16 +75,24 @@ export function Lessons() {
 
 function RuleView({ r }: { r: Rule }) {
   const lesson = LESSONS.find((l) => l.rules.includes(r))?.n;
+  const seen = seenSkills(useProgress());
+  // a rule is practised once its parts are learned; before that, its first part is the way in
+  const firstNew = r.skills.some((s) => !seen.has(s)) ? partsOf(lesson ?? 0).find((x) => x.skills.some((s) => r.skills.includes(s) && !seen.has(s))) : undefined;
   return (
     <article class="panel stack" id={r.id} data-ask={`Rule${lesson ? ` of Lesson ${roman(lesson)}` : ""}: ${r.title}`}>
       <div class="spread">
         <h3>{r.title}</h3>
         <div class="row" style={{ gap: "6px" }}>
-          {r.skills.length > 0 && (
-            <button class="btn ghost small" onClick={() => { startSession({ kind: "skills", skills: r.skills, label: r.title }); go({ page: "train" }); }}>
-              <Icon.stylus /> Practise
-            </button>
-          )}
+          {r.skills.length > 0 &&
+            (firstNew ? (
+              <button class="btn ghost small" onClick={() => go({ page: "learn", id: firstNew.id })} title={`${partName(firstNew)}: ${firstNew.title}`}>
+                <Icon.scroll /> Learn it
+              </button>
+            ) : (
+              <button class="btn ghost small" onClick={() => startSession({ kind: "skills", skills: r.skills, label: r.title }) && go({ page: "train" })}>
+                <Icon.stylus /> Practise
+              </button>
+            ))}
           <button class="btn ghost small" aria-label={`Ask Claude about: ${r.title}`} onClick={() => openAsk({ label: `Rule: ${r.title}`, detail: `What: ${r.what} How: ${r.how} When: ${r.when}` }, "Explain this rule simply, with two short examples.")}>
             <Icon.quill />
           </button>
@@ -115,6 +128,34 @@ function RuleView({ r }: { r: Rule }) {
 
 export { RuleView };
 
+/** One part of a lesson's rules: its state, and the way on (learn it, or practise it). */
+function PartRow({ part }: { part: Part }) {
+  const p = useProgress();
+  const state = partState(p, part);
+  const value = partProgress(p, part);
+  return (
+    <div class={`part-row ${state}`}>
+      <button class="linkish part-row-title" onClick={() => go({ page: "learn", id: part.id })}>
+        <span class="part-row-id">{part.id}</span> {part.title}
+      </button>
+      <span class="part-row-state small ui">
+        {state === "learned" ? (
+          <span class="story-read">learned</span>
+        ) : state === "practising" ? (
+          <Mosaic value={value} tiles={6} thin label={`${Math.round(value * 100)}% on the way to holding`} />
+        ) : (
+          <span class="muted">new</span>
+        )}
+      </span>
+      {state === "new" ? (
+        <button class="btn small" onClick={() => go({ page: "learn", id: part.id })}>Learn</button>
+      ) : (
+        <button class="btn ghost small" onClick={() => startSession({ kind: "part", id: part.id }) && go({ page: "train" })}>Practise</button>
+      )}
+    </div>
+  );
+}
+
 export function LessonPage({ n }: { n: number }) {
   const l = LESSON_BY_N.get(n);
   const p = useProgress();
@@ -127,7 +168,7 @@ export function LessonPage({ n }: { n: number }) {
     l
       ? [
           `The page of Lesson ${l.n}, "${l.title}"${p.lessonsDone.includes(l.n) ? "" : " (not watched yet)"}. ${l.summary}`,
-          `The page, top to bottom: rules (${l.rules.map((r) => r.title).join("; ")}); ${l.sentences.length} sentences from the video; ${l.story ? `the story "${l.story.title}" (${l.story.lines.length} lines); ` : ""}${l.phrases.length ? `${l.phrases.length} famous phrases; ` : ""}${l.words.length} new words${l.fixes.length ? "; differences from the video" : ""}.`,
+          `The page, top to bottom: the rules one at a time (${partsOf(l.n).map((x) => `${x.id} ${x.title}: ${partState(p, x)}`).join("; ")}); the rules in full (${l.rules.map((r) => r.title).join("; ")}); ${l.sentences.length} sentences from the video; ${l.story ? `the story "${l.story.title}" (${l.story.lines.length} lines); ` : ""}${l.phrases.length ? `${l.phrases.length} famous phrases; ` : ""}${l.words.length} new words${l.fixes.length ? "; differences from the video" : ""}.`,
           `English translations of the sentences are ${showEn ? "shown" : "hidden"}.`,
         ].join("\n")
       : "",
@@ -158,20 +199,36 @@ export function LessonPage({ n }: { n: number }) {
         <div class="row small ui">
           <a href={videoUrl(l.videoId)} target="_blank" rel="noopener">▶ Watch the video</a>
           <a href={videoUrl(l.newVideoId)} target="_blank" rel="noopener">▶ 2025 re-recording</a>
-          {p.lessonsDone.includes(l.n) && <Mosaic value={lessonMastery(l.n, p.skills)} thin />}
+          {p.lessonsDone.includes(l.n) && <PartsStrip lesson={l.n} />}
         </div>
         <div class="row">
-          <button class="btn" onClick={() => { startSession({ kind: "lesson", n: l.n }); go({ page: "train" }); }}>
-            <Icon.play /> Practise this lesson
-          </button>
+          {partsOf(l.n).some((x) => partState(p, x) !== "new") ? (
+            <button class="btn" onClick={() => startSession({ kind: "lesson", n: l.n }) && go({ page: "train" })}>
+              <Icon.play /> Practise this lesson
+            </button>
+          ) : (
+            <button class="btn" onClick={() => go({ page: "learn", id: `${l.n}.1` })}>
+              <Icon.scroll /> Learn its first rule
+            </button>
+          )}
           <button class="btn ghost" onClick={() => setCard(true)} disabled={!next}>
             <Icon.card /> Show one more word
           </button>
         </div>
       </div>
 
+      <section class="stack" data-ask={`Lesson ${roman(l.n)}: the rules, one at a time`}>
+        <div class="stack" style={{ gap: "2px" }}>
+          <span class="eyebrow">The rules, one at a time</span>
+          <span class="small muted ui">Each rule: a short explanation, two questions, then exercises from simple to harder.</span>
+        </div>
+        <div class="panel parts-list">
+          {partsOf(l.n).map((x) => <PartRow key={x.id} part={x} />)}
+        </div>
+      </section>
+
       <section class="stack">
-        <span class="eyebrow">Rules</span>
+        <span class="eyebrow">The rules in full</span>
         {l.rules.map((r) => <RuleView key={r.id} r={r} />)}
       </section>
 
@@ -179,7 +236,7 @@ export function LessonPage({ n }: { n: number }) {
         <div class="spread">
           <span class="eyebrow">Sentences from the video</span>
           <div class="row">
-            <button class="btn ghost small" onClick={() => { startSession({ kind: "video", n: l.n }); go({ page: "train" }); }} title="Practise these sentences: choose, build, write">
+            <button class="btn ghost small" onClick={() => startSession({ kind: "video", n: l.n }) && go({ page: "train" })} title="Practise these sentences: choose, build, write">
               <Icon.stylus /> Practise them
             </button>
             {audioReady() &&

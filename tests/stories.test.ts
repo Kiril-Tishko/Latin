@@ -7,7 +7,9 @@ import { full } from "../src/latin/types";
 import { buildKnowledge, fullLexicon, skillsUpTo } from "../src/trainer/knowledge";
 import { lineExercise, lineSkills, readLine } from "../src/trainer/lines";
 import { newProgress } from "../src/trainer/progress";
-import { nextStory, storyLines, storySession } from "../src/trainer/stories";
+import { nextStory, partsBefore, storyLines, storyOpen, storySession } from "../src/trainer/stories";
+import { PARTS } from "../src/content/parts";
+import { markSeen } from "../src/trainer/path";
 import { videoLines } from "../src/trainer/video";
 
 const lex = fullLexicon();
@@ -90,16 +92,31 @@ describe("stories", () => {
     expect(made).toBeGreaterThan(150);
   });
 
-  it("build a round on one story, and offer the next unread story of the step", () => {
+  it("build a round on one story, and offer the next unread story the learner's rules open", () => {
     const p = newProgress();
-    p.focusLesson = 2;
     const story = STORIES.find((s) => s.id === "epistula-poetae")!;
     const round = storySession(p, { k: buildKnowledge([1, 2, 3, 4]), lex, r: seeded(4) }, [story]);
     expect(round.length).toBe(12);
     expect(round.every((ex) => ex.story === story.title)).toBe(true);
+    // nothing is open before the first part is seen
+    expect(nextStory(p)).toBeUndefined();
+    for (const part of PARTS.filter((x) => x.lesson <= 2)) markSeen(p, part.id);
+    p.focusLesson = 2;
     expect(nextStory(p)?.step).toBe(2);
     for (const s of STORIES.filter((x) => x.step === 2)) p.stories[s.id] = 1;
     expect(nextStory(p)?.step).toBe(1);
+  });
+
+  it("open once the parts of their rules are seen, and say which parts are missing", () => {
+    for (const s of STORIES) {
+      const before = new Set(PARTS.filter((x) => x.lesson < s.step).flatMap((x) => x.skills));
+      const all = new Set(PARTS.filter((x) => x.lesson <= s.step).flatMap((x) => x.skills));
+      expect(storyOpen(s, all), s.id).toBe(true);
+      if (s.step > 1) {
+        expect(storyOpen(s, before), s.id).toBe(false);
+        expect(partsBefore(s, before).every((x) => x.lesson === s.step), s.id).toBe(true);
+      }
+    }
   });
 });
 
@@ -119,7 +136,7 @@ describe("the rules a fixed sentence needs", () => {
   });
 
   it("keeps a Lesson II sentence out of step I practice", () => {
-    const step1 = buildKnowledge([1, 2, 3, 4], [], 0, [1]);
+    const step1 = buildKnowledge([1, 2, 3, 4], [], 0, skillsUpTo([1]));
     const lines = videoLines([1, 2, 3, 4], lex, step1);
     expect(lines.some((l) => l.la.includes("nēmō"))).toBe(false);
   });

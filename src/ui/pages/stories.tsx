@@ -7,7 +7,8 @@ import { STORIES, Story, STORY_BY_ID } from "../../content/stories";
 import { LESSON_BY_N } from "../../content/lessons";
 import { seeded, shuffle } from "../../latin/generate";
 import { roman } from "../../latin/text";
-import { nextStory, storiesUpTo } from "../../trainer/stories";
+import { seenSkills } from "../../trainer/path";
+import { nextStory, partsBefore, storyOpen } from "../../trainer/stories";
 import { Hedera, Icon, Laurel } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
@@ -15,9 +16,10 @@ import { go } from "../nav";
 import { useScreen } from "../screen";
 import { audioReady, Speak } from "../speak";
 import { getProgress, update, useProgress } from "../store";
+import { partName } from "./learn";
 import { startSession } from "./train";
 
-function StoryCard({ s, read }: { s: Story; read: boolean }) {
+function StoryCard({ s, read, needs }: { s: Story; read: boolean; needs?: string }) {
   return (
     <button class={`panel story-card${read ? " read" : ""}`} onClick={() => go({ page: "story", id: s.id })}>
       <div class="spread" style={{ alignItems: "baseline" }}>
@@ -26,26 +28,27 @@ function StoryCard({ s, read }: { s: Story; read: boolean }) {
           <span class="story-read" title="Read">
             <Laurel cls="laurel-mini" /> lēcta
           </span>
-        ) : (
+        ) : needs ? null : (
           <span class="chip">new</span>
         )}
       </div>
       <span class="muted">{s.en}</span>
       <span class="small"><Inline text={s.notice} /></span>
-      <span class="small ui muted">{s.lines.length} lines · {s.questions.length} questions</span>
+      <span class="small ui muted">{needs ? `Opens after ${needs}` : `${s.lines.length} lines · ${s.questions.length} questions`}</span>
     </button>
   );
 }
 
 export function Stories() {
   const p = useProgress();
-  const step = p.focusLesson;
-  const now = storiesUpTo(step);
-  const later = STORIES.filter((s) => s.step > step);
+  const seen = seenSkills(p);
+  const now = STORIES.filter((s) => storyOpen(s, seen));
+  const later = STORIES.filter((s) => !storyOpen(s, seen));
+  const needs = (s: Story) => partsBefore(s, seen).map((x) => `${partName(x).toLowerCase()} (${x.title})`).join(", ");
   useScreen("page", "Stories", () =>
     [
-      `The list of short stories (Fābulae), made only of words from the videos. The learner's step is ${step}; stories up to it are open, later ones wait under "Later steps".`,
-      ...STORIES.map((s) => `Step ${s.step}: "${s.title}" (${s.en})${p.stories[s.id] ? ", read" : ""}`),
+      "The list of short stories (Fābulae), made only of words from the videos. A story opens for practice once the learner has learned every rule it uses; the others wait under \"Not open yet\" with the rules they need.",
+      ...STORIES.map((s) => `Step ${s.step}: "${s.title}" (${s.en})${p.stories[s.id] ? ", read" : ""}${storyOpen(s, seen) ? "" : `, opens after ${needs(s)}`}`),
     ].join("\n"),
   );
   return (
@@ -55,14 +58,17 @@ export function Stories() {
         <span class="eyebrow">Fābulae</span>
         <h1>Short stories</h1>
         <p class="muted prose">
-          Made only of the words from the videos, with the rules of your step and nothing more. Read one, listen to it, answer two questions, then practise its lines.
+          Made only of the words from the videos. A story opens when you have learned the rules it uses. Read one, listen to it, answer two questions, then practise its lines.
         </p>
-        <div class="row">
-          <button class="btn" onClick={() => { startSession({ kind: "stories" }); go({ page: "train" }); }}>
-            <Icon.stylus /> Practise the stories of step {roman(step)}
-          </button>
-        </div>
+        {now.length > 0 && (
+          <div class="row">
+            <button class="btn" onClick={() => startSession({ kind: "stories" }) && go({ page: "train" })}>
+              <Icon.stylus /> Practise the open stories
+            </button>
+          </div>
+        )}
       </div>
+      {!now.length && <p class="ansata small">The first stories open after the first rules of Lesson I. Learn them on the Home page.</p>}
       {[...new Set(now.map((s) => s.step))].map((n) => (
         <section key={n} class="stack" data-ask={`Stories of step ${n}`}>
           <span class="eyebrow">Gradus {roman(n)} · {LESSON_BY_N.get(n)?.title}</span>
@@ -73,11 +79,9 @@ export function Stories() {
       ))}
       {later.length > 0 && (
         <details class="later-stories">
-          <summary>
-            Later steps ({roman(later[0].step)}{later.at(-1)!.step > later[0].step ? `–${roman(later.at(-1)!.step)}` : ""}): stories with rules you will practise after step {roman(step)}
-          </summary>
+          <summary>Not open yet ({later.length}): stories with rules you will learn next</summary>
           <div class="grid-2" style={{ marginTop: "12px" }}>
-            {later.map((s) => <StoryCard key={s.id} s={s} read={!!p.stories[s.id]} />)}
+            {later.map((s) => <StoryCard key={s.id} s={s} read={!!p.stories[s.id]} needs={needs(s)} />)}
           </div>
         </details>
       )}
@@ -151,7 +155,9 @@ export function StoryPage({ id }: { id: string }) {
   const read = !!p.stories[story.id];
   const allRight = right.length === story.questions.length;
   const index = STORIES.indexOf(story);
-  const next = STORIES.slice(index + 1).find((s) => s.step <= Math.max(p.focusLesson, story.step)) ?? nextStory(p);
+  const seen = seenSkills(p);
+  const practisable = storyOpen(story, seen);
+  const next = STORIES.slice(index + 1).find((s) => storyOpen(s, seen)) ?? nextStory(p);
   const play = () => {
     stopFn?.();
     const stop = speakSequence(story.lines.map((l) => l.la), { repeatPause: false, onLine: (line) => setPlaying(line) });
@@ -242,16 +248,29 @@ export function StoryPage({ id }: { id: string }) {
             <Laurel cls="laurel-mini" />
             <span class="stack" style={{ gap: "0" }}>
               <span lang="la">Fābula lēcta!</span>
-              <span class="small ui">The story is read: practise its lines next.</span>
+              <span class="small ui">{practisable ? "The story is read: practise its lines next." : "The story is read."}</span>
             </span>
           </div>
         )}
       </section>
 
       <section class="row" data-ask="Story: what next">
-        <button class="btn" onClick={() => { markRead(); startSession({ kind: "story", id: story.id }); go({ page: "train" }); }}>
-          <Icon.stylus /> Practise this story
-        </button>
+        {practisable ? (
+          <button class="btn" onClick={() => { markRead(); if (startSession({ kind: "story", id: story.id })) go({ page: "train" }); }}>
+            <Icon.stylus /> Practise this story
+          </button>
+        ) : (
+          <span class="small ui muted story-locked">
+            Its exercises open after{" "}
+            {partsBefore(story, seen).map((x, i) => (
+              <span key={x.id}>
+                {i > 0 && ", "}
+                <button class="linkish" onClick={() => go({ page: "learn", id: x.id })}>{partName(x).toLowerCase()} ({x.title})</button>
+              </span>
+            ))}
+            .
+          </span>
+        )}
         {next && next.id !== story.id && (
           <button class="btn ghost" onClick={() => go({ page: "story", id: next.id })}>
             Next story: <span lang="la" style={{ marginLeft: "6px" }}>{next.title}</span> →

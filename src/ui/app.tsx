@@ -6,6 +6,7 @@ import { go, Route, useRoute } from "./nav";
 import { Discover } from "./pages/discover";
 import { Home } from "./pages/home";
 import { LessonPage, Lessons } from "./pages/lessons";
+import { LearnPage } from "./pages/learn";
 import { Rules } from "./pages/rules";
 import { startSession, Train } from "./pages/train";
 import { Words } from "./pages/words";
@@ -28,11 +29,11 @@ const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.El
   { route: { page: "rules" }, label: "Rēgulae", en: "Rules", icon: Icon.column },
 ];
 
-// a lesson page, the stories and Latin in English belong to Lectiōnēs
-const UNDER_LESSONS = new Set<Route["page"]>(["lesson", "english", "stories", "story"]);
+// a lesson page, a rule to learn, the stories and Latin in English belong to Lectiōnēs
+const UNDER_LESSONS = new Set<Route["page"]>(["lesson", "learn", "english", "stories", "story"]);
 const active = (r: Route, t: Route) => r.page === t.page || (UNDER_LESSONS.has(r.page) && t.page === "lessons");
 
-const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", train: "Practice", words: "Words", discover: "Discover", rules: "Rules", english: "Latin in English", stories: "Stories", story: "A story" };
+const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", learn: "A rule to learn", train: "Practice", words: "Words", discover: "Discover", rules: "Rules", english: "Latin in English", stories: "Stories", story: "A story" };
 
 const SYNC_TEXT = { local: "saved in this browser", connecting: "connecting…", synced: "saved to your account", saving: "saving…", error: "saving failed, will retry" };
 
@@ -48,8 +49,7 @@ export function App() {
     void connect();
     void connectChats();
     onPractice((skills) => {
-      startSession({ kind: "skills", skills, label: skills.map((s) => SKILL_BY_ID.get(s)?.title).join(", ") });
-      go({ page: "train" });
+      if (startSession({ kind: "skills", skills, label: skills.map((s) => SKILL_BY_ID.get(s)?.title).join(", ") })) go({ page: "train" });
     });
   }, []);
 
@@ -60,6 +60,9 @@ export function App() {
       break;
     case "lesson":
       page = <LessonPage n={route.n} />;
+      break;
+    case "learn":
+      page = <LearnPage id={route.id} />;
       break;
     case "train":
       page = <Train />;

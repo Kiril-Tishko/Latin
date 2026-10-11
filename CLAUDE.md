@@ -10,7 +10,9 @@ published as a private claude.ai artifact.
   comparisons with Russian / Ukrainian cases are welcome.
 - Finished Lessons 1-4 (October 2026). Remembers the words but forgot most of
   the rules, so practice restarted step by step from Lesson I and should feel
-  very simple at first ("I want to think little").
+  very simple at first ("I want to think little"). Now learns the rules in small
+  parts: a very simple explanation, open questions, then a bunch of simple
+  exercises before harder ones, and never an exercise on a rule not seen yet.
 - Wants: only words and constructions from the videos (plus words they open
   in Discover), lots of written exercises, colored endings, Roman classic look,
   light motivation (daily goal + streak), and only sensible sentences: silly
@@ -44,7 +46,8 @@ inlined. Publish with the Artifact tool:
 Artifact URL: https://claude.ai/artifact/3cvi4ofuaPLg6LfXXf7efX (also in README.md).
 
 Runtime capabilities used:
-- `sample`: the Ask Claude drawer and "I think my answer is right" (judge).
+- `sample`: the Ask Claude drawer, "I think my answer is right" (judge), and the
+  check of an open answer on a rule's page (`checkUnderstanding`).
   Ask buttons only put a suggested question in the box; nothing goes to Claude
   until the learner presses Ask. A suggestion is added after what the learner
   has typed, never in its place (`withQuestion`); only an earlier untouched
@@ -77,7 +80,8 @@ Runtime capabilities used:
   into view; reading higher up never shows it). Answers are short and
   structured by default (a bold one-line answer, then 2-4 bullets) and longer
   only when the learner asks (`INSTRUCTIONS` in src/ui/ask.tsx). The profile sends
-  each learned rule's own text, and the instructions forbid invented rules,
+  which parts are learned, in practice and not met yet, and each met rule's own
+  text; the instructions forbid invented rules,
   keep «» for Latin only and name the trap Claude once fell into (agricola
   timidus, not timida). The learner's saved conversations can be read with
   ArtifactData at `data/users/me/chats/threads` to see how answers land.
@@ -102,22 +106,48 @@ Runtime capabilities used:
   unsent text per conversation and whether the drawer was open, so a reload
   loses nothing. Each saved answer records the model tier that gave it.
 
-## Practice, step by step
+## Rules one at a time, then practice
 
-`focusLesson` is the learner's step. Practice uses every known word but only the
-rules of the lessons up to the step (`derived().stepKnowledge`; "All lessons
-mixed" and the check-up use everything). A step session opens with a one-screen
-rule refresher (the step's endings table and its two main rules, once a day),
-and each exercise has a Rule button. While a rule is new (mastery < 0.4) the
-exercises are mostly "choose the right word", "what does it mean?" (pick the
-English) and word tiles (build the sentence from its words plus a wrong form or
-two), with colors on, and sentences are bare (`sentenceStyle` in
-`src/trainer/session.ts`: richness 0, one extra only when it is the thing
-practised). As the rule settles, whole sentences to write, adjectives and "of"
-phrases and the object first come in to test real understanding. The next step is
-offered (never forced) when the step's practised skills average 80% and none is
-under 60% (`readiness`). Saves from before the steps (version 1) restart at
-Lesson I.
+The learner asked for each video's rules in small parts, explained very simply,
+with open questions to check understanding before any exercise, and never an
+exercise on a rule they have not seen. `src/content/parts.ts` splits Lessons I-IV
+into 22 parts (`Part`: `explain` lines, `examples`, a `slavic` comparison, two
+open `questions` with a good `answer` and `keys`, and the `skills` it opens;
+`practised` when not all of them can show up in exercises, as vīnum is never a
+sensible subject). Every lesson skill belongs to exactly one part.
+
+The page `#learn-<lesson>-<n>` (`src/ui/pages/learn.tsx`) shows the explanation,
+then the questions one at a time. An answer counts as right when it has a word
+of every key group (`meetsKeys` in `src/trainer/path.ts`: lower case, no long
+marks, a key of one or two letters must stand alone, "I don't know" never
+counts); otherwise Claude judges it (`checkUnderstanding` in ask.tsx: right /
+partly / wrong with a short feedback, balanced model at medium effort), and
+without Claude the learner compares with the good answer. With both questions
+answered the part is seen (`markSeen`) and its exercises open.
+
+`src/trainer/path.ts` keeps the path: `Progress.parts[id]` = `{ seen, done,
+learned? }`. Practice uses every known word but only the rules of the parts seen
+(`seenSkills`, `derived().seenKnowledge`). A part is learned (for good) after
+`SOLID.done` exercises on it with its rules' mastery averaging 0.85 and none
+under 0.65 (`updatePath`, called from `applyResult`); the current part is the
+first one not learned, and `focusLesson` follows it. The next part is offered,
+never forced ("Or learn the next one now"). Version 4 marked the lessons before
+the step as learned, so the learner went on from the first part of their step.
+
+How hard the exercises are follows the mastery of the rule practised (`phaseOf`
+in progress.ts): simple while it is new (below 0.65, about five right answers:
+choose the word, pick the meaning, build from tiles, type an ending in the gap,
+with colors on and bare sentences, `sentenceStyle` richness 0), then mixed with
+whole sentences to write and change, and mostly hard ones from 0.9. A fixed
+sentence is as hard as its newest rule. A part's round (`partSession`) aims at
+its rules, takes about a third from the videos' and stories' sentences that show
+them (`practiceLines`; et between two verbs lives only there), and once the part
+is past its simple phase a fifth of the exercises review earlier parts. On a later
+day its round starts with a one-screen reminder of the part (`PartRecap`), and
+each exercise's Rule button shows the parts behind it (`RuleBox`). Home, the
+practice chooser and each lesson page show the parts as tiles (`PartsStrip`) and
+offer Learn or Practise. `tests/parts.test.ts` checks the content and that each
+part's practice needs only the rules seen and reaches every rule of the part.
 
 Exercise builders work on any sentence: `writeOn`, `endingOn`, `chooseOn`,
 `tilesOn`, `meaningOn` in `src/trainer/exercises.ts` take tokens and an English
@@ -128,7 +158,7 @@ every rule it needs (its endings and its constructions: an object, "of", nōn,
 ego / tū left out, an infinitive after a verb, X est Y, in / ad + a place,
 plurals, an adjective that follows gender), and `lineExercise` builds the
 exercises. "Sentences from the videos" (`src/trainer/video.ts`) keeps the
-lesson sentences whose rules are within the step; a lesson page's "Practise
+lesson sentences whose rules have all been seen; a lesson page's "Practise
 them" runs one lesson.
 
 Every exercise shows one plain task line with a sign for how to answer (write,
@@ -140,14 +170,16 @@ round's header has two rows: what is practised, then the tesserae and
 "Exercise 3 of 12 · 2 right".
 
 Stories (`src/content/stories.ts`, pages `#stories` and `#story-<id>` in
-`src/ui/pages/stories.tsx`): three per step, each with a small plot, only
-lesson words and only the rules up to its step. `en` is the reader's English,
+`src/ui/pages/stories.tsx`): three per lesson (`step`), each with a small plot,
+only lesson words and only the rules up to its lesson. A story opens for practice
+once all its rules are seen (`storyOpen`); the others wait, naming the parts they
+need (`partsBefore`). `en` is the reader's English,
 `prompt` the exercise English when it must say more ("the friend (f)"), `who`
 the speaker of a dialogue line; two questions each, the right answer first.
 A tap on a line shows its English, a tap on a word its meaning; answering the
 questions marks the story read (`Progress.stories`). "Practise this story" and
 "Sentences from the stories" build rounds from the lines; Home offers the next
-unread story of the step. `tests/stories.test.ts` checks every word, long mark
+unread open story. `tests/stories.test.ts` checks every word, long mark
 and rule, and that each exercise on each line accepts its own answer: write a
 new story, then run the tests.
 
@@ -159,8 +191,8 @@ do there (`whoAt`, `doneAt`, `HOMES`, `REFUGES`, `NOT_DIVINE`, `makesSense`), an
 the word tags in `words.ts` / `deck.ts` (e.g. `long`, `unseen`, `story`). A
 genitive never stands between two nouns (`untangle`). Words whose good uses need
 care ("much water", "the school is full") get hand-made Discover examples
-(`CURATED` in `src/trainer/discover.ts`). "Fix my mistakes" (`mistakesSession`): unfixed mistakes within the
-step come back as fresh exercises of the same kind on the same rules and words;
+(`CURATED` in `src/trainer/discover.ts`). "Fix my mistakes" (`mistakesSession`): unfixed mistakes on rules
+seen come back as fresh exercises of the same kind on the same rules and words;
 a right answer marks one fixed (`Mistake.fixed`), a wrong one never duplicates
 it. Home and the practice chooser show how many wait.
 
@@ -217,6 +249,11 @@ Italian and a Spanish voice to exercise the audio paths.
    the video, story, phrases, rules as What / How / When with examples, a
    Russian / Ukrainian comparison where it helps, and `fixes` where this site
    departs from the video.
+   Then split its rules into parts in `src/content/parts.ts` (`5.1`, `5.2`, …):
+   each in a few very simple lines, with examples that need only the rules met
+   so far, and two open questions whose good answer passes its own keys. Every
+   new skill belongs to one part (`tests/parts.test.ts` checks all of this, and
+   that each part's practice reaches every rule it opens).
 5. **Discover**: cards in `src/content/deck.ts` unlock by grammar; nouns of a
    new declension become usable once its skills exist. Every relative must be
    correct: `from` = borrowed from Latin, `kin` = same ancient root.

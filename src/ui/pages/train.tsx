@@ -1,36 +1,37 @@
 // The trainer: one exercise at a time, written answers on a wax tablet,
 // detailed feedback with colored endings, and Claude on hand for "why?".
+// Every round uses only the rules of the parts the learner has seen.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { LESSON_BY_N } from "../../content/lessons";
+import { Part, PART_BY_ID, partsOf } from "../../content/parts";
 import { STORY_ONLY } from "../../content/words";
-import { Knowledge, latinText, seeded } from "../../latin/generate";
+import { STORIES, STORY_BY_ID } from "../../content/stories";
+import { latinText, seeded } from "../../latin/generate";
 import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
 import { Exercise, ExerciseKind, KIND_LABEL, plainText, Result } from "../../trainer/exercises";
-import { buildKnowledge } from "../../trainer/knowledge";
+import { currentPart, nextNewPart, partProgress, partState, seenSkills } from "../../trainer/path";
 import { dayKey, mastery } from "../../trainer/progress";
-import { applyResult, buildSession, mistakesSession, mistakesToFix, nextExercise, placementSession, readiness, SessionOpts } from "../../trainer/session";
+import { applyResult, buildSession, mistakesSession, mistakesToFix, nextExercise, partSession } from "../../trainer/session";
+import { practiceLines, storyOpen, storySession } from "../../trainer/stories";
 import { videoSession } from "../../trainer/video";
-import { STORY_BY_ID } from "../../content/stories";
-import { storiesUpTo, storySession } from "../../trainer/stories";
 import { openAsk, judge } from "../ask";
 import { CaseChip, Icon, Laurel, Mosaic, toast } from "../components";
 import { LatinTokens } from "../latin";
 import { Inline, Markup } from "../markup";
 import { go } from "../nav";
-import { lessonOfSkill, RuleBox, RuleIntro, rulesFor } from "../rulecard";
+import { partsFor, RuleBox } from "../rulecard";
 import { fitToWindow } from "../fit";
 import { derived, getProgress, update, useProgress } from "../store";
 import { speak, stopSpeaking } from "../../audio/speech";
 import { audioReady, Speak } from "../speak";
 import { useScreen } from "../screen";
+import { partName, PartRecap, PartsStrip } from "./learn";
 
 export type Mode =
-  | { kind: "step" }
+  | { kind: "part"; id: string }
   | { kind: "mixed" }
   | { kind: "lesson"; n: number }
   | { kind: "skills"; skills: string[]; label: string }
-  | { kind: "placement" }
   | { kind: "writing" }
   | { kind: "endings" }
   | { kind: "words" }
@@ -53,10 +54,12 @@ interface Session {
   index: number;
   attempts: Attempt[];
   size: number;
-  /** Highest lesson whose rules the exercises use. */
-  level: number;
-  /** Show the step's rules before the first exercise. */
-  showRules?: boolean;
+  /** The part practised, if the round is on one. */
+  part?: string;
+  /** Show the part's explanation once more before the first exercise (once a day). */
+  showRecap?: boolean;
+  /** Parts that came to hold during the round. */
+  learned: string[];
 }
 
 let session: Session | null = null;
@@ -70,16 +73,16 @@ const SIZE = 15;
 
 export function modeLabel(m: Mode): string {
   switch (m.kind) {
-    case "step":
-      return `Step ${roman(getProgress().focusLesson)} · ${LESSON_BY_N.get(getProgress().focusLesson)?.title ?? ""}`;
+    case "part": {
+      const part = PART_BY_ID.get(m.id);
+      return part ? `${partName(part)} · ${part.title}` : "A rule";
+    }
     case "mixed":
-      return "All lessons mixed";
+      return "Everything you've learned";
     case "lesson":
       return `Lesson ${roman(m.n)}`;
     case "skills":
       return m.label;
-    case "placement":
-      return "Check-up";
     case "writing":
       return "Writing Latin";
     case "endings":
@@ -101,83 +104,66 @@ export function modeLabel(m: Mode): string {
   }
 }
 
+/** Every word the learner knows, with only the rules of the parts seen. */
+function ctx() {
+  return { k: derived().seenKnowledge, lex: derived().lexicon, r: seeded(Date.now() % 2147483647), audio: audioReady() };
+}
+
+/** Exercise kinds of a round that grows from simple to harder (by mastery, see kindWeights). */
+const STEPWISE: ExerciseKind[] = ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen", "tiles", "meaning"];
+
+/** The parts that teach these rules, for a "learn it first" message. */
+const partsTeaching = (skills: string[]) => [...new Set(skills.map((s) => [...PART_BY_ID.values()].find((x) => x.skills.includes(s))).filter(Boolean) as Part[])];
+
 /**
- * The highest lesson whose rules a mode uses. Practice goes step by step: every
- * word the learner knows, but only the rules up to the current step (or up to
- * the lesson / rule chosen). "All lessons mixed" and the check-up use them all.
+ * Starts a new round (from anywhere in the app). Returns false, with a short
+ * note, when there is nothing to practise there yet (a rule not learned).
  */
-function levelOf(mode: Mode): number {
+export function startSession(mode: Mode): boolean {
   const p = getProgress();
-  const top = Math.max(1, ...p.lessonsDone);
-  switch (mode.kind) {
-    case "mixed":
-    case "placement":
-      return top;
-    case "lesson":
-      return mode.n;
-    case "video":
-      return mode.n ?? p.focusLesson;
-    case "story":
-      // a story is practised with the rules it was written with, even one beyond the step
-      return Math.max(p.focusLesson, STORY_BY_ID.get(mode.id)?.step ?? 1);
-    case "skills":
-      return Math.max(p.focusLesson, ...mode.skills.map((id) => lessonOfSkill(id) ?? 1));
-    default:
-      return p.focusLesson;
-  }
-}
-
-function knowledgeFor(level: number): Knowledge {
-  const p = getProgress();
-  const d = derived();
-  if (level >= Math.max(...p.lessonsDone)) return d.knowledge;
-  if (level === p.focusLesson) return d.stepKnowledge;
-  return buildKnowledge(p.lessonsDone, d.added, p.settings.silly, p.lessonsDone.filter((n) => n <= level));
-}
-
-function ctx(level: number) {
-  return { k: knowledgeFor(level), lex: derived().lexicon, r: seeded(Date.now() % 2147483647), audio: audioReady() };
-}
-
-/** Starts a new session (from anywhere in the app). */
-export function startSession(mode: Mode) {
-  const p = getProgress();
-  const level = levelOf(mode);
-  const c = ctx(level);
+  const c = ctx();
+  const seen = seenSkills(p);
   const vocab = derived().words.filter((w) => w.kind !== "fixed");
-  // a step meets a rule in single forms and endings first, whole sentences later
-  const stepwise: Partial<SessionOpts> = { adaptive: true, focusLesson: level, kinds: ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen", "tiles", "meaning"] };
+  const adaptive = { adaptive: true, focusLesson: p.focusLesson, kinds: STEPWISE };
+  const unseen = (skills: string[]) => {
+    const parts = partsTeaching(skills.filter((s) => !seen.has(s)));
+    toast(parts.length ? `Learn ${parts.map((x) => partName(x).toLowerCase()).join(" and ")} first: its exercises open after its two questions.` : "Nothing to practise there yet.");
+    return false;
+  };
   let items: Exercise[];
   switch (mode.kind) {
-    case "step":
-      items = buildSession(p, c, { size: 12, ...stepwise });
+    case "part": {
+      const part = PART_BY_ID.get(mode.id);
+      if (!part) return false;
+      if (!p.parts[part.id]) return unseen(part.skills);
+      items = partSession(p, c, part, practiceLines(c.lex, c.k), { ...adaptive, focusLesson: part.lesson, review: 0.2 }, 12);
       break;
-    case "placement":
-      items = placementSession(p, c);
-      break;
+    }
     case "lesson":
-      items = buildSession(p, c, { size: 12, ...stepwise, skills: LESSON_BY_N.get(mode.n)?.skills });
+    case "skills": {
+      const wanted = mode.kind === "lesson" ? [...new Set(partsOf(mode.n).flatMap((x) => x.skills))] : mode.skills;
+      const open = wanted.filter((s) => seen.has(s));
+      if (!open.length) return unseen(wanted);
+      items = buildSession(p, c, { size: mode.kind === "lesson" ? 12 : 10, ...adaptive, focusLesson: mode.kind === "lesson" ? mode.n : p.focusLesson, skills: open });
       break;
-    case "skills":
-      items = buildSession(p, c, { size: 10, ...stepwise, skills: mode.skills, kinds: ["en2la", "ending", "choose", "form", "transform", "la2en", "tiles", "meaning"] });
-      break;
+    }
     case "writing":
-      items = buildSession(p, c, { size: SIZE, kinds: ["en2la", "transform"], focusLesson: level });
+      items = buildSession(p, c, { size: SIZE, kinds: ["en2la", "transform"] });
       break;
     case "endings":
-      items = buildSession(p, c, { size: 20, kinds: ["ending", "choose", "form"], focusLesson: level });
+      items = buildSession(p, c, { size: 20, kinds: ["ending", "choose", "form"] });
       break;
     case "words":
       items = buildSession(p, c, { size: 20, kinds: ["vocab"], vocab });
       break;
     case "listening":
-      items = buildSession(p, c, { size: 12, kinds: ["listen"], focusLesson: level });
+      items = buildSession(p, c, { size: 12, kinds: ["listen"] });
       break;
     case "english":
       items = buildSession(p, c, { size: 10, kinds: ["derive"], vocab: derived().words.filter((w) => !STORY_ONLY.has(w.id)) });
       break;
     case "video":
-      items = videoSession(p, c, mode.n ? [mode.n] : p.lessonsDone.filter((n) => n <= level));
+      items = videoSession(p, c, mode.n ? [mode.n] : p.lessonsDone);
       break;
     case "story": {
       const story = STORY_BY_ID.get(mode.id);
@@ -185,7 +171,7 @@ export function startSession(mode: Mode) {
       break;
     }
     case "stories":
-      items = storySession(p, c, storiesUpTo(level), 12);
+      items = storySession(p, c, STORIES.filter((x) => storyOpen(x, seen)), 12);
       break;
     case "mistakes":
       items = mistakesSession(p, c, vocab);
@@ -194,11 +180,14 @@ export function startSession(mode: Mode) {
       items = buildSession(p, c, { size: SIZE, vocab });
   }
   if (!items.length) {
-    toast("Nothing to practise there yet.");
-    return;
+    toast(seen.size ? "Nothing to practise there yet: its sentences need rules you haven't learned." : "Learn the first rule first: it takes two minutes.");
+    return false;
   }
-  const showRules = mode.kind === "step" && p.rulesShown[level] !== dayKey();
-  setSession({ mode, items, index: 0, attempts: [], size: items.length, level, showRules });
+  const part = mode.kind === "part" ? mode.id : undefined;
+  // a part learned on an earlier day is recalled once a day before its exercises
+  const showRecap = !!part && p.rulesShown[part] !== dayKey() && dayKey(p.parts[part]?.seen) !== dayKey();
+  setSession({ mode, items, index: 0, attempts: [], size: items.length, part, showRecap, learned: [] });
+  return true;
 }
 
 function useSession() {
@@ -217,82 +206,116 @@ export function Train() {
   const s = useSession();
   useProgress();
   if (!s) return <Chooser />;
-  if (s.showRules) {
+  const part = s.part ? PART_BY_ID.get(s.part) : undefined;
+  if (s.showRecap && part) {
     const start = () => {
-      update((p) => void (p.rulesShown[s.level] = dayKey()));
-      setSession({ ...s, showRules: false });
+      update((p) => void (p.rulesShown[part.id] = dayKey()));
+      setSession({ ...s, showRecap: false });
     };
-    return <RuleIntro lesson={s.level} k={knowledgeFor(s.level)} onStart={start} />;
+    return <PartRecap part={part} onStart={start} />;
   }
   if (s.index >= s.items.length) return <Summary s={s} />;
   return <Runner s={s} key={s.items[s.index].id} />;
 }
 
+/** The rule the learner is on: learn it, or practise it until it holds. */
+function PathPanel() {
+  const p = useProgress();
+  const part = currentPart(p);
+  const upcoming = nextNewPart(p);
+  if (!part) {
+    return (
+      <section class="panel frame step-panel">
+        <div class="stack" style={{ gap: "10px" }}>
+          <span class="eyebrow">Every rule learned</span>
+          <h2>All the rules of the lessons you watched hold.</h2>
+          <p class="muted small">Keep them fresh with everything mixed, or tick a new lesson under Settings when you have watched it.</p>
+          <div class="row">
+            <button class="btn big" onClick={() => startSession({ kind: "mixed" })}><Icon.play /> Everything you've learned</button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+  const state = partState(p, part);
+  const value = partProgress(p, part);
+  return (
+    <section class="panel frame step-panel">
+      <div class="stack" style={{ gap: "10px" }}>
+        <span class="eyebrow">Lesson {roman(part.lesson)} · {partName(part)}</span>
+        <h2>{part.title}</h2>
+        <p class="muted small">
+          {state === "new"
+            ? "A new rule: read it, answer two short questions, then practise it."
+            : "Only the rules you have learned, with all your words. Simple exercises first, harder ones as it sinks in."}
+        </p>
+        <div class="row">
+          {state === "new" ? (
+            <button class="btn big" onClick={() => go({ page: "learn", id: part.id })}>
+              <Icon.scroll /> Learn {partName(part).toLowerCase()}
+            </button>
+          ) : (
+            <button class="btn big" onClick={() => startSession({ kind: "part", id: part.id })}>
+              <Icon.play /> Practise {partName(part).toLowerCase()}
+            </button>
+          )}
+          {state !== "new" && <button class="linkish" onClick={() => go({ page: "learn", id: part.id })}>Read it again</button>}
+        </div>
+      </div>
+      <div class="stack step-side" style={{ gap: "8px" }}>
+        <PartsStrip lesson={part.lesson} />
+        {state === "practising" && (
+          <>
+            <div class="spread small ui">
+              <span>On the way to holding</span>
+              <strong>{Math.round(value * 100)}%</strong>
+            </div>
+            <div style={{ maxWidth: "360px" }}>
+              <Mosaic value={value} tiles={10} label={`${Math.round(value * 100)}% on the way`} />
+            </div>
+            <span class="small muted">When it holds, the next rule is offered.</span>
+          </>
+        )}
+        {state === "practising" && upcoming && upcoming.id !== part.id && (
+          <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "learn", id: upcoming.id })}>
+            Or learn the next one now: {upcoming.title} →
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function Chooser() {
   const p = useProgress();
-  const level = p.focusLesson;
-  const lesson = LESSON_BY_N.get(level);
-  const ready = readiness(p, level);
-  const nextLesson = p.lessonsDone.filter((n) => n > level).sort()[0];
-  const upTo = level === 1 ? "the rules of Lesson I" : `the rules of Lessons I-${roman(level)}`;
-  const toFix = mistakesToFix(p, derived().stepKnowledge).length;
-  const modes: { mode: Mode; title: string; text: string }[] = [
-    ...(toFix ? [{ mode: { kind: "mistakes" } as Mode, title: `Fix my mistakes (${toFix})`, text: "Your mistakes come back as new exercises on the same rules and words." }] : []),
-    { mode: { kind: "video" }, title: "Sentences from the videos", text: `The sentences you heard, up to Lesson ${roman(level)}: choose, build, write.` },
-    { mode: { kind: "stories" }, title: "Sentences from the stories", text: `The stories of ${level > 1 ? `steps I-${roman(level)}` : "step I"}, line by line: choose, build, write.` },
-    { mode: { kind: "writing" }, title: "Write Latin", text: `Whole sentences into Latin, with ${upTo}.` },
-    { mode: { kind: "endings" }, title: "Endings drill", text: "Quick: choose and fill in endings." },
-    { mode: { kind: "words" }, title: "Word recall", text: "Your words, both ways, just before you would forget them." },
-    { mode: { kind: "english" }, title: "Latin in English", text: "Find the Latin word inside an English one: dormitory, aquarium…" },
-    ...(audioReady() ? [{ mode: { kind: "listening" } as Mode, title: "Listening", text: "Hear a sentence, write it down." }] : []),
-    { mode: { kind: "mixed" }, title: "All lessons mixed", text: "Every rule at once. The hardest." },
-    ...(!p.placementDone ? [{ mode: { kind: "placement" } as Mode, title: "Check-up (3 min)", text: "Twelve questions across Lessons I-IV." }] : []),
-  ];
+  const part = currentPart(p);
+  const toFix = mistakesToFix(p, derived().seenKnowledge).length;
+  const anything = seenSkills(p).size > 0;
+  const modes: { mode: Mode; title: string; text: string }[] = anything
+    ? [
+        ...(toFix ? [{ mode: { kind: "mistakes" } as Mode, title: `Fix my mistakes (${toFix})`, text: "Your mistakes come back as new exercises on the same rules and words." }] : []),
+        { mode: { kind: "video" }, title: "Sentences from the videos", text: "The sentences you heard, with the rules you have learned: choose, build, write." },
+        { mode: { kind: "stories" }, title: "Sentences from the stories", text: "The stories whose rules you have learned, line by line: choose, build, write." },
+        { mode: { kind: "writing" }, title: "Write Latin", text: "Whole sentences into Latin, with the rules you have learned." },
+        { mode: { kind: "endings" }, title: "Endings drill", text: "Quick: choose and fill in endings." },
+        { mode: { kind: "words" }, title: "Word recall", text: "Your words, both ways, just before you would forget them." },
+        { mode: { kind: "english" }, title: "Latin in English", text: "Find the Latin word inside an English one: dormitory, aquarium…" },
+        ...(audioReady() ? [{ mode: { kind: "listening" } as Mode, title: "Listening", text: "Hear a sentence, write it down." }] : []),
+        { mode: { kind: "mixed" }, title: "Everything you've learned", text: "Every rule you have learned at once. The hardest." },
+      ]
+    : [
+        { mode: { kind: "words" }, title: "Word recall", text: "Your words, both ways, just before you would forget them." },
+        { mode: { kind: "english" }, title: "Latin in English", text: "Find the Latin word inside an English one: dormitory, aquarium…" },
+      ];
   useScreen("page", "Practice: choosing", () =>
     [
-      `The practice page, choosing what to practise. Current step: Lesson ${level} "${lesson?.title ?? ""}", ${Math.round(ready.value * 100)}% ready for the next step (it opens at 80%).`,
-      `On offer: Practise Lesson ${level} step by step; ${modes.map((m) => `${m.title} (${m.text})`).join("; ")}.`,
+      part ? `The practice page, choosing what to practise. The learner is on ${partName(part)} of Lesson ${part.lesson}, "${part.title}" (${partState(p, part) === "new" ? "not learned yet: they read it and answer two questions first" : `in practice, ${Math.round(partProgress(p, part) * 100)}% of the way to holding`}).` : "The practice page. Every rule of the lessons watched is learned.",
+      `On offer: ${modes.map((m) => `${m.title} (${m.text})`).join("; ")}. Every exercise uses only rules the learner has learned.`,
     ].join("\n"),
   );
   return (
     <div class="stack-lg">
-      <section class="panel frame step-panel">
-        <div class="stack" style={{ gap: "10px" }}>
-          <span class="eyebrow">Step by step · Lesson {roman(level)}</span>
-          <h2>{lesson?.title}</h2>
-          <p class="muted small">Only {upTo}, with all your words. Easy first; harder as it sticks.</p>
-          <div class="row">
-            <button class="btn big" onClick={() => startSession({ kind: "step" })}>
-              <Icon.play /> Practise Lesson {roman(level)}
-            </button>
-            <button class="linkish" onClick={() => go({ page: "lesson", n: level })}>Read the lesson</button>
-          </div>
-        </div>
-        <div class="stack step-side" style={{ gap: "8px" }}>
-          <div class="seg" role="group" aria-label="Step">
-            {p.lessonsDone.map((n) => (
-              <button key={n} aria-pressed={n === level} title={LESSON_BY_N.get(n)?.title} onClick={() => update((x) => void (x.focusLesson = n))}>
-                Lesson {roman(n)}
-                {readiness(p, n).ready ? " ✓" : ""}
-              </button>
-            ))}
-          </div>
-          <div class="spread small ui">
-            <span>Ready for the next step</span>
-            <strong>{Math.round(ready.value * 100)}%</strong>
-          </div>
-          <div style={{ maxWidth: "360px" }}>
-            <Mosaic value={ready.value} tiles={10} label={`${Math.round(ready.value * 100)}% ready`} />
-          </div>
-          {ready.ready && nextLesson ? (
-            <button class="btn gold small" style={{ alignSelf: "flex-start" }} onClick={() => update((x) => void (x.focusLesson = nextLesson))}>
-              Lesson {roman(level)} is solid: go to Lesson {roman(nextLesson)} <Icon.arrow />
-            </button>
-          ) : (
-            <span class="small muted">{ready.ready ? "Every lesson you watched is solid." : `The next lesson opens up at 80%.`}</span>
-          )}
-        </div>
-      </section>
+      <PathPanel />
       <div class="mode-grid">
         {modes.map((m) => (
           <button key={m.title} class="panel frame mode-card" onClick={() => startSession(m.mode)}>
@@ -362,7 +385,7 @@ function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
     meaning: `the Latin sentence "${shownLatin(ex, true)}", with English meanings to choose from: ${ex.choices?.map((c) => c.label).join(" / ")}.`,
   };
   const lines = [
-    `Practising: ${modeLabel(s.mode)} (only the rules up to Lesson ${s.level}). Exercise ${s.index + 1} of ${s.items.length}, "${ex.instruction}".`,
+    `Practising: ${modeLabel(s.mode)} (only the rules of the parts the learner has seen). Exercise ${s.index + 1} of ${s.items.length}, "${ex.instruction}".`,
     ex.video ? `A sentence from the video of Lesson ${ex.video}.` : "",
     ex.story ? `A sentence from the story "${ex.story}" (the learner may have read it on the Stories page).` : "",
     ex.fixes !== undefined ? "This exercise brings back one of the learner's earlier mistakes." : "",
@@ -372,7 +395,7 @@ function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
   if (!st.res) {
     lines.push(`Not answered yet${st.answer.trim() ? `; typed so far: "${givenAnswer(ex, st.answer.trim())}"` : ""}. Do not give the answer away unless the learner asks for it.`);
     if (st.showHints) lines.push(`Hint open: ${ex.hints.filter(Boolean).map(plainText).join("; ")}`);
-    if (st.showRule) lines.push(`Rule box open: ${rulesFor(ex.skills, s.level).slice(0, 2).map((r) => r.title).join("; ") || ex.skills.map((id) => SKILL_BY_ID.get(id)?.title).join("; ")}`);
+    if (st.showRule) lines.push(`Rule box open: ${partsFor(ex.skills, s.part).slice(0, 2).map((x) => `${partName(x)}, ${x.title}`).join("; ") || ex.skills.map((id) => SKILL_BY_ID.get(id)?.title).join("; ")}`);
   } else {
     const given = st.answer === "—" ? "skipped it (\"I don't know\")" : `answered "${givenAnswer(ex, st.answer)}"`;
     lines.push(`The learner ${given}. Verdict: ${st.res.verdict}. Correct answer: ${stop(plainText(st.res.expected))}`);
@@ -509,19 +532,21 @@ function Runner({ s }: { s: Session }) {
 
   function next() {
     if (!res) return;
+    let learned: Part[] = [];
     update((p) => {
-      applyResult(p, ex, res, answer);
-      if (s.mode.kind === "placement" && s.index === s.items.length - 1) p.placementDone = true;
+      learned = applyResult(p, ex, res, answer);
     });
+    // a rule that now holds: say so at once, and offer the next one at the end of the round
+    if (learned.length) toast(`Rēctē! ${partName(learned[0])} holds now: ${learned[0].title}.`);
     const attempts = [...s.attempts, { ex, answer, res }];
     let items = s.items;
     // a wrong sentence comes back once more at the end of the round
     if (res.verdict === "wrong" && ex.kind !== "identify" && s.items.length < s.size + 4) {
-      const again = ex.retry ? ex.retry() : nextExercise(getProgress(), ctx(s.level), { size: 1, skills: Object.keys(res.credit).filter((k) => res.credit[k] < 0.5), kinds: [ex.kind === "vocab" ? "vocab" : ex.kind], vocab: derived().words.filter((w) => ex.words.includes(w.id)) }, new Set(s.items.map((e) => e.context)));
+      const again = ex.retry ? ex.retry() : nextExercise(getProgress(), ctx(), { size: 1, skills: Object.keys(res.credit).filter((k) => res.credit[k] < 0.5), kinds: [ex.kind === "vocab" ? "vocab" : ex.kind], vocab: derived().words.filter((w) => ex.words.includes(w.id)) }, new Set(s.items.map((e) => e.context)));
       if (again && ex.fixes !== undefined) again.fixes = ex.fixes;
       if (again) items = [...items, again];
     }
-    setSession({ ...s, items, attempts, index: s.index + 1 });
+    setSession({ ...s, items, attempts, index: s.index + 1, learned: [...s.learned, ...learned.map((x) => x.id)] });
   }
 
   async function dispute() {
@@ -665,7 +690,7 @@ function Runner({ s }: { s: Session }) {
               {ex.hints.filter(Boolean).map((h, i) => <div key={i}><Inline text={h} /></div>)}
             </div>
           )}
-          {showRule && !res && <RuleBox skills={ex.skills} lesson={s.level} />}
+          {showRule && !res && <RuleBox skills={ex.skills} part={s.part} />}
         </div>
 
         {res && (
@@ -972,30 +997,44 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
   );
 }
 
-/** After a step session: how close the step is to done, and the way to the next one. */
-function StepProgress({ level }: { level: number }) {
+/** After a round: how far the rule is on its way to holding, and the next rule when it holds. */
+function PartProgress({ s }: { s: Session }) {
   const p = useProgress();
-  const r = readiness(p, level);
-  const nextLesson = p.lessonsDone.filter((n) => n > level).sort()[0];
+  const learned = s.learned.map((id) => PART_BY_ID.get(id)).filter(Boolean) as Part[];
+  const part = s.part ? PART_BY_ID.get(s.part) : currentPart(p);
+  const upcoming = nextNewPart(p);
+  if (!part && !learned.length) return null;
+  if (learned.length) {
+    return (
+      <div class="panel stack part-done" style={{ gap: "10px" }}>
+        <div class="row">
+          <Laurel cls="laurel-mini" />
+          <h3>{learned.map((x) => `${partName(x)} holds: ${x.title}`).join(" · ")}</h3>
+        </div>
+        <span class="small muted">It stays in your practice from now on, mixed with the next rules.</span>
+        {upcoming && (
+          <div class="row">
+            <button class="btn gold" onClick={() => { setSession(null); go({ page: "learn", id: upcoming.id }); }}>
+              Next: learn {partName(upcoming).toLowerCase()} · {upcoming.title} <Icon.arrow />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+  const value = partProgress(p, part!);
   return (
     <div class="panel stack" style={{ gap: "8px" }}>
       <div class="spread">
-        <h3>Lesson {roman(level)}: ready for the next step</h3>
-        <strong class="ui">{Math.round(r.value * 100)}%</strong>
+        <h3>{partName(part!)}: {part!.title}</h3>
+        <strong class="ui">{Math.round(value * 100)}%</strong>
       </div>
       <div style={{ maxWidth: "360px" }}>
-        <Mosaic value={r.value} tiles={10} />
+        <Mosaic value={value} tiles={10} label={`${Math.round(value * 100)}% on the way to holding`} />
       </div>
-      {r.ready && nextLesson && p.focusLesson === level ? (
-        <div class="row">
-          <span class="small">These rules are solid now.</span>
-          <button class="btn gold small" onClick={() => { update((x) => void (x.focusLesson = nextLesson)); setSession(null); }}>
-            Go to Lesson {roman(nextLesson)} <Icon.arrow />
-          </button>
-        </div>
-      ) : (
-        <span class="small muted">{r.ready ? "These rules are solid." : "The next lesson opens up at 80%. Another round brings it closer."}</span>
-      )}
+      <span class="small muted">
+        {partState(p, part!) === "learned" ? "This rule holds." : "On the way to holding. Another round brings it closer: the exercises get harder as it sinks in."}
+      </span>
     </div>
   );
 }
@@ -1032,7 +1071,7 @@ function Summary({ s }: { s: Session }) {
           </p>
         </div>
       </div>
-      {(s.mode.kind === "step" || s.mode.kind === "lesson") && <StepProgress level={s.level} />}
+      <PartProgress s={s} />
       {touched.length > 0 && (
         <div class="panel stack">
           <h3>Skills practised</h3>

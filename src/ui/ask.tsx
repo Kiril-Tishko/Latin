@@ -6,11 +6,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { wordInEnglish } from "../content/english";
 import { LESSONS } from "../content/lessons";
+import { Part, PartQuestion, PARTS } from "../content/parts";
 import { checkAnswer, engineFacts, Finding } from "../latin/facts";
 import { Entry } from "../latin/types";
 import { dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, SKILLS } from "../latin/skills";
 import { Exercise, Result } from "../trainer/exercises";
+import { partState } from "../trainer/path";
 import { mastery } from "../trainer/progress";
 import { Chat, ChatTurn, deleteChat, getChat, getChats, newChatId, saveChat, useChats } from "./chats";
 import { Icon, toast } from "./components";
@@ -119,7 +121,7 @@ How to answer:
 - Write every Latin word, form or sentence inside «guillemets», for example «puellam». For a form that could be read two ways, add #case.number inside the guillemets: «puellae#gen.sg», «discipulī#nom.pl». The page colors the endings. Use «» for Latin only: quote English, Russian and Ukrainian words with "double quotes".
 - Use **bold** only for the key point. No tables and no headings.
 - If the question is about a mistake, the bold line names the wrong ending and the right one; the bullets give the rule that decides it.
-- Be exact. The rules under "Skills learned" are this site's rules and they are correct: follow them. Check every Latin form before you write it. Never invent a grammar rule or pattern, and give only memory tricks that are true (an English relative, a real pattern). When there is no reliable way to tell (which infinitive a verb has, for example), say so plainly and suggest learning the pair («discō, discere»).
+- Be exact. The rules under "Skills met" are this site's rules and they are correct: follow them. Check every Latin form before you write it. Never invent a grammar rule or pattern, and give only memory tricks that are true (an English relative, a real pattern). When there is no reliable way to tell (which infinitive a verb has, for example), say so plainly and suggest learning the pair («discō, discere»).
 - A question may end with [Facts from the site's grammar engine]: every Latin word in it, what each form can be, and its word's gender, group and forms. These facts are certain. Build your answer on them, never contradict them, and don't mention the note.
 - Where a word comes from and what it is related to: use the relatives in the facts, which are checked. Say which kind each is: borrowed (English, Russian or Ukrainian took it from Latin) or same ancient root (cousins from the common Indo-European ancestor, not borrowed). Never call a look-alike related, and never invent a relative; if the facts have none, say what you know and that it is less certain. Keep it short: the origin in one bold line, then the relatives as a short list.
 - Easy to get wrong: an adjective agrees with its noun in gender, case and number, not in the look of the ending. «agricola» and «poēta» are masculine, so «agricola timidus», «poēta pulcher», «agricolam timidum».
@@ -134,15 +136,20 @@ function profile(): string {
   const p = getProgress();
   const d = derived();
   const lessons = LESSONS.filter((l) => p.lessonsDone.includes(l.n)).map((l) => `Lesson ${l.n}: ${l.title}`);
-  const skills = SKILLS.filter((s) => d.knowledge.skills.has(s.id)).map((s) => {
+  // only the rules the learner has met: exercises never use the others
+  const skills = SKILLS.filter((s) => d.seenKnowledge.skills.has(s.id)).map((s) => {
     const st = p.skills[s.id];
     return `- ${s.id}: ${s.title}. ${s.hint} (mastery ${Math.round(mastery(st) * 100)}% after ${st?.seen ?? 0} tries)`;
   });
+  const path = PARTS.filter((x) => p.lessonsDone.includes(x.lesson));
+  const named = (state: string) => path.filter((x) => partState(p, x) === state).map((x) => `${x.id} ${x.title}`).join("; ") || "none";
   const words = d.words.map((w) => `${dictionaryForm(w)} = ${w.en}`).join("; ");
   const mistakes = p.mistakes.slice(0, 8).map((m) => `- "${m.prompt}" | wrote: ${m.answer} | expected: ${m.expected}${m.notes.length ? ` | ${m.notes.join(" ")}` : ""}`);
   return [
-    `Lessons finished: ${lessons.join("; ")}. The learner remembers the words of these lessons but has forgotten most of the rules, so practice restarted step by step from Lesson 1. Current step: Lesson ${p.focusLesson} (exercises use only the rules up to Lesson ${p.focusLesson}). Explain with the rules up to the current step unless the learner asks about later ones, and remind them of a rule plainly rather than assuming they remember it.`,
-    `Skills learned, with the rule as this site teaches it (ids for PRACTICE):\n${skills.join("\n")}`,
+    `Lessons watched: ${lessons.join("; ")}. The learner remembers the words of these lessons but had forgotten most of the rules, so they learn the rules again in small parts, one at a time: a very simple explanation, two open questions, then exercises from simple to harder until the rule holds. Exercises use only the rules of the parts seen.`,
+    `Rules learned: ${named("learned")}.\nBeing practised now: ${named("practising")}.\nNot met yet: ${named("new")}.`,
+    "Explain with the rules met so far unless the learner asks about later ones, and remind them of a rule plainly rather than assuming they remember it.",
+    `Skills met, with the rule as this site teaches it (ids for PRACTICE):\n${skills.join("\n") || "none yet"}`,
     `Words known: ${words}`,
     mistakes.length ? `Recent mistakes:\n${mistakes.join("\n")}` : "No recent mistakes recorded.",
   ].join("\n\n");
@@ -200,11 +207,48 @@ The automatic checker said "${res.verdict}" because: ${res.issues.map((i) => i.m
 Decide whether the learner's answer is a correct answer. Accept any Latin word order, missing long marks, and natural English variants (articles, progressive tense, synonyms). Reject wrong endings, wrong person or number, and missing or extra meaning.
 Reply with only JSON: {"correct": true or false, "explanation": "one or two sentences; put Latin inside «guillemets»"}
 
-${engineFacts([{ text: answer, mixed: true }, { text: ex.context, mixed: true }], derived().lexicon, derived().knowledge.skills)}`;
+${engineFacts([{ text: answer, mixed: true }, { text: ex.context, mixed: true }], derived().lexicon, derived().seenKnowledge.skills)}`;
   try {
     const out = await sample.json<Judgement>(prompt, { modelTier: MODEL.tier, effort: MODEL.effort });
     if (typeof out?.correct !== "boolean") return { error: "Claude's reply could not be read. Try again." };
     return { correct: out.correct, explanation: String(out.explanation ?? "") };
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    return { error: sampleErrorText(code) || "Stopped." };
+  }
+}
+
+export interface Understanding {
+  verdict: "right" | "partly" | "wrong";
+  feedback: string;
+}
+
+/** How hard Claude thinks about an open answer: a short check, so the learner does not wait long. */
+const CHECK = { tier: "default", effort: "medium" } as const;
+const unhinted = (s: string) => s.replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "");
+
+/** Asks Claude whether an answer to a rule's open question shows the idea. */
+export async function checkUnderstanding(part: Part, q: PartQuestion, answer: string): Promise<Understanding | { error: string }> {
+  const sample = await sampler();
+  if (!sample) return { error: "Asking Claude works when this page is open on claude.ai." };
+  const prompt = `You check a beginner's answer to an open question in a Latin course (Easy Latin Lessons). The learner has just read this very simple explanation of one rule:
+
+Rule ${part.id}: ${part.title}
+${unhinted(part.explain.join("\n"))}
+Examples: ${part.examples.map((e) => `${unhinted(e.la)} = ${e.en}`).join("; ")}
+
+Question: ${unhinted(q.q)}
+A good answer: ${unhinted(q.answer)}
+The learner's answer (English, Russian or Ukrainian; long marks are never needed): "${answer}"
+
+Decide whether the answer shows the idea of the good answer. "right": the idea is there, in any words (articles, a progressive tense, small typos and missing long marks are fine). "partly": on the way, but something the question asks for is missing or slightly off. "wrong": a different idea, a wrong ending or a wrong meaning.
+Reply with only JSON: {"verdict": "right" or "partly" or "wrong", "feedback": "one or two short, friendly sentences in plain English, written to the learner: what is right, and what to look at again if something is missing. Put Latin inside «guillemets». Use only the rules of this explanation."}
+
+${engineFacts([{ text: answer, mixed: true }, { text: `${q.q} ${q.answer}`, mixed: true }], derived().lexicon, derived().seenKnowledge.skills)}`;
+  try {
+    const out = await sample.json<Understanding>(prompt, { modelTier: CHECK.tier, effort: CHECK.effort });
+    if (!out || !["right", "partly", "wrong"].includes(out.verdict)) return { error: "Claude's reply could not be read. Try again." };
+    return { verdict: out.verdict, feedback: String(out.feedback ?? "") };
   } catch (e) {
     const code = (e as { code?: string }).code;
     return { error: sampleErrorText(code) || "Stopped." };
@@ -283,7 +327,7 @@ function factsFor(question: ChatTurn, context: AskContext | null, lastAnswer?: C
       ...(context?.detail ? [{ text: context.detail, mixed: true }] : []),
     ],
     d.lexicon,
-    d.knowledge.skills,
+    d.seenKnowledge.skills,
     10,
     ORIGIN.test(question.content) ? relatives : undefined,
   );

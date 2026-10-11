@@ -3,26 +3,23 @@ import { LESSONS } from "../../content/lessons";
 import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
+import { currentPart, lessonProgress, partProgress, partState } from "../../trainer/path";
 import { mastery, streak, todayDone } from "../../trainer/progress";
-import { mistakesToFix, readiness } from "../../trainer/session";
+import { mistakesToFix } from "../../trainer/session";
 import { dueWords } from "../../trainer/srs";
 import { nextStory } from "../../trainer/stories";
+import { videoLines } from "../../trainer/video";
 import { openAsk } from "../ask";
 import { CardBack, Icon, Laurel, Mosaic } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
 import { go } from "../nav";
 import { Speak } from "../speak";
-import { derived, useProgress } from "../store";
+import { derived, getProgress, useProgress } from "../store";
 import { useScreen } from "../screen";
 import { openCardOnArrival } from "./discover";
+import { partName, PartsStrip } from "./learn";
 import { startSession } from "./train";
-
-export function lessonMastery(n: number, skills: Record<string, Parameters<typeof mastery>[0]>): number {
-  const l = LESSONS.find((x) => x.n === n);
-  if (!l || !l.skills.length) return 0;
-  return l.skills.reduce((s, id) => s + mastery(skills[id]), 0) / l.skills.length;
-}
 
 /** A bronze stylus: pointed for writing, flat at the other end for smoothing the wax. */
 function Stylus() {
@@ -44,18 +41,17 @@ function Stylus() {
   );
 }
 
-/** One short sentence a day from these lessons. */
-function sentenceOfTheDay(lessons: number[]) {
-  const pool = LESSONS.filter((l) => lessons.includes(l.n))
-    .flatMap((l) => l.sentences)
-    .filter((x) => /^[^.?!]+\.$/.test(x.la) && x.la.split(" ").length >= 2 && x.la.split(" ").length <= 5);
+/** One short sentence a day from the videos, with only the rules learned. */
+function sentenceOfTheDay() {
+  const d = derived();
+  const pool = videoLines(getProgress().lessonsDone, d.lexicon, d.seenKnowledge).filter((x) => /^[^.?!]+[.!]$/.test(x.la) && x.tokens.length >= 2 && x.tokens.length <= 5);
   return pool.length ? pool[Math.floor(Date.now() / 86_400_000) % pool.length] : undefined;
 }
 
-/** Sentence of the day, written on a wax tablet: one short sentence from the current step or before. */
-function HeroTablet({ lessons }: { lessons: number[] }) {
+/** Sentence of the day, written on a wax tablet: one short sentence from the videos, with rules already learned. */
+function HeroTablet() {
   const [english, setEnglish] = useState(false);
-  const s = sentenceOfTheDay(lessons);
+  const s = sentenceOfTheDay();
   if (!s) return null;
   return (
     <figure class="hero-art">
@@ -84,11 +80,11 @@ export function Home() {
   const done = todayDone(p);
   const goal = p.settings.dailyGoal;
   const days = streak(p);
-  const focus = LESSONS.find((l) => l.n === p.focusLesson);
-  const ready = readiness(p, p.focusLesson);
-  // weak spots among the rules of the current step and the ones before it
-  const known = [...d.stepKnowledge.skills].filter((id) => SKILL_BY_ID.has(id));
-  const focusSet = new Set(focus?.skills ?? []);
+  const part = currentPart(p);
+  const state = part ? partState(p, part) : undefined;
+  // weak spots among the rules learned so far, the current part's first
+  const known = [...d.seenKnowledge.skills].filter((id) => SKILL_BY_ID.has(id));
+  const focusSet = new Set(part?.skills ?? []);
   const weak = known
     .sort((a, b) => mastery(p.skills[a]) - (focusSet.has(a) ? 0.15 : 0) - (mastery(p.skills[b]) - (focusSet.has(b) ? 0.15 : 0)))
     .slice(0, 4);
@@ -96,14 +92,14 @@ export function Home() {
   const due = dueWords(p, vocab).length;
   const card = nextCard(p.revealed, d.knowledge, new Set(d.words.map((w) => w.id)));
   const openedNotAdded = p.revealed.filter((id) => !p.added.includes(id)).length;
-  const toFix = mistakesToFix(p, d.stepKnowledge).length;
-  const tabletLessons = p.lessonsDone.filter((n) => n <= p.focusLesson);
+  const toFix = mistakesToFix(p, d.seenKnowledge).length;
+  const train = (mode: Parameters<typeof startSession>[0]) => startSession(mode) && go({ page: "train" });
   useScreen("page", "Home", () => {
-    const sentence = sentenceOfTheDay(tabletLessons);
+    const sentence = sentenceOfTheDay();
     return [
       `The home page. Today: ${done} of ${goal} exercises done; ${days > 0 ? `a ${days}-day streak` : "no streak yet"}.`,
-      focus ? `Current step: Lesson ${p.focusLesson} "${focus.title}", ${Math.round(ready.value * 100)}% ready for the next step (it opens at 80%).` : "",
-      `Weak spots listed: ${weak.map((id) => `${SKILL_BY_ID.get(id)!.title} (${Math.round(mastery(p.skills[id]) * 100)}%)`).join("; ")}.`,
+      part ? `The rule the learner is on: ${partName(part)} of Lesson ${part.lesson}, "${part.title}" (${state === "new" ? "new: to read and answer two questions about before practising" : `in practice, ${Math.round(partProgress(p, part) * 100)}% of the way to holding`}).` : "Every rule of the lessons watched holds.",
+      weak.length ? `Weak spots listed: ${weak.map((id) => `${SKILL_BY_ID.get(id)!.title} (${Math.round(mastery(p.skills[id]) * 100)}%)`).join("; ")}.` : "",
       `Words due for review: ${due}.`,
       sentence ? `Sentence of the day, on the wax tablet: ${sentence.la} (${sentence.en})` : "",
       card ? "A new mystery card is waiting." : "",
@@ -119,13 +115,15 @@ export function Home() {
           <div class="stack" style={{ gap: "6px" }}>
             <span class="eyebrow">Salvē!</span>
             <h1 class="hero-title">
-              {done >= goal ? "Today's goal is done." : done > 0 ? "Keep going: the endings are settling in." : `Today: Lesson ${roman(p.focusLesson)}, step by step.`}
+              {done >= goal ? "Today's goal is done." : !part ? "Every rule you watched holds." : state === "new" ? "Today: a new rule." : done > 0 ? "Keep going: the rule is sinking in." : `Today: ${partName(part).toLowerCase()}, step by step.`}
             </h1>
-            {focus && (
+            {part && (
               <p class="muted prose">
-                Step {roman(p.focusLesson)}: {focus.title} · {Math.round(ready.value * 100)}% ready for the next step
+                Lesson {roman(part.lesson)} · {partName(part)}: {part.title}
+                {state === "practising" ? ` · ${Math.round(partProgress(p, part) * 100)}% on the way to holding` : ""}
               </p>
             )}
+            {part && <PartsStrip lesson={part.lesson} />}
           </div>
           <div class="stack" style={{ gap: "6px", maxWidth: "360px" }}>
             <div class="spread small ui">
@@ -137,47 +135,58 @@ export function Home() {
             </div>
             <Mosaic value={done / goal} tiles={Math.min(goal, 20)} label={`${done} of ${goal} exercises today`} />
           </div>
-        <div class="row">
-          <button class="btn big" onClick={() => { startSession({ kind: "step" }); go({ page: "train" }); }}>
-            <Icon.play /> Practise Lesson {roman(p.focusLesson)}
-          </button>
-          {!p.placementDone && (
-            <button class="btn ghost big" onClick={() => { startSession({ kind: "placement" }); go({ page: "train" }); }}>
-              3-minute check-up
-            </button>
-          )}
+          <div class="row">
+            {part && state === "new" ? (
+              <button class="btn big" onClick={() => go({ page: "learn", id: part.id })}>
+                <Icon.scroll /> Learn {partName(part).toLowerCase()}
+              </button>
+            ) : part ? (
+              <button class="btn big" onClick={() => train({ kind: "part", id: part.id })}>
+                <Icon.play /> Practise {partName(part).toLowerCase()}
+              </button>
+            ) : (
+              <button class="btn big" onClick={() => train({ kind: "mixed" })}>
+                <Icon.play /> Everything you've learned
+              </button>
+            )}
+            {part && state === "practising" && <button class="linkish" onClick={() => go({ page: "learn", id: part.id })}>Read the rule again</button>}
+          </div>
         </div>
-        </div>
-        <HeroTablet lessons={tabletLessons} />
+        <HeroTablet />
       </section>
 
       <div class="grid-2 home-grid">
         <section class="panel stack">
           <div class="spread">
             <h3>Weak spots</h3>
-            <span class="small muted ui">practise these next</span>
+            <span class="small muted ui">{weak.length ? "practise these next" : "none yet"}</span>
           </div>
+          {!weak.length && <p class="muted small">Your weak spots show here once you have learned your first rule and practised it.</p>}
           {weak.map((id) => {
             const s = SKILL_BY_ID.get(id)!;
             return (
               <div key={id} class="spread">
-                <button class="linkish" style={{ color: "var(--ink)", textAlign: "left" }} onClick={() => { startSession({ kind: "skills", skills: [id], label: s.title }); go({ page: "train" }); }}>
+                <button class="linkish" style={{ color: "var(--ink)", textAlign: "left" }} onClick={() => train({ kind: "skills", skills: [id], label: s.title })}>
                   {s.title}
                 </button>
                 <Mosaic value={mastery(p.skills[id])} thin label={`${Math.round(mastery(p.skills[id]) * 100)}% mastered`} />
               </div>
             );
           })}
-          <div class="row">
-            <button class="btn ghost small" onClick={() => { startSession({ kind: "skills", skills: weak, label: "Weak spots" }); go({ page: "train" }); }}>
-              Practise all four
-            </button>
-            {toFix > 0 && (
-              <button class="btn small" onClick={() => { startSession({ kind: "mistakes" }); go({ page: "train" }); }}>
-                Fix {toFix} mistake{toFix === 1 ? "" : "s"}
-              </button>
-            )}
-          </div>
+          {(weak.length > 1 || toFix > 0) && (
+            <div class="row">
+              {weak.length > 1 && (
+                <button class="btn ghost small" onClick={() => train({ kind: "skills", skills: weak, label: "Weak spots" })}>
+                  Practise all {weak.length === 4 ? "four" : weak.length === 3 ? "three" : "two"}
+                </button>
+              )}
+              {toFix > 0 && (
+                <button class="btn small" onClick={() => train({ kind: "mistakes" })}>
+                  Fix {toFix} mistake{toFix === 1 ? "" : "s"}
+                </button>
+              )}
+            </div>
+          )}
         </section>
 
         <section class="panel stack">
@@ -186,7 +195,7 @@ export function Home() {
             {due > 0 ? `${due} word${due === 1 ? "" : "s"} ready for review.` : "Nothing due right now. Words come back just before you'd forget them."}
           </p>
           <div class="row">
-            <button class="btn small" disabled={!due} onClick={() => { startSession({ kind: "words" }); go({ page: "train" }); }}>Review words</button>
+            <button class="btn small" disabled={!due} onClick={() => train({ kind: "words" })}>Review words</button>
             <button class="btn ghost small" onClick={() => go({ page: "words" })}>My dictionary ({d.words.filter((w) => w.kind !== "fixed").length})</button>
           </div>
         </section>
@@ -233,7 +242,7 @@ export function Home() {
                 <span class="numeral" style={{ marginRight: "8px" }}>{roman(l.n)}</span>
                 {l.title}
               </button>
-              <Mosaic value={lessonMastery(l.n, p.skills)} thin />
+              <Mosaic value={lessonProgress(p, l.n)} thin label={`${Math.round(lessonProgress(p, l.n) * 100)}% of its rules learned`} />
             </div>
           ))}
           <div class="row">
@@ -270,7 +279,7 @@ function StoryPanel() {
             <span class="small"><Inline text={story.notice} /></span>
           </>
         ) : (
-          <span class="muted">You have read every story of step {roman(p.focusLesson)}. Read one again, or practise their lines.</span>
+          <span class="muted">No new story yet: stories open as you learn the rules they use. Read one again, or practise their lines.</span>
         )}
       </div>
       <div class="row">

@@ -3,6 +3,7 @@ import { LESSONS } from "../content/lessons";
 import { roman } from "../latin/text";
 import { Icon, Modal } from "./components";
 import { getSync, resetProgress, update, useProgress } from "./store";
+import { updatePath } from "../trainer/path";
 import { audioSupported, hasLatinVoice, latinVoices, pickVoice, speak, useVoices } from "../audio/speech";
 
 export function Settings({ onClose }: { onClose: () => void }) {
@@ -30,11 +31,8 @@ export function Settings({ onClose }: { onClose: () => void }) {
                     update((x) => {
                       const on = (e.target as HTMLInputElement).checked;
                       x.lessonsDone = on ? [...new Set([...x.lessonsDone, l.n])].sort() : x.lessonsDone.filter((n) => n !== l.n);
-                      // the step moves to the nearest watched lesson below it (or the first one)
-                      if (!x.lessonsDone.includes(x.focusLesson)) {
-                        const below = x.lessonsDone.filter((n) => n < x.focusLesson);
-                        x.focusLesson = below.length ? Math.max(...below) : x.lessonsDone.length ? Math.min(...x.lessonsDone) : 1;
-                      }
+                      // the rules of a lesson not watched leave practice; the path goes on from the first rule not learned
+                      updatePath(x);
                     })
                   }
                 />
@@ -42,16 +40,6 @@ export function Settings({ onClose }: { onClose: () => void }) {
               </label>
             ))}
           </div>
-        </div>
-
-        <div class="stack" style={{ gap: "6px" }}>
-          <span class="eyebrow">Step</span>
-          <div class="seg">
-            {p.lessonsDone.map((n) => (
-              <button key={n} aria-pressed={p.focusLesson === n} onClick={() => update((x) => void (x.focusLesson = n))}>Lesson {roman(n)}</button>
-            ))}
-          </div>
-          <span class="small muted">Practice uses every word you know but only the rules up to this lesson, and concentrates on this lesson.</span>
         </div>
 
         <div class="stack" style={{ gap: "6px" }}>

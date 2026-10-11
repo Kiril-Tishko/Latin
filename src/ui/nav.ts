@@ -1,11 +1,12 @@
 // Page routing. Only a bare #token survives in an artifact link, so routes
-// are plain words: #home, #lessons, #lesson-3, #train, #words, #discover, #rules, #english, #stories, #story-aqua.
+// are plain words: #home, #lessons, #lesson-3, #learn-2-1, #train, #words, #discover, #rules, #english, #stories, #story-aqua.
 import { useEffect, useState } from "preact/hooks";
 
 export type Route =
   | { page: "home" }
   | { page: "lessons" }
   | { page: "lesson"; n: number }
+  | { page: "learn"; id: string }
   | { page: "train" }
   | { page: "words" }
   | { page: "discover" }
@@ -18,6 +19,8 @@ export function parse(hash: string): Route {
   const h = hash.replace(/^#/, "");
   const m = h.match(/^lesson-(\d+)$/);
   if (m) return { page: "lesson", n: Number(m[1]) };
+  const part = h.match(/^learn-(\d+)-(\d+)$/);
+  if (part) return { page: "learn", id: `${part[1]}.${part[2]}` };
   const st = h.match(/^story-([a-z-]+)$/);
   if (st) return { page: "story", id: st[1] };
   if (["lessons", "train", "words", "discover", "rules", "english", "stories"].includes(h)) return { page: h as "lessons" };
@@ -25,7 +28,9 @@ export function parse(hash: string): Route {
 }
 
 export function hashOf(r: Route): string {
-  return r.page === "lesson" ? `#lesson-${r.n}` : r.page === "story" ? `#story-${r.id}` : `#${r.page}`;
+  if (r.page === "lesson") return `#lesson-${r.n}`;
+  if (r.page === "learn") return `#learn-${r.id.replace(".", "-")}`;
+  return r.page === "story" ? `#story-${r.id}` : `#${r.page}`;
 }
 
 const listeners = new Set<(r: Route) => void>();

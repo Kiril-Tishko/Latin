@@ -21,16 +21,16 @@ export function fullLexicon(extra: Entry[] = []): Lexicon {
 }
 
 /**
- * Words of the lessons watched (plus extra words) with the grammar of
- * `grammarLessons`: step-by-step practice uses every word the learner knows but
- * only the rules up to the current step.
+ * Words of the lessons watched (plus extra words) with these rules: practice
+ * uses every word the learner knows but only the rules of the parts they have
+ * seen (trainer/path.ts).
  */
-export function buildKnowledge(lessonsUnlocked: number[], extraWords: Entry[] = [], silly = 0, grammarLessons = lessonsUnlocked): Knowledge {
+export function buildKnowledge(lessonsUnlocked: number[], extraWords: Entry[] = [], silly = 0, skills = skillsUpTo(lessonsUnlocked)): Knowledge {
   const words = [...lessonWords(lessonsUnlocked), ...extraWords].filter((w) => !STORY_ONLY.has(w.id));
   const seen = new Set<string>();
   const unique = words.filter((w) => (seen.has(w.id) ? false : (seen.add(w.id), true)));
   return {
-    skills: skillsUpTo(grammarLessons),
+    skills: new Set(skills),
     nouns: unique.filter((w): w is NounEntry => w.kind === "noun"),
     verbs: unique.filter((w): w is VerbEntry => w.kind === "verb"),
     adjs: unique.filter((w): w is AdjEntry => w.kind === "adj"),

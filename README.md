@@ -6,10 +6,15 @@ published as a private claude.ai artifact.
 
 - **Lessons**: every rule from the videos as What / How / When, the video's
   sentences and stories, with case endings in color.
-- **Train**: step by step, one lesson's rules at a time (with every word you
-  know): a short rule refresher, then choose-the-word and reading while a rule
-  is new, and written exercises (translate both ways, fill in endings, build
-  forms, transform sentences) as it settles, with feedback that names the case
+- **Rules one at a time**: each video's rules in small parts (22 for Lessons
+  I-IV). A part is explained very simply with examples, then two open questions
+  are answered in your own words (checked by their key words, by Claude, or
+  against a good answer). Only then do its exercises open; a rule you have not
+  learned never appears in practice.
+- **Train**: every word you know, only the rules you have learned. A new rule
+  sinks in with simple exercises (choose the word, pick the meaning, build from
+  tiles, type an ending in the gap); whole sentences to write and change come as
+  it holds, and the next rule is offered when it does. Feedback names the case
   or person you used and the one needed, plus the rule behind it.
   Each exercise fits the window and says in a few plain words what to do; an
   ending or a form is typed right into the sentence; translations of Latin
@@ -25,8 +30,8 @@ published as a private claude.ai artifact.
   Listen and write exercise.
 - **Sentences from the videos**: the sentences you heard, as exercises: choose
   the form, pick the meaning, build them from word tiles, write them.
-- **Fābulae (short stories)**: twelve stories, three for each step, made only
-  of the words from the videos and the rules up to their step. Tap a line for its
+- **Fābulae (short stories)**: twelve stories, three for each lesson, made only
+  of the words from the videos; each opens when you have learned its rules. Tap a line for its
   English and a word for its meaning, listen, answer two questions, then practise
   the story's lines.
 - **Fix my mistakes**: your mistakes come back later as new exercises on the

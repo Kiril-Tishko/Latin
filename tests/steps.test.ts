@@ -3,15 +3,15 @@ import { caseOf } from "../src/latin/analyze";
 import { seeded } from "../src/latin/generate";
 import { ExerciseKind, makeExercise } from "../src/trainer/exercises";
 import { buildKnowledge, fullLexicon, skillsUpTo } from "../src/trainer/knowledge";
-import { mastery, migrate, newProgress } from "../src/trainer/progress";
-import { buildSession, kindWeights, readiness, sentenceStyle } from "../src/trainer/session";
+import { migrate, newProgress } from "../src/trainer/progress";
+import { buildSession, kindWeights, sentenceStyle } from "../src/trainer/session";
 
 const lex = fullLexicon();
 const kinds: Exclude<ExerciseKind, "vocab" | "derive">[] = ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen"];
 
 describe("step-by-step practice", () => {
   // every word of Lessons I-IV, but only the rules of Lesson I
-  const k1 = buildKnowledge([1, 2, 3, 4], [], 0.35, [1]);
+  const k1 = buildKnowledge([1, 2, 3, 4], [], 0.35, skillsUpTo([1]));
   const lesson1 = skillsUpTo([1]);
 
   it("uses words from every lesson but only the rules of the step", () => {
@@ -65,7 +65,7 @@ describe("step-by-step practice", () => {
   });
 
   it("keeps sentences short, sensible and in the usual order while a rule is new", () => {
-    const k2 = buildKnowledge([1, 2, 3, 4], [], 0.35, [1, 2, 3, 4]);
+    const k2 = buildKnowledge([1, 2, 3, 4], [], 0.35, skillsUpTo([1, 2, 3, 4]));
     const style = (m: number) => ({ ...k2, ...sentenceStyle(m, 0.35) });
     const longest = (k: typeof k2, kind: Exclude<ExerciseKind, "vocab" | "derive">) => {
       let max = 0;
@@ -115,20 +115,10 @@ describe("step-by-step practice", () => {
     expect(gentle).toBeGreaterThanOrEqual(30); // at least half of 60
   });
 
-  it("is ready for the next step when the step's rules are solid", () => {
-    const p = newProgress();
-    expect(readiness(p, 1)).toEqual({ value: 0, ready: false, practised: 0 });
-    for (const id of ["v.1sg", "v.2sg", "v.3sg", "s.sv"]) p.skills[id] = { seen: 10, right: 9, ewma: 0.9, last: 0 };
-    expect(readiness(p, 1).ready).toBe(true);
-    p.skills["v.2sg"] = { seen: 10, right: 3, ewma: 0.4, last: 0 };
-    expect(readiness(p, 1).ready).toBe(false);
-    expect(mastery(p.skills["v.1sg"])).toBeCloseTo(0.9);
-  });
-
   it("restarts saves from before the steps at Lesson I, and keeps later choices", () => {
     const old = migrate({ version: 1, lessonsDone: [1, 2, 3, 4], focusLesson: 4, updatedAt: 5 });
     expect(old.focusLesson).toBe(1);
-    expect(old.version).toBe(3);
+    expect(old.version).toBe(4);
     expect(old.rulesShown).toEqual({});
     const now = migrate({ ...old, focusLesson: 2 });
     expect(now.focusLesson).toBe(2);

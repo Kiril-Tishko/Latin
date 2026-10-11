@@ -6,6 +6,7 @@ import { Lexicon } from "../latin/analyze";
 import { Knowledge } from "../latin/generate";
 import { Entry } from "../latin/types";
 import { buildKnowledge, fullLexicon, lessonWords } from "../trainer/knowledge";
+import { seenSkills } from "../trainer/path";
 import { migrate, newProgress, Progress } from "../trainer/progress";
 import { DocRef, progressDoc, storage } from "./platform";
 
@@ -124,8 +125,8 @@ document.addEventListener("visibilitychange", () => {
 interface Derived {
   /** Every word and rule of the lessons watched. */
   knowledge: Knowledge;
-  /** Every word, but only the rules up to the current step (focusLesson). */
-  stepKnowledge: Knowledge;
+  /** Every word, but only the rules of the parts the learner has seen: what practice uses. */
+  seenKnowledge: Knowledge;
   lexicon: Lexicon;
   /** Words in the learner's dictionary: lesson words plus added cards. */
   words: Entry[];
@@ -140,7 +141,7 @@ export function derived(): Derived {
   const added = p.added.map((id) => CARD_BY_ID.get(id)?.entry).filter(Boolean) as Entry[];
   derivedCache = {
     knowledge: buildKnowledge(p.lessonsDone, added, p.settings.silly),
-    stepKnowledge: buildKnowledge(p.lessonsDone, added, p.settings.silly, p.lessonsDone.filter((n) => n <= p.focusLesson)),
+    seenKnowledge: buildKnowledge(p.lessonsDone, added, p.settings.silly, seenSkills(p)),
     lexicon: fullLexicon(DECK_CARDS.map((c) => c.entry)),
     words: [...lessonWords(p.lessonsDone), ...added],
     added,

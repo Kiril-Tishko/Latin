@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { seeded } from "../src/latin/generate";
-import { buildKnowledge, fullLexicon, lessonWords } from "../src/trainer/knowledge";
+import { buildKnowledge, fullLexicon, lessonWords, skillsUpTo } from "../src/trainer/knowledge";
 import { makeExercise } from "../src/trainer/exercises";
 import { newProgress } from "../src/trainer/progress";
 import { applyResult, mistakesSession, mistakesToFix } from "../src/trainer/session";
 
 const lex = fullLexicon();
 const all = buildKnowledge([1, 2, 3, 4]);
-const step1 = buildKnowledge([1, 2, 3, 4], [], 0, [1]);
+const step1 = buildKnowledge([1, 2, 3, 4], [], 0, skillsUpTo([1]));
 const vocab = lessonWords([1, 2, 3, 4]).filter((w) => w.kind !== "fixed");
 
 /** Answers an exercise wrong (on purpose), so its mistake is recorded. */

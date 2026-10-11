@@ -7,6 +7,7 @@ import { Analysis, annotate, caseOf, Lexicon, numOf } from "../latin/analyze";
 import { LToken, Rand, Role, shuffle } from "../latin/generate";
 import { adjDecl, nounSkill } from "../latin/skills";
 import { chooseOn, Ctx, endingOn, Exercise, ExerciseKind, meaningOn, tilesOn, writeOn } from "./exercises";
+import { phaseOf } from "./progress";
 
 /** A sentence to read and practise. */
 export interface Line {
@@ -143,10 +144,11 @@ export function makeLine(from: Line["from"], la: string, en: string, lex: Lexico
 
 export type LineKind = Extract<ExerciseKind, "choose" | "ending" | "tiles" | "en2la" | "meaning">;
 
-/** Gentle kinds while a sentence's rules are new; writing it out as they settle. */
+/** Simple kinds while a sentence's rules are new; writing it out as they hold. */
 export function kindsFor(m: number): [LineKind, number][] {
-  if (m < 0.35) return [["choose", 32], ["meaning", 26], ["tiles", 26], ["ending", 16]];
-  if (m < 0.7) return [["tiles", 26], ["ending", 22], ["en2la", 26], ["choose", 14], ["meaning", 12]];
+  const phase = phaseOf(m);
+  if (phase === "simple") return [["choose", 32], ["meaning", 26], ["tiles", 26], ["ending", 16]];
+  if (phase === "mixed") return [["tiles", 26], ["ending", 22], ["en2la", 26], ["choose", 14], ["meaning", 12]];
   return [["en2la", 44], ["tiles", 20], ["ending", 18], ["choose", 10], ["meaning", 8]];
 }
 

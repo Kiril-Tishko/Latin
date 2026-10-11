@@ -162,8 +162,7 @@ function YourWords() {
 }
 
 function practise() {
-  startSession({ kind: "english" });
-  go({ page: "train" });
+  if (startSession({ kind: "english" })) go({ page: "train" });
 }
 
 export function English() {

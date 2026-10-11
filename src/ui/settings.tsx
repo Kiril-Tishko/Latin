@@ -3,7 +3,7 @@ import { LESSONS } from "../content/lessons";
 import { roman } from "../latin/text";
 import { Icon, Modal } from "./components";
 import { getSync, resetProgress, update, useProgress } from "./store";
-import { allVoices, audioSupported, hasLatinVoice, latinVoices, pickVoice, speak, useVoices } from "../audio/speech";
+import { audioSupported, hasLatinVoice, latinVoices, pickVoice, speak, useVoices } from "../audio/speech";
 
 export function Settings({ onClose }: { onClose: () => void }) {
   const p = useProgress();
@@ -125,8 +125,8 @@ function AudioSettings() {
       </div>
     );
   }
+  // only the voices that read Latin well: Spanish and Italian ones
   const latin = latinVoices();
-  const others = allVoices().filter((v) => !latin.includes(v));
   const best = pickVoice();
   return (
     <div class="stack" style={{ gap: "8px" }}>
@@ -136,21 +136,13 @@ function AudioSettings() {
         <select
           id="voice"
           class="select"
-          value={p.settings.voice ?? ""}
+          value={latin.some((v) => v.voiceURI === p.settings.voice) ? p.settings.voice : ""}
           onChange={(e) => update((x) => void (x.settings.voice = (e.target as HTMLSelectElement).value || undefined))}
         >
           <option value="">Best available{best ? ` (${best.name})` : ""}</option>
-          {latin.length > 0 && (
-            <optgroup label="Spanish and Italian: best for Latin">
-              {latin.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} · {v.lang}</option>)}
-            </optgroup>
-          )}
-          {others.length > 0 && (
-            <optgroup label="Other voices">
-              {others.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} · {v.lang}</option>)}
-            </optgroup>
-          )}
+          {latin.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} · {voiceLang(v.lang)}</option>)}
         </select>
+        <span class="muted">Only Spanish and Italian voices are listed: they read Latin with classical sounds.</span>
       </label>
       <div class="row">
         <div class="seg" role="group" aria-label="Speed">
@@ -178,4 +170,16 @@ function AudioSettings() {
       </p>
     </div>
   );
+}
+
+/** "es-MX" → "Spanish (Mexico)". */
+function voiceLang(tag: string): string {
+  try {
+    const [lang, region] = tag.replace("_", "-").split("-");
+    const names = new Intl.DisplayNames(["en"], { type: "language" });
+    const regions = new Intl.DisplayNames(["en"], { type: "region" });
+    return region ? `${names.of(lang)} (${regions.of(region.toUpperCase())})` : names.of(lang) ?? tag;
+  } catch {
+    return tag;
+  }
 }

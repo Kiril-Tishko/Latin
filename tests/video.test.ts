@@ -73,7 +73,7 @@ describe("sentences from the videos", () => {
         const answer = modelAnswer(ex);
         const res = ex.check(answer);
         expect(res.verdict, `${kind}: ${ex.context} | ${answer} | ${res.issues.map((i) => i.message).join("; ")}`).toBe("correct");
-        expect(ex.video).toBe(line.lesson);
+        expect(ex.video).toBe(line.from.lesson);
       }
     }
     expect(made).toBeGreaterThan(lines.length * 3);

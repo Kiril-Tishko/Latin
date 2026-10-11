@@ -939,6 +939,19 @@ table.paradigm td .latin { font-size: 1.08rem; }
 .session-mosaic i.almost { background: var(--gold-soft); box-shadow: none; }
 .session-mosaic i.wrong { background: color-mix(in srgb, var(--ink-2) 75%, var(--panel)); box-shadow: none; }
 .trainer-top .counter { font-family: var(--f-display); font-size: 0.85rem; letter-spacing: 0.08em; color: var(--ink-2); white-space: nowrap; }
+.counter-words { display: none; font-family: var(--f-ui); letter-spacing: 0; font-size: 0.95rem; }
+.counter-words strong { color: var(--ink); }
+/* on a phone the round gets two clear rows: what is being practised, then the tesserae and "Exercise 3 of 12" */
+@media (max-width: 600px) {
+  .trainer-top { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label end" "mosaic count"; gap: 10px 14px; }
+  .trainer-top > .eyebrow { grid-area: label; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trainer-top > .linkish { grid-area: end; }
+  .trainer-top > .session-mosaic { grid-area: mosaic; gap: 4px; }
+  .trainer-top > .session-mosaic i { height: 16px; max-width: none; border-radius: 3px; }
+  .trainer-top > .counter { grid-area: count; }
+  .counter-roman { display: none; }
+  .counter-words { display: inline; }
+}
 
 /* a victor's wreath round the score */
 .summary-head { display: flex; gap: 20px; align-items: center; }
@@ -990,3 +1003,75 @@ html, .drawer-body, .modal > .panel, .table-wrap { scrollbar-width: thin; scroll
 .en-list { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
 .en-from { font-size: 1.02rem; }
 .silent { color: var(--gold); text-decoration: underline dotted 2px; text-underline-offset: 3px; }
+
+/* ------------------------------------------------------------ stories */
+.story-card { display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; color: inherit; cursor: pointer; }
+.story-card:hover { border-color: var(--gold-soft); }
+.story-card.read { background: color-mix(in srgb, var(--panel) 85%, var(--panel-2)); }
+.story-read { display: inline-flex; align-items: center; gap: 4px; font-family: var(--f-ui); font-size: 0.8rem; color: var(--gold); white-space: nowrap; }
+.later-stories > summary { cursor: pointer; font-family: var(--f-ui); color: var(--ink-2); }
+.later-stories[open] > summary { margin-bottom: 4px; }
+.story-title { font-size: clamp(1.9rem, 6vw, 2.6rem); }
+.story-title .latin { font-family: var(--f-display); }
+.story-en { font-style: italic; margin-top: -6px; }
+.story-notice { position: relative; align-self: flex-start; margin-inline: 13px; padding: 6px 14px; background: var(--panel-2); border-radius: 4px; }
+.story-text { padding: 10px 18px; }
+.story-line { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); padding: 10px 0; cursor: pointer; align-items: baseline; }
+.story-line .story-la { font-size: 1.22rem; line-height: 1.5; }
+.story-line .story-la .w { border-radius: 3px; }
+.story-line .story-la .w:hover { background: color-mix(in srgb, var(--gold-soft) 18%, transparent); }
+.story-who { display: block; font-family: var(--f-display); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.story-gloss { grid-column: 1 / -1; color: var(--ink-2); padding: 2px 8px; border-left: 2px solid var(--gold-soft); }
+.story-tr { align-self: center; }
+@media (max-width: 600px) {
+  .story-line { grid-template-columns: 1fr; }
+  .story-tr:empty { display: none; }
+}
+.story-q .btn[disabled] { opacity: 1; }
+.btn.q-right { border-color: var(--good); box-shadow: 0 0 0 2px color-mix(in srgb, var(--good) 35%, transparent); }
+.btn.q-wrong { border-color: var(--bad); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 35%, transparent); }
+.btn.q-tried:not(.q-wrong) { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--bad) 60%, transparent); }
+.q-note-right { color: var(--good); }
+.q-note-wrong { color: var(--bad); }
+.story-done { position: relative; align-self: flex-start; margin-inline: 13px; display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--panel-2); border-radius: 4px; font-family: var(--f-display); letter-spacing: 0.05em; }
+.story-done .small { font-family: var(--f-ui); letter-spacing: 0; }
+.story-mark { margin-left: auto; color: var(--gold); opacity: 0.6; }
+.story-panel { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+.span-2 { grid-column: 1 / -1; }
+
+/* ------------------------------------------------- what to do, at a glance */
+.task-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-family: var(--f-ui); }
+.task-glyph { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--wax); color: var(--wax-ink); flex: none; }
+.task-glyph svg { width: 19px; height: 19px; }
+.task-line .task-text { font-family: var(--f-ui); font-weight: 700; font-size: clamp(1.02rem, 1.8vw, 1.22rem); letter-spacing: 0; text-transform: none; color: var(--ink); }
+.task-dir { font-family: var(--f-ui); font-size: 0.8rem; font-weight: 600; color: var(--gold); border: 1px solid var(--gold-soft); border-radius: 999px; padding: 1px 10px; white-space: nowrap; }
+.task-line .ex-source { flex-basis: 100%; padding-left: 44px; font-family: var(--f-ui); font-size: 0.85rem; font-weight: 500; letter-spacing: 0; color: var(--ink-2); }
+.exercise.answered .task-line .task-text { font-size: 1rem; }
+
+/* the answer typed into the sentence: a small wax box where the ending (or the form) goes */
+.gap-word { white-space: nowrap; }
+.gap-input {
+  font: inherit;
+  color: var(--wax-ink);
+  background: var(--wax);
+  border: 0;
+  border-bottom: 3px solid var(--gold);
+  border-radius: 5px 5px 2px 2px;
+  padding: 0 0.12em;
+  margin-left: 2px;
+  min-width: 2.4ch;
+  max-width: 100%;
+  text-align: left;
+  vertical-align: baseline;
+  caret-color: var(--gold-soft);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+  animation: gap-glow 1.6s ease-in-out 2;
+}
+.gap-input::placeholder { color: color-mix(in srgb, var(--wax-ink) 55%, transparent); text-align: center; }
+.gap-input:focus { outline: 2px solid var(--gold-soft); outline-offset: 2px; }
+.gap-input.wide { min-width: 5ch; }
+@keyframes gap-glow { 50% { box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 4px color-mix(in srgb, var(--gold-soft) 45%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .gap-input { animation: none; } }
+.form-line .latin-lg { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.35em; }
+.form-arrow { color: var(--gold); }
+.form-label { font-family: var(--f-text); color: var(--ink-2); }

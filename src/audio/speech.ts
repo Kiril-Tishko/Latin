@@ -25,31 +25,27 @@ if (audioSupported()) {
 }
 
 const QUALITY = /(natural|neural|premium|enhanced|online|google|siri)/i;
+/** Apple's playful and robotic voices (they come in every language): no good for Latin. */
+const NOVELTY = /^(eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|pipe organ|superstar|trinoids|whisper|wobble|zarvox|deranged|hysterical|princess|ralph|fred|junior|kathy)\b/i;
 
 function score(v: SpeechSynthesisVoice): number {
   const lang = v.lang.toLowerCase().replace("_", "-");
   let s = lang.startsWith("es") ? 100 : lang.startsWith("it") ? 60 : 0;
-  if (!s) return 0;
+  if (!s || NOVELTY.test(v.name.trim())) return 0;
   if (QUALITY.test(v.name)) s += 10;
   if (lang === "es-es" || lang === "it-it") s += 2;
   return s;
 }
 
-/** Spanish and Italian voices, best first. */
+/** The voices that can read Latin: Spanish and Italian ones, best first (no novelty voices). */
 export function latinVoices(): SpeechSynthesisVoice[] {
   return voices.filter((v) => score(v) > 0).sort((a, b) => score(b) - score(a));
 }
 
-export function allVoices(): SpeechSynthesisVoice[] {
-  return voices;
-}
-
+/** The chosen voice if it is one of the suitable ones, else the best of them; never a voice of another language. */
 export function pickVoice(preferred?: string): SpeechSynthesisVoice | null {
-  if (preferred) {
-    const v = voices.find((x) => x.voiceURI === preferred);
-    if (v) return v;
-  }
-  return latinVoices()[0] ?? null;
+  const ok = latinVoices();
+  return (preferred && ok.find((x) => x.voiceURI === preferred)) || ok[0] || null;
 }
 
 /** True when a voice that can read Latin reasonably is installed. */
@@ -135,9 +131,11 @@ export function speak(latin: string, opts: { id?: string; rate?: number } = {}):
       u.lang = voice.lang;
     } else u.lang = "es-ES";
     u.rate = opts.rate ?? prefs.rate;
+    // an utterance cut short by another one counts as stopped, so a sequence
+    // (Listen & repeat, a story) never carries on reading after a tap elsewhere
     const done = (ok: boolean) => {
       if (generation === mine) setSpeaking(null);
-      resolve(ok);
+      resolve(ok && generation === mine);
     };
     u.onend = () => done(true);
     u.onerror = (e) => done(e.error === "interrupted" || e.error === "canceled");
@@ -168,7 +166,10 @@ export function speakSequence(lines: string[], opts: { repeatPause: boolean; onL
       const ok = await speak(lines[i], { id: `seq-${i}` });
       if (!ok || stopped) break;
       const spoken = performance.now() - t0;
+      const mine = generation;
       await new Promise((r) => setTimeout(r, opts.repeatPause ? Math.max(1200, spoken * 1.3) : 450));
+      // something else was read during the pause (a tap on one word): the sequence ends
+      if (generation !== mine) break;
     }
     if (!stopped) opts.onLine(null);
   };

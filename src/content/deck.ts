@@ -63,7 +63,7 @@ function a(dict: string, en: string, o: Opts): Card {
 
 export const CARDS: Card[] = [
   n("ventus, ventī, m", "wind", {
-    tags: ["nature", "thing", "unseen"],
+    tags: ["weather", "unseen"],
     from: { en: ["vent", "ventilate"], ru: ["вентилятор", "вентиляция"], uk: ["вентилятор", "вентиляція"] },
     kin: { en: ["wind"], ru: ["ветер"], uk: ["вітер"] },
     hook: "A вентилятор makes ventus. And ventus, ветер, вітер and wind are one ancient word.",
@@ -75,13 +75,13 @@ export const CARDS: Card[] = [
     hook: "Ukrainian окуляри (glasses) come straight from oculus: things for the eyes. Око is its ancient cousin.",
   }),
   n("lūna, lūnae, f", "moon", {
-    tags: ["nature", "thing", "place", "on"],
+    tags: ["nature", "thing", "sky"],
     from: { en: ["lunar", "lunatic"] },
     kin: { ru: ["луна"], uk: ["луна (echo)"] },
     hook: "Луна! Latin and Russian kept the same old word for 'the shining one'. In Ukrainian луна drifted to mean an echo.",
   }),
   n("nāsus, nāsī, m", "nose", {
-    tags: ["body", "thing"],
+    tags: ["body", "thing", "long"],
     from: { en: ["nasal"] },
     kin: { en: ["nose"], ru: ["нос"], uk: ["ніс"] },
     hook: "nāsus, нос, ніс, nose: the same word in four languages. Nasal sounds come through the nose.",
@@ -124,7 +124,7 @@ export const CARDS: Card[] = [
   }),
   n("via, viae, f", "road", {
     alt: ["way", "street", "path"],
-    tags: ["place"],
+    tags: ["place", "long", "public"],
     from: { en: ["via", "viaduct", "trivia"], ru: ["виадук"], uk: ["віадук"] },
     kin: { en: ["way"], ru: ["везти"], uk: ["везти"] },
     hook: "Trivia: tri-via, the place where three roads meet and people gossip. A виадук carries the road.",
@@ -137,7 +137,7 @@ export const CARDS: Card[] = [
     hook: "vīvus ~ живой / живий: the same ancient root. Vivid colors look alive.",
   }),
   n("vīta, vītae, f", "life", {
-    tags: ["abstract", "mass"],
+    tags: ["abstract", "mass", "unseen", "beauty"],
     from: { en: ["vital", "vitamin"], ru: ["витамин"], uk: ["вітамін"] },
     kin: { ru: ["жизнь"], uk: ["життя"] },
     hook: "Витамины = 'amines of life'. Vital signs show there is vīta.",
@@ -168,11 +168,12 @@ export const CARDS: Card[] = [
     hook: "Медик = medicus. The doctor of ancient Rome.",
   }),
   a("bonus, bona, bonum", "good", {
+    tags: ["person", "animal", "place", "thing", "mass", "beauty"],
     from: { en: ["bonus", "bonanza"], ru: ["бонус"], uk: ["бонус"] },
     hook: "A бонус is 'something good' on top. Bona fide = in good faith.",
   }),
   n("numerus, numerī, m", "number", {
-    tags: ["thing", "abstract"],
+    tags: ["abstract"],
     from: { en: ["number", "numeral", "numerous"], ru: ["номер"], uk: ["номер"] },
     hook: "Номер is numerus that travelled through French (numéro).",
   }),
@@ -183,7 +184,7 @@ export const CARDS: Card[] = [
   }),
   n("locus, locī, m", "place", {
     alt: ["spot"],
-    tags: ["place"],
+    tags: ["place", "vague"],
     from: { en: ["local", "location", "locomotive"], ru: ["локация", "локомотив"], uk: ["локація", "локомотив"] },
     hook: "A локомотив moves 'from its place' (locō mōtīvus). Location, local: all about places.",
   }),
@@ -194,7 +195,7 @@ export const CARDS: Card[] = [
     hook: "plēnus ~ полный / повний ~ full: one ancient word. A пленарное заседание is the full meeting.",
   }),
   n("oleum, oleī, n", "oil", {
-    tags: ["thing", "drink", "mass"],
+    tags: ["thing", "mass"],
     from: { en: ["oil"], uk: ["олія"] },
     kin: { ru: ["елей"] },
     hook: "Ukrainian олія came from oleum through Polish (olej). Russian елей is the same Greek word.",
@@ -220,14 +221,14 @@ export const CARDS: Card[] = [
   }),
   a("vērus, vēra, vērum", "true", {
     alt: ["real"],
-    tags: ["abstract", "thing"],
+    tags: ["story", "friend"],
     from: { en: ["very", "verify", "verdict"] },
     kin: { ru: ["вера"], uk: ["віра"] },
     hook: "vērus ~ вера / віра: what you believe is 'true'. A verdict is a 'true saying' (vērē dictum).",
   }),
   n("theātrum, theātrī, n", "theater", {
     alt: ["theatre"],
-    tags: ["place", "building"],
+    tags: ["place", "building", "public"],
     from: { en: ["theater"], ru: ["театр"], uk: ["театр"] },
     hook: "Театр is theātrum, a Greek word the Romans borrowed.",
   }),
@@ -287,13 +288,13 @@ export const CARDS: Card[] = [
   }),
   n("focus, focī, m", "hearth", {
     alt: ["fireplace"],
-    tags: ["place", "thing"],
+    tags: ["building"],
     from: { en: ["focus", "fuel"], ru: ["фокус"], uk: ["фокус"] },
     hook: "The focus was the fireplace, the centre of a Roman home, where everything converged. Фокус!",
   }),
   v("dīcō, dīcere, dīxī, dictum", "say", {
     trans: true,
-    intrans: true,
+    intrans: false,
     shortImp: true,
     en: { s: "says", past: "said", pp: "said" },
     alt: ["tell", "speak"],
@@ -302,7 +303,7 @@ export const CARDS: Card[] = [
   }),
   n("radius, radiī, m", "ray", {
     alt: ["spoke", "beam"],
-    tags: ["thing", "nature"],
+    tags: ["light"],
     from: { en: ["radius", "radio", "radiation"], ru: ["радиус", "радио"], uk: ["радіус", "радіо"] },
     hook: "A radius was the spoke of a wheel, a ray from the centre. Радио sends rays.",
   }),
@@ -322,7 +323,7 @@ export const CARDS: Card[] = [
   }),
   n("stilus, stilī, m", "pen", {
     alt: ["stylus", "writing stick"],
-    tags: ["thing", "writing"],
+    tags: ["thing", "tool", "long"],
     from: { en: ["style", "stylus"], ru: ["стиль"], uk: ["стиль"] },
     hook: "Romans wrote on wax with a stilus; the way you wrote became your style (стиль).",
   }),
@@ -339,7 +340,7 @@ export const CARDS: Card[] = [
   }),
   n("circus, circī, m", "circle", {
     alt: ["ring", "racetrack"],
-    tags: ["place", "thing"],
+    tags: ["abstract"],
     from: { en: ["circus", "circle", "circuit"], ru: ["цирк"], uk: ["цирк"] },
     hook: "The Circus Maximus was a giant ring for chariot races. Цирк kept the name.",
   }),
@@ -363,14 +364,14 @@ export const CARDS: Card[] = [
   }),
   v("fīniō, fīnīre, fīnīvī, fīnītum", "finish", {
     trans: true,
-    intrans: true,
+    intrans: false,
     alt: ["end"],
     from: { en: ["finish", "final", "infinite"], ru: ["финиш", "финал"], uk: ["фініш", "фінал"] },
     hook: "Финиш, финал, the end: fīnis is the boundary, fīniō puts an end to it.",
   }),
   n("familia, familiae, f", "family", {
     alt: ["household"],
-    tags: ["person"],
+    tags: ["person", "group"],
     enPl: "families",
     from: { en: ["family", "familiar"], ru: ["фамилия"], uk: ["фамільний"] },
     hook: "Careful: Russian фамилия is the family name (surname), while Latin familia is the whole household, slaves included.",
@@ -383,12 +384,12 @@ export const CARDS: Card[] = [
   }),
   n("littera, litterae, f", "letter of the alphabet", {
     alt: ["letter"],
-    tags: ["thing", "writing"],
+    tags: ["writing", "abstract"],
     from: { en: ["letter", "literature", "literal"], ru: ["литера", "литература"], uk: ["літера", "література"] },
     hook: "Літера is a single littera. Litterae (plural) became literature.",
   }),
   a("pūblicus, pūblica, pūblicum", "public", {
-    tags: ["thing", "place"],
+    tags: ["public"],
     alt: ["common"],
     from: { en: ["public", "publish"], ru: ["публика", "публичный"], uk: ["публіка", "публічний"] },
     hook: "Публика is the public. Rēs pūblica (the public thing) gave us the republic.",
@@ -416,7 +417,7 @@ export const CARDS: Card[] = [
   }),
   n("forma, formae, f", "shape", {
     alt: ["form", "beauty"],
-    tags: ["thing", "abstract"],
+    tags: ["abstract", "beauty"],
     from: { en: ["form", "format", "formula"], ru: ["форма"], uk: ["форма"] },
     hook: "Форма is forma. In Latin it also meant beauty: a good shape.",
   }),
@@ -428,7 +429,7 @@ export const CARDS: Card[] = [
   }),
   n("fābula, fābulae, f", "story", {
     alt: ["fable", "tale"],
-    tags: ["thing", "writing"],
+    tags: ["writing", "abstract", "long", "story", "unseen", "beauty"],
     from: { en: ["fable", "fabulous"], ru: ["фабула"], uk: ["фабула"] },
     hook: "The фабула of a novel is its story. Fabulous = fit for a fable.",
   }),
@@ -444,7 +445,7 @@ export const CARDS: Card[] = [
     hook: "An овал is egg-shaped.",
   }),
   n("verbum, verbī, n", "word", {
-    tags: ["thing", "writing", "abstract"],
+    tags: ["writing", "abstract", "long", "story", "beauty"],
     from: { en: ["verb", "verbal", "proverb"], ru: ["вербальный"], uk: ["вербальний"] },
     hook: "Verbal = in words. A verb is 'the word' of the sentence.",
   }),
@@ -456,7 +457,7 @@ export const CARDS: Card[] = [
   }),
   n("officium, officiī, n", "duty", {
     alt: ["office", "service"],
-    tags: ["abstract", "place"],
+    tags: ["abstract", "unseen"],
     from: { en: ["office", "official"], ru: ["офис", "офицер"], uk: ["офіс", "офіцер"] },
     hook: "An офис is where you do your officium (duty). An офицер holds one.",
   }),
@@ -483,7 +484,7 @@ export const CARDS: Card[] = [
     hook: "porcus ~ поросёнок / порося: the same ancient word for a young pig. Pork came through French.",
   }),
   a("clārus, clāra, clārum", "bright", {
-    tags: ["thing", "place"],
+    tags: ["sky", "light"],
     alt: ["clear", "famous"],
     from: { en: ["clear", "clarify"], ru: ["кларнет"], uk: ["кларнет"] },
     hook: "The кларнет was named for its clear (clārus) bright sound.",
@@ -510,7 +511,7 @@ export const CARDS: Card[] = [
   }),
   n("imperium, imperiī, n", "command", {
     alt: ["power", "empire", "rule"],
-    tags: ["abstract", "place"],
+    tags: ["abstract", "unseen"],
     from: { en: ["empire", "imperial"], ru: ["империя", "император"], uk: ["імперія", "імператор"] },
     hook: "An империя is the area under one imperium (command).",
   }),
@@ -523,7 +524,7 @@ export const CARDS: Card[] = [
   }),
   n("monstrum, monstrī, n", "monster", {
     alt: ["omen", "wonder"],
-    tags: ["animal", "thing"],
+    tags: ["creature", "thing"],
     from: { en: ["monster", "demonstrate"], ru: ["монстр"], uk: ["монстр"] },
     hook: "A monstrum was a sign or warning from the gods: something they 'showed' (monstrāre).",
   }),

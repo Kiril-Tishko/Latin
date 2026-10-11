@@ -71,6 +71,8 @@ export interface Progress {
   days: Record<string, { done: number; right: number }>;
   mistakes: Mistake[];
   placementDone: boolean;
+  /** Stories read to the end, keyed by id: when. */
+  stories: Record<string, number>;
 }
 
 // sensible sentences only: silly pairings confused the learner
@@ -91,6 +93,7 @@ export function newProgress(): Progress {
     days: {},
     mistakes: [],
     placementDone: false,
+    stories: {},
   };
 }
 
@@ -111,6 +114,7 @@ export function migrate(raw: unknown): Progress {
     days: p.days ?? {},
     mistakes: p.mistakes ?? [],
     rulesShown: p.rulesShown ?? {},
+    stories: p.stories ?? {},
   } as Progress;
   // Version 2 practises step by step. The learner remembered the words but not
   // the rules, so saves from version 1 start again at Lesson I.

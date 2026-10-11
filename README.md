@@ -11,8 +11,9 @@ published as a private claude.ai artifact.
   is new, and written exercises (translate both ways, fill in endings, build
   forms, transform sentences) as it settles, with feedback that names the case
   or person you used and the one needed, plus the rule behind it.
-  Each exercise fits the window; translations of Latin prompts stay hidden
-  until you press Translate.
+  Each exercise fits the window and says in a few plain words what to do; an
+  ending or a form is typed right into the sentence; translations of Latin
+  prompts stay hidden until you press Translate. Only sensible sentences.
 - **Words**: your dictionary with spaced repetition; each word has its forms,
   sensible example sentences and, where one exists, a famous Latin saying.
 - **Discover**: mystery cards, five at a time, each in its own fixed spot, with
@@ -24,6 +25,10 @@ published as a private claude.ai artifact.
   Listen and write exercise.
 - **Sentences from the videos**: the sentences you heard, as exercises: choose
   the form, pick the meaning, build them from word tiles, write them.
+- **Fābulae (short stories)**: twelve stories, three for each step, made only
+  of the words from the videos and the rules up to their step. Tap a line for its
+  English and a word for its meaning, listen, answer two questions, then practise
+  the story's lines.
 - **Fix my mistakes**: your mistakes come back later as new exercises on the
   same rules and words.
 - **Latin in English**: what English took from Latin, from Roman traders to

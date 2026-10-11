@@ -10,6 +10,7 @@ import { Rules } from "./pages/rules";
 import { startSession, Train } from "./pages/train";
 import { Words } from "./pages/words";
 import { English } from "./pages/english";
+import { Stories, StoryPage } from "./pages/stories";
 import { Settings } from "./settings";
 import { connect, getSync, useProgress } from "./store";
 import { connectChats } from "./chats";
@@ -27,10 +28,11 @@ const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.El
   { route: { page: "rules" }, label: "Rēgulae", en: "Rules", icon: Icon.column },
 ];
 
-// a lesson page and Latin in English belong to Lectiōnēs
-const active = (r: Route, t: Route) => r.page === t.page || ((r.page === "lesson" || r.page === "english") && t.page === "lessons");
+// a lesson page, the stories and Latin in English belong to Lectiōnēs
+const UNDER_LESSONS = new Set<Route["page"]>(["lesson", "english", "stories", "story"]);
+const active = (r: Route, t: Route) => r.page === t.page || (UNDER_LESSONS.has(r.page) && t.page === "lessons");
 
-const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", train: "Practice", words: "Words", discover: "Discover", rules: "Rules", english: "Latin in English" };
+const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", train: "Practice", words: "Words", discover: "Discover", rules: "Rules", english: "Latin in English", stories: "Stories", story: "A story" };
 
 const SYNC_TEXT = { local: "saved in this browser", connecting: "connecting…", synced: "saved to your account", saving: "saving…", error: "saving failed, will retry" };
 
@@ -73,6 +75,12 @@ export function App() {
       break;
     case "english":
       page = <English />;
+      break;
+    case "stories":
+      page = <Stories />;
+      break;
+    case "story":
+      page = <StoryPage id={route.id} />;
       break;
     default:
       page = <Home />;

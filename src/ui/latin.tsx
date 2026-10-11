@@ -1,6 +1,6 @@
 // Latin with colored endings. Every inflected word shows its stem in ink and
 // its ending in the color of its case (verbs: teal); plurals are underlined.
-import { Fragment } from "preact";
+import { ComponentChildren, Fragment } from "preact";
 import { Analysis, annotate, caseOf, numOf } from "../latin/analyze";
 import { LToken } from "../latin/generate";
 import { describe } from "../latin/check";
@@ -21,7 +21,7 @@ function tooltip(a?: Analysis): string | undefined {
   return `${a.entry.en}: ${describe(a)}`;
 }
 
-export function Word({ text, analysis, blank, whole, plain }: { text: string; analysis?: Analysis; blank?: boolean; whole?: boolean; plain?: boolean }) {
+export function Word({ text, analysis, blank, whole, plain, gap }: { text: string; analysis?: Analysis; blank?: boolean; whole?: boolean; plain?: boolean; gap?: ComponentChildren }) {
   const a = analysis;
   if (blank && whole) {
     return (
@@ -38,10 +38,11 @@ export function Word({ text, analysis, blank, whole, plain }: { text: string; an
   const cap = text[0] !== stem[0] && text[0]?.toLowerCase() === stem[0];
   const s = cap ? capitalize(stem) : stem;
   if (blank) {
+    // the ending is typed right here when the page gives a box for it
     return (
-      <span class="w" title="fill in the ending">
+      <span class={`w${gap ? " gap-word" : ""}`} title={gap ? undefined : "fill in the ending"}>
         {show(s)}
-        <span class="blank">?</span>
+        {gap ?? <span class="blank">?</span>}
       </span>
     );
   }
@@ -61,13 +62,13 @@ export function Word({ text, analysis, blank, whole, plain }: { text: string; an
 }
 
 /** A generated sentence, word by word. */
-export function LatinTokens({ tokens, blank, whole, plain, period = true, cap = true, cls = "" }: { tokens: LToken[]; blank?: number; whole?: boolean; plain?: boolean; period?: boolean; cap?: boolean; cls?: string }) {
+export function LatinTokens({ tokens, blank, whole, plain, period = true, cap = true, cls = "", gap }: { tokens: LToken[]; blank?: number; whole?: boolean; plain?: boolean; period?: boolean; cap?: boolean; cls?: string; gap?: ComponentChildren }) {
   return (
     <span class={`latin ${plain ? "plain" : ""} ${cls}`} lang="la">
       {tokens.map((t, i) => (
         <Fragment key={i}>
           {i > 0 && " "}
-          <Word text={i === 0 && cap ? capitalize(t.text) : t.text} analysis={t.analysis} blank={i === blank} whole={whole} plain={plain} />
+          <Word text={i === 0 && cap ? capitalize(t.text) : t.text} analysis={t.analysis} blank={i === blank} whole={whole} plain={plain} gap={i === blank ? gap : undefined} />
         </Fragment>
       ))}
       {period && "."}

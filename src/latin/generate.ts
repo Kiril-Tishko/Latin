@@ -95,6 +95,47 @@ export interface Clause {
 
 const MOTION = new Set(["ambulo", "fugito", "porto"]);
 
+// ----------------------------------------------------------- what makes sense
+
+/** What gods don't do in a sensible sentence: study, write letters, run away. */
+const NOT_DIVINE = new Set(["disco", "studeo", "laboro", "lego", "scribo", "fugito", "doceo", "aro", "respondeo", "finio", "credo", "struo", "texo"]);
+/** Where one flees to: away into the forest or over to an island, not into a school. */
+const REFUGES = new Set(["silva", "insula", "creta"]);
+/** Places you can't walk to: an island. Nor into the earth. */
+const NOT_ON_FOOT = new Set(["insula", "creta", "terra"]);
+/** Where one lives: in a forest, on an island, on earth; the gods on Olympus. */
+const HOMES = new Set(["silva", "insula", "creta", "terra", "olympus"]);
+const divine = (n?: NounEntry) => !!n?.tags.includes("divine");
+
+/**
+ * The checks a sensible sentence passes (silliness 0): gods live on Olympus and
+ * watch the earth but don't go to school; people don't live on Olympus; you
+ * flee into a forest, not into a school; you don't walk to an island.
+ */
+export function makesSense(c: Clause): boolean {
+  const nps = c.subj.kind === "np" ? [c.subj.np] : c.subj.kind === "coord" ? c.subj.nps : [];
+  const gods = nps.filter((np) => divine(np.noun)).length;
+  if (gods && gods < nps.length) return false; // "the god and the friend work"
+  const godly = gods > 0;
+  if (godly && (NOT_DIVINE.has(c.verb.id) || (c.inf && NOT_DIVINE.has(c.inf.verb.id)))) return false;
+  if (c.pred?.np && (godly || divine(c.pred.np.noun) || c.pred.np.noun.tags.includes("group"))) return false; // "the goddess is a poet", "you are a family"
+  // a poet already writes
+  if (c.inf?.verb.id === "scribo" && ((c.verb.id === "disco" && c.subj.kind === "np" && c.subj.np.noun.id === "poeta") || (c.verb.id === "doceo" && c.obj?.noun.id === "poeta"))) return false;
+  const place = c.pp?.np.noun;
+  if (place) {
+    if (place.id === "olympus" && !godly) return false;
+    if (godly && !HOMES.has(place.id)) return false; // gods keep to Olympus, forests, islands and the earth
+    if (c.pp!.case === "abl") {
+      if (!doneAt(place, c.verb)) return false;
+    } else {
+      if (c.verb.id === "fugito" && !REFUGES.has(place.id)) return false;
+      if (c.verb.id === "ambulo" && NOT_ON_FOOT.has(place.id)) return false;
+      if (place.id === "terra") return false;
+    }
+  }
+  return true;
+}
+
 const pnOf = (person: 1 | 2 | 3, num: Num) => `${person}${num}` as PN;
 
 // ------------------------------------------------------ what is usable
@@ -168,6 +209,18 @@ function takeExtra(k: Knowledge, r: Rand, skills: string[], normal: number): boo
 }
 
 const isPerson = (n: NounEntry) => n.tags.includes("person") || n.tags.includes("animal");
+/** What a person may have as "my": a friend, a book, my school; not "my moon" or "my farmer". */
+const mine = (n: NounEntry) => RELATIONS.has(n.id) || (physical(n) && !n.tags.includes("nature")) || n.id === "schola";
+/** Things that are someone's: the poet's letter, the farmer's wine, the student's sword (not "the teacher's yoke"). */
+const OWNED = new Set(["writing", "drink", "weapon", "tool", "story"]);
+/** People who are someone's: a friend, a student, a teacher. */
+const RELATIONS = new Set(["amicus", "amica", "discipulus", "discipula", "magistra", "familia"]);
+/** Whose a student or a teacher is: the teacher's student, the girl's teacher (not the student's student). */
+const OWNERS: Record<string, string[]> = {
+  discipulus: ["magistra", "poeta"],
+  discipula: ["magistra", "poeta"],
+  magistra: ["discipulus", "discipula", "puella", "amicus", "amica"],
+};
 const isHuman = (n: NounEntry) => n.tags.includes("person");
 /** Who does things: people, and (when silliness is allowed) animals too. */
 const agent = (k: Knowledge) => (k.silly === 0 ? isHuman : isPerson);
@@ -178,8 +231,14 @@ const takesObject = (k: Knowledge, v: VerbEntry) => !!v.trans && !(k.silly === 0
 export const adjFits = (a: AdjEntry, tags: string[]) =>
   !a.tags.length ||
   (a.tags.some((t) => tags.includes(t)) &&
-    (!tags.includes("mass") || a.tags.includes("mass")) && // wine is not "long"
+    (!tags.includes("mass") || a.tags.includes("mass") || (tags.includes("abstract") && a.tags.includes("abstract"))) && // wine is not "long"; life can be beautiful
     (!tags.includes("nature") || tags.includes("place") || a.tags.includes("nature") || a.tags.includes("plant"))); // nor is the wind
+/** "I am alone", not "the alone girl". */
+const PREDICATE_ONLY = new Set(["solus", "vivus"]);
+/** "much water", not "the water is much". */
+const ATTRIBUTE_ONLY = new Set(["multus", "totus"]);
+/** Needs words not taught yet ("full of …"): only in the dictionary's own examples. */
+const NEVER = new Set(["plenus", "placeo", "creo", "multus", "totus"]);
 const isThing = (n: NounEntry) => !isPerson(n);
 const isPlace = (n: NounEntry) => n.tags.includes("place");
 
@@ -199,21 +258,40 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
   const noun = pick(r, pool);
   const np: NP = { noun, case: o.case, num: o.num };
   if (takeExtra(k, r, ["adj.agree", "adj.gender"], o.adjChance ?? 0.3)) {
-    let adjs = k.adjs.filter((a) => adjUsable(k, a, noun, o.case, o.num) && !(noun.proper && a.id === "meus"));
+    // a name takes what suits it (pulchra or timida Eurōpa, pulchra Crēta), never "big Europa" or "my Europa"
+    const personal = (a: AdjEntry) => a.tags.length > 0 && a.tags.every((t) => t === "person" || t === "animal"); // timidus
+    const fitsName = (a: AdjEntry) => a.id === "pulcher" || (isHuman(noun) && personal(a));
+    let adjs = k.adjs.filter(
+      (a) =>
+        adjUsable(k, a, noun, o.case, o.num) &&
+        !(noun.proper && a.id === "meus") &&
+        !(k.silly === 0 && noun.proper && !fitsName(a)) &&
+        // "my friend", "my book"; not "my farmer"; and no timid gods
+        !(k.silly === 0 && a.id === "meus" && !mine(noun)) &&
+        !(k.silly === 0 && a.id === "timidus" && divine(noun)) &&
+        !PREDICATE_ONLY.has(a.id) &&
+        !NEVER.has(a.id),
+    );
     if (!chance(r, k.silly * 0.5)) {
       const fitting = adjs.filter((a) => adjFits(a, noun.tags));
-      if (fitting.length) adjs = fitting;
+      // sensible: an adjective that suits the noun, or none at all
+      if (fitting.length || k.silly === 0) adjs = fitting;
     }
     if (adjs.length) {
       np.adj = pick(r, adjs);
       np.adjFirst = np.adj.id === "meus" ? false : chance(r, 0.5);
     }
   }
-  if (np.adj?.id !== "meus" && k.skills.has("s.gen") && takeExtra(k, r, ["s.gen"], o.possChance ?? 0.2)) {
+  // whose: people own things and places, and are friends, students or teachers of someone (not "the poet's farmer", "the bull's student")
+  const ownable = isPlace(noun) || noun.id === "vita" || noun.tags.some((t) => OWNED.has(t));
+  const owned = k.silly > 0 || (!noun.proper && (isHuman(noun) ? RELATIONS.has(noun.id) : ownable));
+  if (owned && np.adj?.id !== "meus" && k.skills.has("s.gen") && takeExtra(k, r, ["s.gen"], o.possChance ?? 0.2)) {
+    const owner = OWNERS[noun.id];
     const poss = makeNP(k, r, {
       case: "gen",
       num: "sg",
-      prefer: isPerson,
+      prefer: k.silly === 0 ? isHuman : isPerson,
+      require: k.silly === 0 && owner ? (n) => owner.includes(n.id) : undefined,
       exclude: [noun.id, ...(o.exclude ?? [])],
       adjChance: 0,
       possChance: 0,
@@ -226,17 +304,26 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
   return np;
 }
 
-function makeSubject(
-  k: Knowledge,
-  r: Rand,
-  o: { allowPron?: boolean; allowPlural?: boolean; allowNemo?: boolean; possChance?: number; anyNoun?: boolean; adjChance?: number } = {},
-) {
+interface SubjectOpts {
+  allowPron?: boolean;
+  allowPlural?: boolean;
+  allowNemo?: boolean;
+  possChance?: number;
+  anyNoun?: boolean;
+  adjChance?: number;
+  /** Only these nouns may be the subject (gods on Olympus); ego, tū and nēmō only if `people`. */
+  who?: (n: NounEntry) => boolean;
+  people?: boolean;
+}
+
+function makeSubject(k: Knowledge, r: Rand, o: SubjectOpts = {}) {
   type Opt = { w: number; build: () => { subj: Subject; person: 1 | 2 | 3; num: Num; skills: string[] } | null };
+  if (o.people === false) o = { ...o, allowPron: false, allowNemo: false };
   const opts: Opt[] = [
     {
       w: 6,
       build: () => {
-        const np = makeNP(k, r, { case: "nom", num: "sg", prefer: o.anyNoun ? undefined : agent(k), possChance: o.possChance, adjChance: o.adjChance, sillyScale: 0.5 });
+        const np = makeNP(k, r, { case: "nom", num: "sg", prefer: o.anyNoun ? undefined : agent(k), require: o.who, possChance: o.possChance, adjChance: o.adjChance, sillyScale: 0.5 });
         return np && { subj: { kind: "np", np }, person: 3, num: "sg", skills: ["s.sv", ...npSkills(np)] };
       },
     },
@@ -246,7 +333,7 @@ function makeSubject(
     opts.push({
       w: pluralW,
       build: () => {
-        const np = makeNP(k, r, { case: "nom", num: "pl", prefer: agent(k), possChance: 0, sillyScale: 0.5 });
+        const np = makeNP(k, r, { case: "nom", num: "pl", prefer: agent(k), require: o.who, possChance: 0, sillyScale: 0.5 });
         return np && { subj: { kind: "np", np }, person: 3, num: "pl", skills: ["s.sv", "s.pl", ...npSkills(np)] };
       },
     });
@@ -255,9 +342,9 @@ function makeSubject(
       opts.push({
         w: coordW,
         build: () => {
-          const a = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), adjChance: 0.15, possChance: 0, sillyScale: 0.5 });
+          const a = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), require: o.who, adjChance: 0.15, possChance: 0, sillyScale: 0.5 });
           if (!a) return null;
-          const b = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), adjChance: 0.15, possChance: 0, exclude: [a.noun.id], sillyScale: 0.5 });
+          const b = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), require: o.who, adjChance: 0.15, possChance: 0, exclude: [a.noun.id], sillyScale: 0.5 });
           return b && { subj: { kind: "coord", nps: [a, b] }, person: 3, num: "pl", skills: ["s.sv", "s.pl", "s.et", ...npSkills(a), ...npSkills(b)] };
         },
       });
@@ -290,42 +377,51 @@ function makeSubject(
 }
 
 // What a verb sensibly acts on, by noun tags (silly sentences ignore it sometimes).
-const physical = (n: NounEntry) => isThing(n) && !n.tags.some((t) => t === "place" || t === "building" || t === "body" || t === "abstract");
+const physical = (n: NounEntry) =>
+  isThing(n) && !n.tags.some((t) => t === "place" || t === "building" || t === "body" || t === "abstract" || t === "unseen" || t === "light" || t === "creature");
 /** Things with a shape: you break a sword, not the water. */
 const solid = (n: NounEntry) => physical(n) && !n.tags.includes("mass");
 /** Things you can pick up: not the wind or the smoke, but water, a rose, a book. */
 const portable = (n: NounEntry) => physical(n) && (!n.tags.includes("nature") || n.tags.includes("drink") || n.tags.includes("plant"));
 /** What can be seen or watched: a number, a shape, a play; not "life" itself. */
-const visible = (n: NounEntry) => !(n.tags.includes("abstract") && n.tags.includes("mass")) && !n.tags.includes("unseen");
+const visible = (n: NounEntry) => !(n.tags.includes("abstract") && n.tags.includes("mass")) && !n.tags.includes("unseen") && !n.tags.includes("body"); // not "I see the eye"
 const tagged = (tag: string) => (n: NounEntry) => n.tags.includes(tag);
 /** Verbs that need an object or a place to make sense on their own: not "I see on Olympus", "learns to live". */
 const NEEDS_MORE = new Set(["video", "sentio", "audio", "habito"]);
+/** What one learns or teaches to do: to write, to sing; not "teaches the student to flee" or "learns to sleep". */
+const LEARNABLE = new Set(["scribo", "lego", "laboro", "doceo", "canto", "aro", "texo", "respondeo", "struo"]);
+/** Who is taught: students, a girl, a friend, a farmer (the Lesson II story); not a teacher, a poet or a god. */
+const PUPILS = new Set(["discipula", "discipulus", "puella", "amica", "amicus", "agricola", "femina", "europa"]);
 
+const none = () => false;
 const OBJECTS: Record<string, (n: NounEntry) => boolean> = {
   lego: tagged("writing"),
   scribo: tagged("writing"),
-  dico: tagged("writing"),
+  dico: tagged("story"), // says a word, tells a story
+  aro: (n) => n.id === "terra" || n.id === "campus", // ploughs the land, a field; not the forest
+  duco: (n) => isPerson(n) && !n.tags.includes("divine"),
   finio: tagged("writing"),
-  credo: tagged("writing"), // believes the story (a person would be dative)
-  respondeo: tagged("writing"),
-  canto: tagged("writing"),
+  credo: tagged("story"), // believes the story (a person would be dative)
+  respondeo: none, // answers someone: dative, later
+  canto: none, // sings (a song is a later word)
+  texo: none,
   porto: portable,
   iacio: (n) => portable(n) && solid(n),
-  mitto: portable,
+  mitto: (n) => (physical(n) && n.tags.includes("writing")) || n.id === "donum" || n.id === "praemium", // a letter, a book, a gift
   teneo: portable,
-  traho: portable,
+  traho: (n) => (solid(n) && !n.tags.includes("writing")) || n.tags.includes("animal"), // a sword, a bull; not a letter
   cupio: portable,
-  habeo: (n) => portable(n) || isHuman(n),
+  habeo: (n) => portable(n) || (isHuman(n) && !n.tags.includes("divine") && !n.proper),
   tango: solid,
   moveo: solid,
   rumpo: solid,
   deleo: solid,
-  creo: solid,
-  struo: solid,
-  texo: solid,
-  sentio: (n) => physical(n) || n.tags.includes("nature"),
+  creo: (n) => n.tags.includes("building") || n.tags.includes("story"),
+  struo: tagged("building"), // a school, a theatre; not a sword
+  sentio: (n) => (n.tags.includes("nature") && !n.tags.includes("place")) || n.tags.includes("light") || n.tags.includes("weather"), // the wind, the water, a ray
   video: visible,
-  specto: (n) => visible(n) && !n.tags.includes("mass"), // you watch a girl or a bull, not the wine
+  specto: (n) =>
+    (isPerson(n) || isPlace(n) || n.tags.some((t) => t === "nature" || t === "sky" || t === "creature")) && !n.tags.includes("drink") && !n.tags.includes("unseen"), // a girl, a bull, the forest, the moon; not a book, the wine or the wind
   amo: (n) => isPerson(n) || n.tags.includes("plant") || n.tags.includes("drink") || n.tags.includes("abstract"),
   audio: isPerson,
   voco: isHuman,
@@ -333,26 +429,53 @@ const OBJECTS: Record<string, (n: NounEntry) => boolean> = {
   doceo: isHuman,
   desidero: isHuman,
   transformo: isPerson,
-  duco: isPerson,
-  terreo: isPerson,
+  terreo: (n) => isPerson(n) && !n.tags.includes("divine"),
   cognosco: (n) => isHuman(n) || isPlace(n),
   peto: (n) => isPlace(n) || portable(n),
-  aro: (n) => isPlace(n) && n.tags.includes("nature"),
   disco: isThing,
 };
 
 function objectFor(k: Knowledge, r: Rand, verb: VerbEntry, exclude: string[], possChance?: number): NP | null {
   if (verb.id === "bibo") return makeNP(k, r, { case: "acc", num: "sg", require: tagged("drink"), exclude, adjChance: 0.15, possChance });
-  return makeNP(k, r, { case: "acc", num: "sg", prefer: OBJECTS[verb.id], exclude, possChance });
+  const fits = OBJECTS[verb.id];
+  return makeNP(k, r, { case: "acc", num: "sg", ...(k.silly === 0 && fits ? { require: fits } : { prefer: fits }), exclude, possChance });
 }
 
-const placeNoun = (k: Knowledge, r: Rand, c: Case, exclude: string[]) =>
-  makeNP(k, r, { case: c, num: "sg", prefer: isPlace, exclude, adjChance: 0.2, possChance: 0.05, sillyScale: 0.3 });
+function placeNoun(k: Knowledge, r: Rand, c: Case, exclude: string[]) {
+  // a place whose ending is the one being practised (in Olympō for -ō), when there is one
+  const wanted = (n: NounEntry) => isPlace(n) && !!k.focus?.includes(nounSkill(n.decl, c, "sg"));
+  const focused = k.nouns.some((n) => wanted(n) && nounUsable(k, n, c, "sg") && !exclude.includes(n.id));
+  return makeNP(k, r, { case: c, num: "sg", prefer: focused ? wanted : isPlace, require: (n) => !n.tags.includes("vague"), exclude, adjChance: 0.2, possChance: 0.05, sillyScale: 0.3 });
+}
+
+/** What one does at a place: on the land you work or sleep, not read; at school you don't live or drink. */
+function doneAt(place: NounEntry, v: VerbEntry): boolean {
+  if (v.id === "fugito") return false; // "flees in the forest": fleeing goes somewhere
+  if (v.id === "habito" || v.id === "vivo") return HOMES.has(place.id); // not "lives in the theatre"
+  if (place.id === "terra") return ["laboro", "dormio", "habito", "ambulo", "sedeo", "sto", "aro", "curro"].includes(v.id);
+  if (place.id === "via") return ["ambulo", "curro", "sto", "sedeo", "laboro", "canto"].includes(v.id);
+  if (place.id === "theatrum") return ["specto", "sedeo", "canto", "sto", "video", "audio", "laboro"].includes(v.id);
+  if (v.id === "credo") return false;
+  if (["respondeo", "dico"].includes(v.id)) return place.id === "schola"; // answers in class, not in the forest
+  if (place.id === "schola") return !["habito", "bibo", "aro"].includes(v.id);
+  return true;
+}
+
+const godlike = (s: { subj: Subject }) =>
+  s.subj.kind === "np" ? divine(s.subj.np.noun) : s.subj.kind === "coord" ? s.subj.nps.every((np) => divine(np.noun)) : false;
+
+/** Who sensibly is at a place: the gods on Olympus, people (not gods) at school. */
+function whoAt(k: Knowledge, place: NounEntry): Pick<SubjectOpts, "who" | "people"> {
+  if (k.silly > 0) return {};
+  if (place.id === "olympus") return { who: (n) => divine(n), people: false };
+  if (place.id === "schola") return { who: (n) => isHuman(n) && !divine(n) };
+  return {};
+}
 
 type Template = (k: Knowledge, r: Rand) => Clause | null;
 
 const finite = (k: Knowledge, pred: (v: VerbEntry) => boolean, person: 1 | 2 | 3, num: Num) =>
-  k.verbs.filter((v) => !v.irregular && pred(v) && verbUsable(k, v, pnOf(person, num)));
+  k.verbs.filter((v) => !v.irregular && !NEVER.has(v.id) && pred(v) && verbUsable(k, v, pnOf(person, num)));
 
 function base(k: Knowledge, r: Rand, s: NonNullable<ReturnType<typeof makeSubject>>, verb: VerbEntry, more: string[]): Clause {
   const c: Clause = { subj: s.subj, person: s.person, num: s.num, verb, neg: false, skills: [...s.skills, `v.${pnOf(s.person, s.num)}`, ...more] };
@@ -396,18 +519,25 @@ const TEMPLATES: Record<string, Template> = {
     c.obj = obj;
     c.skills.push(...npSkills(obj));
     // once the endings are solid, the object sometimes leads: only the endings tell who does what
-    if (rich(k) >= 1 && s.subj.kind === "np" && chance(r, 0.3)) c.objFirst = true;
+    // (not a plural subject: "Librum amīcae vident" would read as "they see the friend's book")
+    if (rich(k) >= 1 && s.subj.kind === "np" && s.num === "sg" && chance(r, 0.3)) c.objFirst = true;
     return c;
   },
   // Where: in + ablative.
   loc: (k, r) => {
     if (!k.skills.has("s.loc")) return null;
-    const s = makeSubject(k, r, { possChance: 0.1 });
-    if (!s) return null;
-    const verbs = finite(k, (v) => v.intrans && (k.silly > 0 || !NEEDS_MORE.has(v.id) || v.id === "habito"), s.person, s.num);
-    if (!verbs.length) return null;
-    const np = placeNoun(k, r, "abl", subjectIds(s.subj));
+    // the place first, then someone who belongs there
+    const np = placeNoun(k, r, "abl", []);
     if (!np) return null;
+    const s = makeSubject(k, r, { possChance: 0.1, ...whoAt(k, np.noun) });
+    if (!s || subjectIds(s.subj).includes(np.noun.id)) return null;
+    const verbs = finite(
+      k,
+      (v) => v.intrans && (k.silly > 0 || ((!NEEDS_MORE.has(v.id) || v.id === "habito") && doneAt(np.noun, v) && !(godlike(s) && NOT_DIVINE.has(v.id)))),
+      s.person,
+      s.num,
+    );
+    if (!verbs.length) return null;
     const c = base(k, r, s, pick(r, verbs), ["s.loc"]);
     c.pp = { prep: "in", case: "abl", np };
     c.skills.push(...npSkills(np));
@@ -417,16 +547,23 @@ const TEMPLATES: Record<string, Template> = {
   motion: (k, r) => {
     const preps = [k.skills.has("s.into") && "in", k.skills.has("s.ad") && "ad"].filter(Boolean) as ("in" | "ad")[];
     if (!preps.length) return null;
-    const s = makeSubject(k, r, { possChance: 0.1 });
-    if (!s) return null;
+    // the goal first, then someone who would go there
+    const np = placeNoun(k, r, "acc", []);
+    if (!np) return null;
+    const s = makeSubject(k, r, { possChance: 0.1, ...whoAt(k, np.noun) });
+    if (!s || subjectIds(s.subj).includes(np.noun.id)) return null;
     let verbs = finite(k, (v) => MOTION.has(v.id) || v.tags.includes("motion"), s.person, s.num);
     // while the rule is new: walk or run somewhere, without carrying anything
     if (rich(k) < 0.5 && verbs.some((v) => !v.trans)) verbs = verbs.filter((v) => !v.trans);
+    // you flee into a forest or to an island, and don't walk to one
+    if (k.silly === 0) {
+      verbs = verbs.filter(
+        (v) => !(v.id === "fugito" && !REFUGES.has(np.noun.id)) && !(v.id === "ambulo" && NOT_ON_FOOT.has(np.noun.id)) && !(godlike(s) && NOT_DIVINE.has(v.id)),
+      );
+    }
     if (!verbs.length) return null;
     const verb = pick(r, verbs);
     const prep = pick(r, preps);
-    const np = placeNoun(k, r, "acc", subjectIds(s.subj));
-    if (!np) return null;
     const c = base(k, r, s, verb, [prep === "in" ? "s.into" : "s.ad"]);
     c.pp = { prep, case: "acc", np };
     c.skills.push(...npSkills(np));
@@ -453,10 +590,10 @@ const TEMPLATES: Record<string, Template> = {
     if (useAdj) {
       const holder: NounEntry =
         s.subj.kind === "np" ? s.subj.np.noun : ({ decl: gender === "f" ? "1" : "2", gender } as NounEntry);
-      let adjs = k.adjs.filter((a) => a.id !== "meus" && adjUsable(k, a, holder, "nom", "sg"));
+      let adjs = k.adjs.filter((a) => a.id !== "meus" && !ATTRIBUTE_ONLY.has(a.id) && !NEVER.has(a.id) && adjUsable(k, a, holder, "nom", "sg"));
       if (!chance(r, k.silly * 0.5)) {
         const fitting = adjs.filter((a) => adjFits(a, s.subj.kind === "np" ? s.subj.np.noun.tags : ["person"]));
-        if (fitting.length) adjs = fitting;
+        if (fitting.length || k.silly === 0) adjs = fitting;
       }
       if (!adjs.length) return null;
       c.pred = { adj: pick(r, adjs), gender, predFirst: chance(r, 0.6) };
@@ -492,7 +629,7 @@ const TEMPLATES: Record<string, Template> = {
     if (!possum) return null;
     const s = makeSubject(k, r, { allowPlural: false, possChance: 0.1 });
     if (!s || !verbUsable(k, possum, pnOf(s.person, s.num))) return null;
-    const infs = k.verbs.filter((v) => !v.irregular && (k.silly > 0 || v.id !== "habito"));
+    const infs = k.verbs.filter((v) => !v.irregular && !NEVER.has(v.id) && (k.silly > 0 || (v.id !== "habito" && v.id !== "vivo")));
     if (!infs.length) return null;
     const inf = pick(r, infs);
     const c = base(k, r, s, possum, ["v.possum", "s.inf", "v.inf"]);
@@ -515,13 +652,15 @@ const TEMPLATES: Record<string, Template> = {
     const verbs = finite(k, (v) => v.id === "disco" || v.id === "doceo", s.person, s.num);
     if (!verbs.length) return null;
     const verb = pick(r, verbs);
-    const infs = k.verbs.filter((v) => !v.irregular && v.intrans && v.id !== verb.id && (k.silly > 0 || !NEEDS_MORE.has(v.id)));
+    const infs = k.verbs.filter((v) => !v.irregular && v.intrans && v.id !== verb.id && (k.silly > 0 ? !NEEDS_MORE.has(v.id) : LEARNABLE.has(v.id)));
     if (!infs.length) return null;
     const c = base(k, r, s, verb, ["s.inf", "v.inf"]);
     c.inf = { verb: pick(r, infs) };
     if (verb.id === "doceo") {
       if (!k.skills.has("s.svo")) return null;
-      const obj = makeNP(k, r, { case: "acc", num: "sg", prefer: agent(k), exclude: subjectIds(s.subj), possChance: 0 });
+      // people are taught; not a goddess or a letter
+      const pupil = k.silly === 0 ? (n: NounEntry) => PUPILS.has(n.id) : agent(k);
+      const obj = makeNP(k, r, { case: "acc", num: "sg", prefer: pupil, exclude: subjectIds(s.subj), possChance: 0 });
       if (!obj) return null;
       c.obj = obj;
       c.skills.push("s.svo", ...npSkills(obj));
@@ -564,6 +703,7 @@ export function generate(k0: Knowledge, r: Rand, focus: string[] = [], templates
       if (fails[name] >= 6) alive = alive.filter((t) => t !== name);
       continue;
     }
+    if (k.silly === 0 && !makesSense(c)) continue;
     c.template = name;
     const hits = focus.filter((f) => c.skills.includes(f)).length;
     const score = hits + r() * 0.5;
@@ -634,6 +774,37 @@ function npTokens(np: NP, role: "subj" | "obj" | "pred" | "pp"): LToken[] {
   return out;
 }
 
+const NOUNISH = /^(subj|obj|pred|pp)(-adj)?$/;
+const groupOf = (t?: LToken) => (t && NOUNISH.test(t.role) ? t.role.replace("-adj", "") : null);
+
+/**
+ * A genitive between two nouns could belong to either ("Puella deae epistulam
+ * scrībit": the goddess's girl, or the goddess's letter?). Moves it to the far
+ * side of its own noun: "Puella epistulam deae scrībit".
+ */
+export function untangle(out: LToken[]): LToken[] {
+  for (let i = 1; i < out.length - 1; i++) {
+    const t = out[i];
+    if (!t.role.endsWith("-poss")) continue;
+    const own = t.role.slice(0, -"-poss".length);
+    const left = groupOf(out[i - 1]);
+    const right = groupOf(out[i + 1]);
+    if (!left || !right || left === right) continue;
+    if (right === own) {
+      out.splice(i, 1);
+      let j = i;
+      while (j < out.length && groupOf(out[j]) === own) j++;
+      out.splice(j, 0, t);
+    } else if (left === own) {
+      out.splice(i, 1);
+      let j = i - 1;
+      while (j >= 0 && groupOf(out[j]) === own) j--;
+      out.splice(j + 1, 0, t);
+    }
+  }
+  return out;
+}
+
 /** The sentence in Latin, word by word, in a natural order (verb last). */
 export function latinTokens(c: Clause, k: Knowledge): LToken[] {
   const out: LToken[] = [];
@@ -672,7 +843,7 @@ export function latinTokens(c: Clause, k: Knowledge): LToken[] {
     // nōn stays right before est: "Poēta nōn est puella" / "Poēta puella nōn est"
     if (c.pred.predFirst) out.push(...pred, ...neg, verb);
     else out.push(...neg, verb, ...pred);
-    return out;
+    return untangle(out);
   }
   if (c.inf) {
     if (c.inf.obj && c.verb.id !== "doceo") out.push(...npTokens(c.inf.obj, "obj"));
@@ -681,7 +852,7 @@ export function latinTokens(c: Clause, k: Knowledge): LToken[] {
   if (c.adv === "bene") out.push(fixedToken(k, "bene", "adv", "bene"));
   if (c.neg) out.push(fixedToken(k, "non", "neg", "nōn"));
   out.push(verb);
-  return out;
+  return untangle(out);
 }
 
 export function latinText(tokens: LToken[]): string {

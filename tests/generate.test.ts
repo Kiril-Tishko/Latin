@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { english, generate, latinText, latinTokens, seeded, TEMPLATE_NAMES } from "../src/latin/generate";
+import { english, generate, latinText, latinTokens, makesSense, seeded, TEMPLATE_NAMES } from "../src/latin/generate";
 import { normalizeEnglish } from "../src/latin/english";
 import { buildKnowledge } from "../src/trainer/knowledge";
 import { SKILL_BY_ID } from "../src/latin/skills";
@@ -60,6 +60,58 @@ describe("sentence generator", () => {
     for (let seed = 1; seed <= 40; seed++) {
       const c = generate(ALL, seeded(seed * 7919));
       if (c) lines.push(`${latinText(latinTokens(c, ALL)).padEnd(52)} ${english(c, ALL).text}`);
+    }
+    console.log(lines.join("\n"));
+  });
+});
+
+describe("sensible sentences (from the learner's own questions)", () => {
+  const sensible = buildKnowledge([1, 2, 3, 4], [], 0);
+  const many = (n = 1500) =>
+    Array.from({ length: n }, (_, i) => generate(sensible, seeded(i + 1))).filter((c): c is NonNullable<typeof c> => !!c);
+
+  it("teaches and learns only what can be learned: to write, to read; not to flee or to sleep", () => {
+    const odd: string[] = [];
+    for (const c of many()) {
+      if (!c.inf || (c.verb.id !== "disco" && c.verb.id !== "doceo")) continue;
+      if (["dormio", "fugito", "bibo", "habito", "specto", "video", "desidero", "sedeo"].includes(c.inf.verb.id)) odd.push(english(c, sensible).text);
+      if (c.verb.id === "doceo" && c.obj && (c.obj.noun.tags.includes("divine") || !c.obj.noun.tags.includes("person"))) odd.push(english(c, sensible).text);
+    }
+    expect(odd).toEqual([]);
+  });
+
+  it("never puts a genitive between two nouns (Puella deae epistulam scrībit)", () => {
+    const nounish = (r?: string) => !!r && /^(subj|obj|pred|pp)(-adj)?$/.test(r);
+    const tangled: string[] = [];
+    for (const c of many()) {
+      const t = latinTokens(c, sensible);
+      t.forEach((tok, i) => {
+        if (!tok.role.endsWith("-poss")) return;
+        const l = t[i - 1]?.role.replace("-adj", "");
+        const r = t[i + 1]?.role.replace("-adj", "");
+        if (nounish(l) && nounish(r) && l !== r) tangled.push(latinText(t));
+      });
+    }
+    expect(tangled).toEqual([]);
+  });
+
+  it("gives a name only what suits a person: pulchra or timida Eurōpa, not big Europa", () => {
+    const odd: string[] = [];
+    for (const c of many()) {
+      const nps = [c.subj.kind === "np" ? c.subj.np : null, c.obj, c.pp?.np, c.pred?.np].filter(Boolean);
+      for (const np of nps) if (np!.noun.proper && np!.adj && !["pulcher", "timidus"].includes(np!.adj.id)) odd.push(english(c, sensible).text);
+    }
+    expect(odd).toEqual([]);
+  });
+
+  it("keeps gods on Olympus and people in school: every sentence makes sense", () => {
+    const odd = many().filter((c) => !makesSense(c)).map((c) => english(c, sensible).text);
+    expect(odd).toEqual([]);
+    const rich = buildKnowledge([1, 2, 3, 4], [], 0);
+    const lines: string[] = [];
+    for (let seed = 2000; seed < 2040; seed++) {
+      const c = generate(rich, seeded(seed), [], ["loc", "motion", "learnTo", "est"]);
+      if (c) lines.push(`${latinText(latinTokens(c, rich)).padEnd(52)} ${english(c, rich).text}`);
     }
     console.log(lines.join("\n"));
   });

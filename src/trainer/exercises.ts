@@ -81,6 +81,8 @@ export interface Exercise {
   tiles?: string[];
   /** A sentence from the video of this lesson. */
   video?: number;
+  /** A sentence from this story (its title). */
+  story?: string;
   /** The mistake (its time) this exercise brings back in "Fix my mistakes". */
   fixes?: number;
   /** Another exercise on the same material, for a wrong answer to come back to. */
@@ -546,7 +548,8 @@ function verbFormExercise(ctx: Ctx, skillId: string): Exercise | null {
   let key: VerbKey;
   let label: string;
   if (skillId === "v.inf") {
-    const pool = ctx.k.verbs.filter((v) => !v.irregular);
+    // from the tū form, whose vowel decides the infinitive (from discō alone it can't be known)
+    const pool = ctx.k.verbs.filter((v) => !v.irregular && verbUsable(ctx.k, v, "2sg"));
     if (!pool.length) return null;
     verb = pick(ctx.r, pool);
     key = "inf";
@@ -569,14 +572,19 @@ function verbFormExercise(ctx: Ctx, skillId: string): Exercise | null {
   }
   const form = conjugate(verb)[key]!;
   const expected = full(form);
-  const shown = key === "inf" ? verb.pp[0] : full(conjugate(verb).inf!);
+  const shown = key === "inf" ? full(conjugate(verb)["pres.2sg"]!) : full(conjugate(verb).inf!);
   const token: LToken = { text: expected, role: "verb", analysis: { entry: verb, key, form }, skill: skillId };
+  // the hints never spell out the answer
+  const hints =
+    key === "inf"
+      ? ["The vowel before -s gives the infinitive: -ās → -āre, -ēs → -ēre, -īs → -īre, a short -is → -ere.", `${shown} = you ${verb.en}`]
+      : [SKILL_BY_ID.get(skillId)?.hint ?? "", `${shown} = to ${verb.irregular === "possum" ? "be able (can)" : verb.en}`];
   return {
     id: nextId(),
     kind: "form",
     instruction: KIND_LABEL.form,
     ask: `${shown} → ${label}`,
-    hints: [SKILL_BY_ID.get(skillId)?.hint ?? "", `${dictionaryForm(verb)}: ${verb.en}`],
+    hints,
     answer: "la",
     skills: [skillId],
     words: [verb.id],
@@ -676,7 +684,7 @@ const TRANSFORMS: Transform[] = [
   },
   {
     name: "negate",
-    instruction: "Make it negative (add 'not').",
+    instruction: "Make it negative (add nōn, 'not').",
     skill: "s.non",
     apply: (c, k) => (c.neg || !k.skills.has("s.non") || c.subj.kind === "nemo" ? null : { ...c, neg: true, skills: [...c.skills, "s.non"] }),
   },

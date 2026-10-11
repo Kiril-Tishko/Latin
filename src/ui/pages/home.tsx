@@ -6,9 +6,11 @@ import { nextCard } from "../../trainer/discover";
 import { mastery, streak, todayDone } from "../../trainer/progress";
 import { mistakesToFix, readiness } from "../../trainer/session";
 import { dueWords } from "../../trainer/srs";
+import { nextStory } from "../../trainer/stories";
 import { openAsk } from "../ask";
 import { CardBack, Icon, Laurel, Mosaic } from "../components";
 import { LatinText } from "../latin";
+import { Inline } from "../markup";
 import { go } from "../nav";
 import { Speak } from "../speak";
 import { derived, useProgress } from "../store";
@@ -234,10 +236,13 @@ export function Home() {
               <Mosaic value={lessonMastery(l.n, p.skills)} thin />
             </div>
           ))}
-          <div>
-            <button class="linkish" onClick={() => go({ page: "english" })}>Extra: Latin in English</button>
+          <div class="row">
+            <button class="linkish" onClick={() => go({ page: "stories" })}>Short stories</button>
+            <button class="linkish" onClick={() => go({ page: "english" })}>Latin in English</button>
           </div>
         </section>
+
+        <StoryPanel />
       </div>
 
       <section class="row">
@@ -246,5 +251,36 @@ export function Home() {
         </button>
       </section>
     </div>
+  );
+}
+
+/** The next story of the step, to read today. */
+function StoryPanel() {
+  const p = useProgress();
+  const story = nextStory(p);
+  return (
+    <section class="panel story-panel span-2" data-ask="A story to read">
+      <div class="stack" style={{ gap: "4px" }}>
+        <span class="eyebrow">Fābula{story ? ` · Gradus ${roman(story.step)}` : ""}</span>
+        {story ? (
+          <>
+            <span>
+              <LatinText text={story.title} cls="latin-lg" /> <span class="muted" style={{ marginLeft: "6px" }}>{story.en}</span>
+            </span>
+            <span class="small"><Inline text={story.notice} /></span>
+          </>
+        ) : (
+          <span class="muted">You have read every story of step {roman(p.focusLesson)}. Read one again, or practise their lines.</span>
+        )}
+      </div>
+      <div class="row">
+        {story && (
+          <button class="btn small" onClick={() => go({ page: "story", id: story.id })}>
+            <Icon.scroll /> Read the story
+          </button>
+        )}
+        <button class={story ? "linkish" : "btn small"} onClick={() => go({ page: "stories" })}>All stories</button>
+      </div>
+    </section>
   );
 }

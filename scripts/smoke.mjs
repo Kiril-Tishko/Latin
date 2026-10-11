@@ -96,6 +96,27 @@ async function run(name, viewport, colorScheme) {
   await p.screenshot({ path: `${out}/${name}-fix.png` });
   await p.locator(".trainer-top button", { hasText: "End" }).click();
   await p.locator("button", { hasText: "Choose another practice" }).click();
+  // every exercise says what to do; an ending or a form is typed into the sentence itself,
+  // and a sentence to change starts in the box
+  await p.locator(".mode-card", { hasText: "Endings drill" }).click();
+  let inline = 0;
+  for (let i = 0; i < 8 && !(await p.locator(".summary-head").count()); i++) {
+    await p.waitForTimeout(100);
+    if (!(await p.locator(".task-line .task-text").count())) errors.push(`${name}: an exercise without a plain task line`);
+    if (await p.locator(".gap-input").count()) {
+      inline++;
+      if (!(await p.locator(".prompt .gap-input").count())) errors.push(`${name}: the answer box is not inside the sentence`);
+      if (inline === 1) await p.screenshot({ path: `${out}/${name}-gap.png` });
+      await p.locator(".gap-input").fill("a");
+      await p.locator(".gap-input").press("Enter");
+    } else if (await p.locator(".word-btn.choice").count()) await p.locator(".word-btn.choice").first().click();
+    else break;
+    await p.waitForTimeout(120);
+    await p.locator("button", { hasText: "Next" }).click();
+  }
+  if (!inline) errors.push(`${name}: no ending or form was typed into the sentence`);
+  await p.locator(".trainer-top button", { hasText: "End" }).click().catch(() => {});
+  await p.locator("button", { hasText: "Choose another practice" }).click();
   // train: the current step (Lesson I), its rule refresher first, then three exercises
   await p.locator(nav, { hasText: "Exercitium" }).first().click();
   await p.waitForTimeout(200);
@@ -140,6 +161,9 @@ async function audio() {
     const voices = [
       { name: "Alice", lang: "it-IT", voiceURI: "alice", localService: true, default: false },
       { name: "Mónica", lang: "es-ES", voiceURI: "monica", localService: true, default: false },
+      { name: "Grandpa (Spanish (Spain))", lang: "es-ES", voiceURI: "grandpa", localService: true, default: false },
+      { name: "Milena", lang: "ru-RU", voiceURI: "milena", localService: true, default: true },
+      { name: "Samantha", lang: "en-US", voiceURI: "samantha", localService: true, default: false },
     ];
     window.__spoken = [];
     const synth = {
@@ -174,6 +198,19 @@ async function audio() {
   await p.locator("button", { hasText: "Stop" }).first().click().catch(() => {});
   const spoken = await p.evaluate(() => window.__spoken);
   if (spoken.length < 3) errors.push(`audio: listen & repeat spoke ${spoken.length} lines`);
+  // a tap on one sentence during Listen & repeat ends the sequence: only that sentence is read
+  await p.locator("button", { hasText: "Listen & repeat" }).click();
+  await p.waitForTimeout(700);
+  const n0 = (await p.evaluate(() => window.__spoken)).length;
+  await p.locator(".ex-line .speak").nth(4).click();
+  await p.waitForTimeout(3200);
+  const after = (await p.evaluate(() => window.__spoken)).slice(n0);
+  if (after.length !== 1) errors.push(`audio: after a tap on one sentence the voice read ${after.length} texts: ${JSON.stringify(after)}`);
+  // the voice list offers only the voices that suit Latin
+  await p.locator('button[aria-label^="Optiōnēs"]').click();
+  const options = await p.locator("#voice option").allTextContents();
+  if (options.length !== 3 || options.some((o) => /Milena|Samantha|Grandpa/.test(o))) errors.push(`audio: voice list ${JSON.stringify(options)}`);
+  await p.keyboard.press("Escape");
   if (!spoken.some((t) => /disquípula|maguístra/.test(t))) errors.push(`audio: no respelled Latin in ${JSON.stringify(spoken.slice(0, 3))}`);
   if (spoken.some((t) => /[àèìòù]/.test(t))) errors.push(`audio: grave accents would be spelled out: ${JSON.stringify(spoken.slice(0, 3))}`);
   await p.locator(".nav button", { hasText: "Exercitium" }).click();
@@ -437,6 +474,50 @@ async function chatScroll() {
   await ctx.close();
 }
 
+// Stories: read one (a tap on a line shows its English, a tap on a word its meaning),
+// answer its questions (the story is then read), and practise its lines.
+async function stories() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => errors.push(`stories: ${e.message}`));
+  await p.goto(`file://${page}`);
+  await p.waitForTimeout(700);
+  await p.locator(".story-panel button", { hasText: "Read the story" }).click();
+  await p.waitForTimeout(300);
+  if (!(await p.locator(".story-line").count())) errors.push("stories: the home page's story does not open");
+  await p.locator(".bottomnav button", { hasText: "Lectiōnēs" }).click();
+  await p.locator(".lesson-card", { hasText: "Fābulae" }).click();
+  await p.waitForTimeout(300);
+  if ((await p.locator(".story-card").count()) < 3) errors.push("stories: fewer than three stories for the step");
+  await p.screenshot({ path: `${out}/stories.png`, fullPage: true });
+  await p.locator(".story-card").nth(1).click();
+  await p.waitForTimeout(300);
+  await p.locator(".story-line").nth(1).click({ position: { x: 2, y: 2 } });
+  if (!((await p.locator(".story-line").nth(1).locator(".story-tr").textContent()) ?? "").trim()) errors.push("stories: a tap on a line does not show its English");
+  await p.locator(".story-line").nth(2).locator(".w").first().click();
+  if (!(await p.locator(".story-gloss").count())) errors.push("stories: a tap on a word does not show its meaning");
+  const qs = p.locator(".story-q");
+  for (let i = 0; i < (await qs.count()); i++) {
+    for (let j = 0; j < 3 && !(await qs.nth(i).locator(".q-note-right").count()); j++) {
+      await qs.nth(i).locator("button").nth(j).click();
+      await p.waitForTimeout(60);
+    }
+  }
+  if (!(await p.locator(".story-done").count())) errors.push("stories: answering the questions does not mark the story read");
+  await p.screenshot({ path: `${out}/story.png`, fullPage: true });
+  await p.locator("button", { hasText: "Practise this story" }).click();
+  await p.waitForTimeout(400);
+  if (!(await p.locator(".ex-source", { hasText: "from the story" }).count())) errors.push("stories: the practice does not come from the story");
+  await p.screenshot({ path: `${out}/story-practice.png` });
+  await p.locator(".trainer-top button", { hasText: "End" }).click();
+  await p.locator(".bottomnav button", { hasText: "Lectiōnēs" }).click();
+  await p.locator(".lesson-card", { hasText: "Fābulae" }).click();
+  await p.waitForTimeout(300);
+  if (!(await p.locator(".story-card.read").count())) errors.push("stories: the list does not show the story as read");
+  await ctx.close();
+}
+
+await stories();
 await conversations();
 await chatScroll();
 await askClaude();

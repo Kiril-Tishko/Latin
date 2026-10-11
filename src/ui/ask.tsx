@@ -113,9 +113,12 @@ How to answer:
 - A yes/no or one-word question gets one or two lines.
 - Give a longer, more open answer only when the learner asks for one ("tell me more", "explain in detail", "tell me about…") or wants to chat generally (history, culture, how a word came into English). Keep even that in short paragraphs or bullets, under about 250 words.
 - Stay inside what the learner knows (lessons, words and skills below). If you must use a word or form they have not learned, mark it "(new)" and keep it to a minimum.
-- Write every Latin word, form or sentence inside «guillemets», for example «puellam». For a form that could be read two ways, add #case.number inside the guillemets: «puellae#gen.sg», «discipulī#nom.pl». The page colors the endings.
+- Write every Latin word, form or sentence inside «guillemets», for example «puellam». For a form that could be read two ways, add #case.number inside the guillemets: «puellae#gen.sg», «discipulī#nom.pl». The page colors the endings. Use «» for Latin only: quote English, Russian and Ukrainian words with "double quotes".
 - Use **bold** only for the key point. No tables and no headings.
 - If the question is about a mistake, the bold line names the wrong ending and the right one; the bullets give the rule that decides it.
+- Be exact. The rules under "Skills learned" are this site's rules and they are correct: follow them. Check every Latin form before you write it. Never invent a grammar rule or pattern, and give only memory tricks that are true (an English relative, a real pattern). When there is no reliable way to tell (which infinitive a verb has, for example), say so plainly and suggest learning the pair («discō, discere»).
+- Easy to get wrong: an adjective agrees with its noun in gender, case and number, not in the look of the ending. «agricola» and «poēta» are masculine, so «agricola timidus», «poēta pulcher», «agricolam timidum».
+- If the learner says they are just curious, or asks about something other than the exercise, answer that alone and do not lead back to the exercise.
 - If a short drill would help, end with one final line exactly like: PRACTICE: skill-id, skill-id (1-3 ids from the skill list below). Otherwise leave that line out.
 
 Where the learner is: each question starts with a note in [square brackets] describing what was on their screen when they asked: the page or exercise, an open dialog, the part of a long page in view, and the last line or word they tapped. "Here", "this", "this sentence", "this word" or "this exercise" mean what the newest note describes; earlier questions may have been asked elsewhere. Use the note quietly: do not repeat it back. When the exercise on screen has not been answered yet, help with the rule and hints, and do not give the answer away unless the learner asks for it.
@@ -128,13 +131,13 @@ function profile(): string {
   const lessons = LESSONS.filter((l) => p.lessonsDone.includes(l.n)).map((l) => `Lesson ${l.n}: ${l.title}`);
   const skills = SKILLS.filter((s) => d.knowledge.skills.has(s.id)).map((s) => {
     const st = p.skills[s.id];
-    return `- ${s.id}: ${s.title}, mastery ${Math.round(mastery(st) * 100)}% after ${st?.seen ?? 0} tries`;
+    return `- ${s.id}: ${s.title}. ${s.hint} (mastery ${Math.round(mastery(st) * 100)}% after ${st?.seen ?? 0} tries)`;
   });
   const words = d.words.map((w) => `${dictionaryForm(w)} = ${w.en}`).join("; ");
   const mistakes = p.mistakes.slice(0, 8).map((m) => `- "${m.prompt}" | wrote: ${m.answer} | expected: ${m.expected}${m.notes.length ? ` | ${m.notes.join(" ")}` : ""}`);
   return [
     `Lessons finished: ${lessons.join("; ")}. The learner remembers the words of these lessons but has forgotten most of the rules, so practice restarted step by step from Lesson 1. Current step: Lesson ${p.focusLesson} (exercises use only the rules up to Lesson ${p.focusLesson}). Explain with the rules up to the current step unless the learner asks about later ones, and remind them of a rule plainly rather than assuming they remember it.`,
-    `Skills learned (ids for PRACTICE):\n${skills.join("\n")}`,
+    `Skills learned, with the rule as this site teaches it (ids for PRACTICE):\n${skills.join("\n")}`,
     `Words known: ${words}`,
     mistakes.length ? `Recent mistakes:\n${mistakes.join("\n")}` : "No recent mistakes recorded.",
   ].join("\n\n");

@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import { speakSequence } from "../../audio/speech";
 import { audioReady, Speak } from "../speak";
 import { Lesson, LESSONS, LESSON_BY_N, Rule, videoUrl } from "../../content/lessons";
+import { STORIES } from "../../content/stories";
 import { dictionaryForm, headword } from "../../latin/morph";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
@@ -40,6 +41,17 @@ export function Lessons() {
             </button>
           );
         })}
+        <button class="panel lesson-card" onClick={() => go({ page: "stories" })}>
+          <span class="numeral" aria-hidden="true"><Icon.scroll /></span>
+          <div class="stack" style={{ gap: "6px" }}>
+            <div class="spread">
+              <h2 style={{ fontSize: "1.3rem" }}>Fābulae: short stories</h2>
+              <span class="chip">{STORIES.filter((s) => s.step <= p.focusLesson && !p.stories[s.id]).length || "all"} {STORIES.some((s) => s.step <= p.focusLesson && !p.stories[s.id]) ? "to read" : "read"}</span>
+            </div>
+            <p class="muted small">Stories made only of the words from the videos, with the rules of your step: read, listen, answer, practise.</p>
+            <span class="small ui muted">{STORIES.length} stories, three for each step.</span>
+          </div>
+        </button>
         <button class="panel lesson-card" onClick={() => go({ page: "english" })}>
           <span class="numeral" aria-hidden="true"><Hedera /></span>
           <div class="stack" style={{ gap: "6px" }}>

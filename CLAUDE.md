@@ -69,7 +69,11 @@ Runtime capabilities used:
   below the screen, unseen, shows a "New message" button (gone once it comes
   into view; reading higher up never shows it). Answers are short and
   structured by default (a bold one-line answer, then 2-4 bullets) and longer
-  only when the learner asks (`INSTRUCTIONS` in src/ui/ask.tsx).
+  only when the learner asks (`INSTRUCTIONS` in src/ui/ask.tsx). The profile sends
+  each learned rule's own text, and the instructions forbid invented rules,
+  keep «» for Latin only and name the trap Claude once fell into (agricola
+  timidus, not timida). The learner's saved conversations can be read with
+  ArtifactData at `data/users/me/chats/threads` to see how answers land.
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
   Ask Claude conversations: one private doc each at
@@ -98,11 +102,45 @@ Lesson I.
 
 Exercise builders work on any sentence: `writeOn`, `endingOn`, `chooseOn`,
 `tilesOn`, `meaningOn` in `src/trainer/exercises.ts` take tokens and an English
-text, so generated clauses and fixed sentences share them. "Sentences from the
-videos" (`src/trainer/video.ts`) reads each lesson's sentences into tokens (role
-and ending of each word; a neuter with I / you acting is the object) and keeps
-those whose endings are within the step; a lesson page's "Practise them" runs
-one lesson. "Fix my mistakes" (`mistakesSession`): unfixed mistakes within the
+text, so generated clauses and fixed sentences share them. Fixed sentences go
+through `src/trainer/lines.ts`: `makeLine` reads one into tokens (role and ending
+of each word; a neuter with I / you acting is the object), `lineSkills` lists
+every rule it needs (its endings and its constructions: an object, "of", nōn,
+ego / tū left out, an infinitive after a verb, X est Y, in / ad + a place,
+plurals, an adjective that follows gender), and `lineExercise` builds the
+exercises. "Sentences from the videos" (`src/trainer/video.ts`) keeps the
+lesson sentences whose rules are within the step; a lesson page's "Practise
+them" runs one lesson.
+
+Every exercise shows one plain task line with a sign for how to answer (write,
+tap, type in the gap, listen, change: `taskOf` in `src/ui/pages/train.tsx`).
+Endings and forms are typed into the sentence itself (`GapInput`), a sentence to
+change starts in the answer box, and the infinitive is asked from the tū form
+(its vowel decides it: from discō alone it cannot be known). On a phone the
+round's header has two rows: what is practised, then the tesserae and
+"Exercise 3 of 12 · 2 right".
+
+Stories (`src/content/stories.ts`, pages `#stories` and `#story-<id>` in
+`src/ui/pages/stories.tsx`): three per step, each with a small plot, only
+lesson words and only the rules up to its step. `en` is the reader's English,
+`prompt` the exercise English when it must say more ("the friend (f)"), `who`
+the speaker of a dialogue line; two questions each, the right answer first.
+A tap on a line shows its English, a tap on a word its meaning; answering the
+questions marks the story read (`Progress.stories`). "Practise this story" and
+"Sentences from the stories" build rounds from the lines; Home offers the next
+unread story of the step. `tests/stories.test.ts` checks every word, long mark
+and rule, and that each exercise on each line accepts its own answer: write a
+new story, then run the tests.
+
+Sensible sentences (`silly` 0) come from rules in `src/latin/generate.ts`: what a
+verb takes (`OBJECTS`, strict when sensible), who is taught and what can be
+learned (`PUPILS`, `LEARNABLE`), whose things and people are (`OWNED`,
+`RELATIONS`, `OWNERS`, `mine` for "my"), where people and gods are and what they
+do there (`whoAt`, `doneAt`, `HOMES`, `REFUGES`, `NOT_DIVINE`, `makesSense`), and
+the word tags in `words.ts` / `deck.ts` (e.g. `long`, `unseen`, `story`). A
+genitive never stands between two nouns (`untangle`). Words whose good uses need
+care ("much water", "the school is full") get hand-made Discover examples
+(`CURATED` in `src/trainer/discover.ts`). "Fix my mistakes" (`mistakesSession`): unfixed mistakes within the
 step come back as fresh exercises of the same kind on the same rules and words;
 a right answer marks one fixed (`Mistake.fixed`), a wrong one never duplicates
 it. Home and the practice chooser show how many wait.
@@ -117,7 +155,9 @@ antepenult) is marked with an acute accent, which Spanish voices follow anywhere
 in a word. Italian gets no accent marks: Italian voices spell out an accent in
 the middle of a word (*videō* came out as "u i accento grave deo").
 `src/audio/speech.ts` picks the best Spanish voice and speaks; `speakSequence`
-drives Listen & repeat. Only Latin words reach the voice (`speakable`: reading
+drives Listen & repeat and stops as soon as anything else is read (an utterance
+cut short resolves as stopped). Only Spanish and Italian voices, without Apple's
+novelty ones (Grandpa, Bells…), are listed in Settings or ever used. Only Latin words reach the voice (`speakable`: reading
 hints go, separators such as the · of a word list become pauses), and a word's
 speaker says just the word, never its whole dictionary entry. Audio buttons are hidden when the device has no Spanish
 or Italian voice (Settings explains how to add one). The smoke test fakes an

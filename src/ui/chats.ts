@@ -18,6 +18,8 @@ export interface ChatTurn {
   screen?: { label: string; detail?: string };
   /** For a question: the learner had switched off sharing the screen. */
   noScreen?: boolean;
+  /** "fix": not the learner's question but a request to correct the last answer (the grammar check found a mistake). */
+  kind?: "fix";
 }
 
 export interface Chat {

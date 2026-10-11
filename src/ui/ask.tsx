@@ -3,15 +3,16 @@
 // when a question is asked (see screen.ts), so "here" and "this" make sense.
 // Conversations are saved (see chats.ts) and can be continued on any device;
 // what is typed in the box survives a reload.
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { LESSONS } from "../content/lessons";
+import { checkAnswer, engineFacts, Finding } from "../latin/facts";
 import { dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, SKILLS } from "../latin/skills";
 import { Exercise, Result } from "../trainer/exercises";
 import { mastery } from "../trainer/progress";
 import { Chat, ChatTurn, deleteChat, getChat, getChats, newChatId, saveChat, useChats } from "./chats";
 import { Icon, toast } from "./components";
-import { Markup } from "./markup";
+import { Inline, Markup } from "./markup";
 import { SampleFn, sampleErrorText, sampler, storage } from "./platform";
 import { currentScreen, Screen, sharedByDefault, useScreenLabel } from "./screen";
 import { derived, getProgress } from "./store";
@@ -117,6 +118,7 @@ How to answer:
 - Use **bold** only for the key point. No tables and no headings.
 - If the question is about a mistake, the bold line names the wrong ending and the right one; the bullets give the rule that decides it.
 - Be exact. The rules under "Skills learned" are this site's rules and they are correct: follow them. Check every Latin form before you write it. Never invent a grammar rule or pattern, and give only memory tricks that are true (an English relative, a real pattern). When there is no reliable way to tell (which infinitive a verb has, for example), say so plainly and suggest learning the pair («discō, discere»).
+- A question may end with [Facts from the site's grammar engine]: every Latin word in it, what each form can be, and its word's gender, group and forms. These facts are certain. Build your answer on them, never contradict them, and don't mention the note.
 - Easy to get wrong: an adjective agrees with its noun in gender, case and number, not in the look of the ending. «agricola» and «poēta» are masculine, so «agricola timidus», «poēta pulcher», «agricolam timidum».
 - If the learner says they are just curious, or asks about something other than the exercise, answer that alone and do not lead back to the exercise.
 - If a short drill would help, end with one final line exactly like: PRACTICE: skill-id, skill-id (1-3 ids from the skill list below). Otherwise leave that line out.
@@ -193,9 +195,11 @@ Learner's answer: "${answer}"
 The automatic checker said "${res.verdict}" because: ${res.issues.map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "")).join(" ") || "it did not match the accepted answers."}
 
 Decide whether the learner's answer is a correct answer. Accept any Latin word order, missing long marks, and natural English variants (articles, progressive tense, synonyms). Reject wrong endings, wrong person or number, and missing or extra meaning.
-Reply with only JSON: {"correct": true or false, "explanation": "one or two sentences; put Latin inside «guillemets»"}`;
+Reply with only JSON: {"correct": true or false, "explanation": "one or two sentences; put Latin inside «guillemets»"}
+
+${engineFacts([{ text: answer, mixed: true }, { text: ex.context, mixed: true }], derived().lexicon, derived().knowledge.skills)}`;
   try {
-    const out = await sample.json<Judgement>(prompt, { modelTier: "default" });
+    const out = await sample.json<Judgement>(prompt, { modelTier: MODEL.tier, effort: MODEL.effort });
     if (typeof out?.correct !== "boolean") return { error: "Claude's reply could not be read. Try again." };
     return { correct: out.correct, explanation: String(out.explanation ?? "") };
   } catch (e) {
@@ -208,7 +212,9 @@ Reply with only JSON: {"correct": true or false, "explanation": "one or two sent
 
 const QUICK = ["Why is this the right ending?", "Explain this rule simply", "Give me a memory trick", "Compare it with Russian or Ukrainian"];
 
-const TIER_NAME: Record<string, string> = { quick: "quick model", default: "balanced model", complex: "most capable model" };
+const TIER_NAME: Record<string, string> = { quick: "quick model", default: "balanced model, thinking harder", complex: "most capable model" };
+/** The model for explanations and checks: the balanced one at high effort (a step smarter than its default). */
+const MODEL = { tier: "default", effort: "high" } as const;
 
 /**
  * The turns Claude reads: the conversation so far (last few), the first carrying
@@ -224,8 +230,30 @@ function toMessages(chat: Chat): { role: "user" | "assistant"; content: string }
   // with sharing switched off, nothing points back at screens: no "asked on" notes, no "opened from"
   const general = !!hist[latest]?.noScreen;
   const msgs = hist.map((t, i) => ({ role: t.role, content: t.role === "user" ? questionText(t, i === latest, general) : t.content }));
+  // the grammar engine's facts about every Latin word in play: the question, the screen, the last answer
+  const facts = factsFor(hist[latest], general ? null : chat.context, hist.slice(0, latest).reverse().find((t) => t.role === "assistant"));
+  if (facts) msgs[latest] = { ...msgs[latest], content: `${msgs[latest].content}\n\n${facts}` };
   msgs[0] = { role: "user", content: [INSTRUCTIONS, profile(), general ? "" : openedFrom(chat.context, !!hist[0].screen), msgs[0].content].filter(Boolean).join("\n\n") };
   return msgs;
+}
+
+function factsFor(question: ChatTurn, context: AskContext | null, lastAnswer?: ChatTurn): string {
+  const d = derived();
+  return engineFacts(
+    [
+      { text: question.content, mixed: true },
+      ...(lastAnswer ? [{ text: lastAnswer.content, quoted: true }] : []),
+      ...(question.screen?.detail ? [{ text: question.screen.detail, mixed: true }] : []),
+      ...(context?.detail ? [{ text: context.detail, mixed: true }] : []),
+    ],
+    d.lexicon,
+    d.knowledge.skills,
+  );
+}
+
+/** A request to put right what the grammar check found in the last answer. */
+function fixRequest(found: Finding[]): string {
+  return `The site's grammar engine found a mistake in your last answer:\n${found.map((f) => `- ${f.message}`).join("\n")}\nPlease give the corrected answer, short, without apologising at length.`;
 }
 
 function when(t: number): string {
@@ -352,7 +380,7 @@ export function AskDrawer() {
     const count = b.querySelectorAll(".msg").length;
     if (glideTo.current) {
       glideTo.current = null;
-      const asked = [...b.querySelectorAll<HTMLElement>(".msg.user")].pop();
+      const asked = [...b.querySelectorAll<HTMLElement>(".msg.user, .msg-fix")].pop();
       if (asked) {
         space(0);
         const top = asked.getBoundingClientRect().top - b.getBoundingClientRect().top + b.scrollTop - 12;
@@ -411,6 +439,9 @@ export function AskDrawer() {
         cache: false,
         signal: ctl.current.signal,
         onText: ({ text }: { text: string }) => setStreaming(text),
+        // the balanced model, thinking harder before it answers: fewer slips than its usual setting
+        modelTier: MODEL.tier,
+        effort: MODEL.effort,
       });
       const { body, practice } = splitPractice(res.text);
       const latest = getChat(c.id) ?? c;
@@ -435,6 +466,16 @@ export function AskDrawer() {
       setStreaming("");
       ctl.current = null;
     }
+  }
+
+  /** Asks Claude to put right what the grammar check found in its last answer. */
+  async function fix(found: Finding[]) {
+    if (!chat || busy) return;
+    const now = Date.now();
+    const next: Chat = { ...chat, turns: [...chat.turns, { role: "user", content: fixRequest(found), at: now, kind: "fix" }], updatedAt: now };
+    glideTo.current = next.id;
+    saveChat(next);
+    await answer(next);
   }
 
   async function send(question: string) {
@@ -573,9 +614,17 @@ export function AskDrawer() {
                 </div>
               </div>
             )}
-            {turns.map((t, i) => (
+            {turns.map((t, i) =>
+              t.kind === "fix" ? (
+                <div key={i} class="msg-fix ui small muted" role="note">
+                  <Icon.repeat /> Asked Claude to correct the answer
+                </div>
+              ) : (
               <div key={i} class={`msg ${t.role}`}>
                 {t.role === "assistant" ? <Markup text={t.content} /> : <span class="msg-text">{t.content}</span>}
+                {t.role === "assistant" && (
+                  <GrammarCheck text={t.content} canFix={i === turns.length - 1 && !busy} onFix={(found) => void fix(found)} />
+                )}
                 {t.role === "assistant" && t.tier && <div class="msg-meta">{TIER_NAME[t.tier] ?? t.tier}</div>}
                 {t.role === "user" && t.screen && <div class="msg-meta" title="What was on your screen when you asked">on {t.screen.label}</div>}
                 {t.role === "user" && t.noScreen && <div class="msg-meta" title="Asked with screen sharing switched off">screen not shared</div>}
@@ -682,6 +731,33 @@ export function AskDrawer() {
         )}
       </aside>
     </>
+  );
+}
+
+/**
+ * The grammar engine's reading of an answer: what it finds wrong (an adjective
+ * that does not match its noun, a verb that does not match its subject…), with
+ * the right forms, and a button that asks Claude to correct the answer.
+ */
+function GrammarCheck({ text, canFix, onFix }: { text: string; canFix: boolean; onFix: (found: Finding[]) => void }) {
+  const found = useMemo(() => checkAnswer(text, derived().lexicon), [text]);
+  if (!found.length) return null;
+  // a long mark alone is worth a note, not a new answer
+  const serious = found.some((f) => f.kind !== "spelling");
+  return (
+    <div class={`grammar-note${serious ? "" : " minor"}`} role="note">
+      <span class="eyebrow">Grammar check</span>
+      {found.map((f, i) => (
+        <p key={i}>
+          <Inline text={f.message} />
+        </p>
+      ))}
+      {canFix && serious && (
+        <button class="btn small" onClick={() => onFix(found)}>
+          <Icon.repeat /> Fix this answer
+        </button>
+      )}
+    </div>
   );
 }
 

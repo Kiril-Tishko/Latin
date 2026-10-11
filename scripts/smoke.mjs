@@ -66,9 +66,12 @@ async function run(name, viewport, colorScheme) {
   await p.screenshot({ path: `${out}/${name}-english-quiz.png` });
   await p.locator(".trainer-top button", { hasText: "End" }).click();
   await p.locator("button", { hasText: "Choose another practice" }).click();
-  // a round on the sentences of the videos (tiles and meanings among them), then the mistakes come back
-  await p.locator(".mode-card", { hasText: "Sentences from the videos" }).click();
+  // rounds on the sentences of the videos (tiles and meanings among them: a round is random,
+  // so a second one runs if the first lacked one), then the mistakes come back
   const kinds = new Set();
+  for (let round = 0; round < 3 && !(kinds.has("tiles") && kinds.has("meaning")); round++) {
+  if (round) await p.locator("button", { hasText: "Choose another practice" }).click();
+  await p.locator(".mode-card", { hasText: "Sentences from the videos" }).click();
   for (let i = 0; i < 20 && !(await p.locator(".summary-head").count()); i++) {
     await p.waitForTimeout(120);
     if (await p.locator(".tile-board").count()) {
@@ -87,7 +90,8 @@ async function run(name, viewport, colorScheme) {
     if (!(await p.locator(".ex-source", { hasText: "video" }).count())) errors.push(`${name}: a video round exercise does not say where it is from`);
     await p.locator("button", { hasText: "Next" }).click();
   }
-  if (!kinds.has("tiles") || !kinds.has("meaning")) errors.push(`${name}: the video round had no tiles or no meanings (${[...kinds]})`);
+  }
+  if (!kinds.has("tiles") || !kinds.has("meaning")) errors.push(`${name}: the video rounds had no tiles or no meanings (${[...kinds]})`);
   await p.screenshot({ path: `${out}/${name}-video-summary.png`, fullPage: true });
   await p.locator("button", { hasText: "Choose another practice" }).click();
   await p.locator(".mode-card", { hasText: "Fix my mistakes" }).click();
@@ -235,12 +239,15 @@ async function askClaude() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => {
     window.__asked = [];
+    window.__opts = [];
     window.__fail = null;
+    window.__reply = null;
     const sample = (input, opts) => {
       window.__asked.push(input);
+      window.__opts.push({ modelTier: opts?.modelTier, effort: opts?.effort });
       if (window.__fail) return Promise.reject(window.__fail);
       return new Promise((res) => setTimeout(() => {
-        const text = "The ending «-am» marks the object.";
+        const text = window.__reply ?? "The ending «-am» marks the object.";
         opts?.onText?.({ text, delta: text });
         res({ text, truncated: false });
       }, 50));
@@ -273,6 +280,26 @@ async function askClaude() {
   if (!(await lastAsked()).includes("[Where the learner is: Home")) errors.push("ask: with the eye on, the home page is not described");
   await p.screenshot({ path: `${out}/ask-error.png` });
   await p.evaluate(() => { window.__fail = null; });
+  // the grammar engine's facts go with a question that names Latin words, the model thinks harder,
+  // and an answer with a grammar mistake gets a note with the right form and a way to fix it
+  await p.evaluate(() => { window.__reply = 'It is «Timida agricola spectat.»'; });
+  await p.locator("#ask-input").fill("what if it's timid agricola watches?");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(400);
+  const asked = await lastAsked();
+  if (!asked.includes("[Facts from the site's grammar engine") || !asked.includes("noun, masculine")) errors.push("ask: no grammar facts with a question about agricola");
+  const opts = await p.evaluate(() => window.__opts.at(-1));
+  if (opts.modelTier !== "default" || opts.effort !== "high") errors.push(`ask: model ${JSON.stringify(opts)}`);
+  const note = await p.locator(".grammar-note").last().textContent().catch(() => "");
+  if (!note.includes("masculine") || !note.includes("timidus")) errors.push(`ask: no grammar note for «timida agricola» (${note})`);
+  await p.screenshot({ path: `${out}/ask-grammar-check.png` });
+  await p.evaluate(() => { window.__reply = "Sorry: «Agricola timidus spectat.»"; });
+  await p.locator(".grammar-note button", { hasText: "Fix this answer" }).click();
+  await p.waitForTimeout(400);
+  if (!(await lastAsked()).includes("The site's grammar engine found a mistake")) errors.push("ask: Fix this answer did not ask Claude to correct it");
+  if (!(await p.locator(".msg-fix").count())) errors.push("ask: the fix request is not shown as a note");
+  if ((await p.locator(".grammar-note").count()) !== 1) errors.push("ask: the corrected answer still gets a grammar note");
+  await p.evaluate(() => { window.__reply = null; });
   await p.keyboard.press("Escape");
   const askHere = async (q) => {
     await p.locator(".ask-btn").click();

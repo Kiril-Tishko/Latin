@@ -74,6 +74,18 @@ Runtime capabilities used:
   keep «» for Latin only and name the trap Claude once fell into (agricola
   timidus, not timida). The learner's saved conversations can be read with
   ArtifactData at `data/users/me/chats/threads` to see how answers land.
+  Claude does not answer Latin grammar from memory alone (`src/latin/facts.ts`):
+  the newest question carries `engineFacts`, the grammar engine's facts about
+  every Latin word in the question, the last answer and the screen (what each
+  form can be, gender, group, known forms, how an adjective goes with it), and
+  every answer is read back by `checkAnswer` (adjective agreement, subject and
+  verb, in / ad with the right case, long marks in endings; Latin quoted as a
+  wrong example or as the learner's own words is left alone). A finding shows
+  as a "Grammar check" note under the answer, with "Fix this answer", which
+  sends the findings back (a turn of `kind: "fix"`). The learner cannot judge
+  answers themselves, so there is no "this is wrong" button. Answers and the
+  judge use the balanced model at high effort (`MODEL` in ask.tsx); the most
+  capable tier is the next step if answers still slip.
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
   Ask Claude conversations: one private doc each at

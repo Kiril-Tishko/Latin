@@ -370,8 +370,8 @@ async function conversations() {
 }
 
 // The chat never jumps while reading or typing: a sent question glides to the top
-// and its answer fills the room below; anything new below the screen shows a
-// "New message" button instead of moving the view.
+// and its answer fills the room below. Only a new message that arrives below the
+// screen, unseen, shows the "New message" button; reading higher up does not.
 async function chatScroll() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 700 } });
   await ctx.addInitScript(() => {
@@ -395,27 +395,45 @@ async function chatScroll() {
     await p.waitForTimeout(700);
   }
   const body = p.locator(".drawer-body");
-  // typing while reading higher up leaves the conversation where it is
+  const button = () => p.locator(".to-latest").count();
+  if (await button()) errors.push("scroll: a New message button with every message seen");
+  // reading and typing higher up leaves the conversation where it is, with no button
   await body.evaluate((b) => b.scrollTo({ top: 0 }));
-  await p.waitForTimeout(100);
+  await p.waitForTimeout(150);
   await p.locator("#ask-input").pressSequentially("abc");
   await p.waitForTimeout(200);
   if ((await body.evaluate((b) => b.scrollTop)) !== 0) errors.push("scroll: typing moved the conversation");
-  // a question glides to the top; its long answer arrives without moving the view
+  if (await button()) errors.push("scroll: a New message button for messages already seen");
+  // a question glides to the top; its long answer arrives in view, without moving it
   await p.evaluate(() => { window.__delay = 1600; });
   await p.locator("#ask-input").fill("Three?");
   await p.locator("#ask-input").press("Enter");
   await p.waitForTimeout(1100);
-  const at = () => body.evaluate((b) => { const q = [...b.querySelectorAll(".msg.user")].pop(); return Math.round(q.getBoundingClientRect().top - b.getBoundingClientRect().top); });
-  const glided = await at();
+  const at = (sel) => body.evaluate((b, sel) => { const q = [...b.querySelectorAll(sel)].pop(); return Math.round(q.getBoundingClientRect().top - b.getBoundingClientRect().top); }, sel);
+  const glided = await at(".msg.user");
   if (Math.abs(glided - 12) > 30) errors.push(`scroll: the sent question did not glide to the top (${glided}px)`);
   await p.waitForTimeout(1000);
-  if (Math.abs((await at()) - glided) > 2) errors.push("scroll: the arriving answer moved the conversation");
-  if (!(await p.locator(".to-latest.new").count())) errors.push("scroll: no New message button for an answer below the screen");
+  if (Math.abs((await at(".msg.user")) - glided) > 2) errors.push("scroll: the arriving answer moved the conversation");
+  if (await button()) errors.push("scroll: a New message button for an answer in view");
+  // an answer that arrives while reading higher up shows the button, which goes down to it
+  await p.evaluate(() => { window.__delay = 1400; });
+  await p.locator("#ask-input").fill("Four?");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(900);
+  await body.evaluate((b) => b.scrollTo({ top: 0 }));
+  await p.waitForTimeout(1000);
+  if (!(await button())) errors.push("scroll: no New message button for an answer below the screen");
   await p.screenshot({ path: `${out}/ask-new-message.png` });
   await p.locator(".to-latest").click();
   await p.waitForTimeout(900);
-  if (await p.locator(".to-latest").count()) errors.push("scroll: the New message button does not go down to the message");
+  if (await button()) errors.push("scroll: the New message button does not go away at the message");
+  const answerTop = await at(".msg.assistant");
+  const height = await body.evaluate((b) => b.clientHeight);
+  if (answerTop < 0 || answerTop > height - 16) errors.push(`scroll: the New message button did not bring the answer into view (${answerTop}px)`);
+  // once seen, reading back up shows no button
+  await body.evaluate((b) => b.scrollTo({ top: 0 }));
+  await p.waitForTimeout(200);
+  if (await button()) errors.push("scroll: the New message button came back for a message already seen");
   await ctx.close();
 }
 

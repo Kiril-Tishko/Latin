@@ -109,11 +109,13 @@ const INSTRUCTIONS = `You are a friendly Latin tutor inside "Tabula Latina", a p
 The learner speaks English, Russian and Ukrainian natively. Explain in English. When it really helps, compare with Russian or Ukrainian grammar (cases, word order); they know both well.
 
 How to answer:
-- Be concise: usually 60-160 words, short paragraphs or a short list, no preamble.
+- Short and structured by default, about 40-90 words: the answer itself in one **bold** line first, then 2-4 short bullets (the rule, why it applies here, one example as «Latin» = English). No greeting, no preamble, no closing summary, no offers of more help.
+- A yes/no or one-word question gets one or two lines.
+- Give a longer, more open answer only when the learner asks for one ("tell me more", "explain in detail", "tell me about…") or wants to chat generally (history, culture, how a word came into English). Keep even that in short paragraphs or bullets, under about 250 words.
 - Stay inside what the learner knows (lessons, words and skills below). If you must use a word or form they have not learned, mark it "(new)" and keep it to a minimum.
 - Write every Latin word, form or sentence inside «guillemets», for example «puellam». For a form that could be read two ways, add #case.number inside the guillemets: «puellae#gen.sg», «discipulī#nom.pl». The page colors the endings.
-- Use **bold** for the key point. Do not use tables.
-- If the question is about a mistake, say exactly which ending was wrong, why, and the rule that decides it.
+- Use **bold** only for the key point. No tables and no headings.
+- If the question is about a mistake, the bold line names the wrong ending and the right one; the bullets give the rule that decides it.
 - If a short drill would help, end with one final line exactly like: PRACTICE: skill-id, skill-id (1-3 ids from the skill list below). Otherwise leave that line out.
 
 Where the learner is: each question starts with a note in [square brackets] describing what was on their screen when they asked: the page or exercise, an open dialog, the part of a long page in view, and the last line or word they tapped. "Here", "this", "this sentence", "this word" or "this exercise" mean what the newest note describes; earlier questions may have been asked elsewhere. Use the note quietly: do not repeat it back. When the exercise on screen has not been answered yet, help with the rule and hints, and do not give the answer away unless the learner asks for it.
@@ -305,17 +307,26 @@ export function AskDrawer() {
 
   // The conversation never moves by itself while you read or type. It opens at
   // the latest message; a question you send glides up to the top, with room
-  // below it that its answer fills; anything new below the screen shows a
-  // "New message" button instead.
-  const [below, setBelow] = useState(false);
+  // below it that its answer fills. A new message (or an answer arriving) that
+  // starts below what is on screen shows a "New message" button; nothing else does.
   const [unseen, setUnseen] = useState(false);
   const spaceRef = useRef<HTMLDivElement>(null);
   const lastEnd = useRef(0);
+  const lastCount = useRef(0);
   const glideTo = useRef<string | null>(null);
   /** Where the last message ends, measured in the scrolled content. */
   const contentEnd = (b: HTMLElement) => {
     const last = spaceRef.current?.previousElementSibling;
     return last ? last.getBoundingClientRect().bottom - b.getBoundingClientRect().top + b.scrollTop : 0;
+  };
+  /** How far the newest message starts below the top of what is on screen. */
+  const newestTop = (b: HTMLElement) => {
+    const el = [...b.querySelectorAll<HTMLElement>(".msg")].pop();
+    return el ? el.getBoundingClientRect().top - b.getBoundingClientRect().top : null;
+  };
+  const outOfSight = (b: HTMLElement) => {
+    const top = newestTop(b);
+    return top !== null && top > b.clientHeight - 16;
   };
   const space = (px: number) => {
     if (spaceRef.current) spaceRef.current.style.height = `${Math.max(0, px)}px`;
@@ -327,7 +338,7 @@ export function AskDrawer() {
     space(0);
     b.scrollTop = b.scrollHeight;
     lastEnd.current = contentEnd(b);
-    setBelow(false);
+    lastCount.current = b.querySelectorAll(".msg").length;
     setUnseen(false);
   }, [state.open, state.history, key]);
 
@@ -335,6 +346,7 @@ export function AskDrawer() {
     const b = bodyRef.current;
     if (!state.open || state.history || !b) return;
     const end = contentEnd(b);
+    const count = b.querySelectorAll(".msg").length;
     if (glideTo.current) {
       glideTo.current = null;
       const asked = [...b.querySelectorAll<HTMLElement>(".msg.user")].pop();
@@ -345,27 +357,24 @@ export function AskDrawer() {
         b.scrollTo({ top, behavior: motion() });
       }
       setUnseen(false);
-    } else if (end !== lastEnd.current) {
+    } else if (end !== lastEnd.current || count !== lastCount.current) {
       // the room under a question shrinks as the answer fills it (and grows back if it shrinks), so nothing moves
       space((parseFloat(spaceRef.current?.style.height ?? "") || 0) - (end - lastEnd.current));
-      if (end > lastEnd.current + 2 && end - (b.scrollTop + b.clientHeight) > 24) {
-        setBelow(true);
-        setUnseen(true);
-      }
+      if (outOfSight(b)) setUnseen(true);
     }
     lastEnd.current = end;
+    lastCount.current = count;
   });
 
   const onScroll = () => {
     const b = bodyRef.current;
-    if (!b) return;
-    const away = contentEnd(b) - (b.scrollTop + b.clientHeight) > 24;
-    setBelow(away);
-    if (!away) setUnseen(false);
+    if (b && unseen && !outOfSight(b)) setUnseen(false);
   };
+  /** Down to the start of the newest message. */
   const toLatest = () => {
     const b = bodyRef.current;
-    if (b) b.scrollTo({ top: Math.max(0, contentEnd(b) + 16 - b.clientHeight), behavior: motion() });
+    const top = b && newestTop(b);
+    if (b && top !== null) b.scrollTo({ top: b.scrollTop + top - 12, behavior: motion() });
   };
 
   // with the drawer open, a dialog behind it moves aside (wide screens) and Escape closes the drawer first
@@ -619,10 +628,10 @@ export function AskDrawer() {
             )}
             <div ref={spaceRef} class="chat-space" aria-hidden="true" />
           </div>
-          {below ? (
-            <button class={`to-latest${unseen ? " new" : ""}`} onClick={toLatest} aria-label={unseen ? "New message: go down to it" : "Go down to the latest message"}>
+          {unseen ? (
+            <button class="to-latest" onClick={toLatest} aria-label="New message: go down to it">
               <Icon.arrow />
-              {unseen ? "New message" : null}
+              New message
             </button>
           ) : null}
           </div>

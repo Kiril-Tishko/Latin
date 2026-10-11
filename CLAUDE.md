@@ -65,8 +65,11 @@ Runtime capabilities used:
   switches sharing on.
   The chat never scrolls by itself while the learner reads or types: it opens
   at the latest message, a sent question glides to the top with room below
-  that its answer fills (`.chat-space`), and anything new below the screen
-  shows a "New message" button.
+  that its answer fills (`.chat-space`), and only a new message that arrives
+  below the screen, unseen, shows a "New message" button (gone once it comes
+  into view; reading higher up never shows it). Answers are short and
+  structured by default (a bold one-line answer, then 2-4 bullets) and longer
+  only when the learner asks (`INSTRUCTIONS` in src/ui/ask.tsx).
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
   Ask Claude conversations: one private doc each at

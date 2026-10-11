@@ -280,6 +280,18 @@ async function askClaude() {
   if (!(await lastAsked()).includes("[Where the learner is: Home")) errors.push("ask: with the eye on, the home page is not described");
   await p.screenshot({ path: `${out}/ask-error.png` });
   await p.evaluate(() => { window.__fail = null; });
+  // in a new conversation the quick questions add to what is written, never replace it
+  await p.locator(".drawer-head button", { hasText: "New" }).click();
+  await p.locator("#ask-input").fill("agricola:");
+  await p.locator(".drawer-body button", { hasText: "Where does this word come from?" }).click();
+  await p.locator(".drawer-body button", { hasText: "Which words are related to it?" }).click();
+  const box = await p.locator("#ask-input").inputValue();
+  if (box !== "agricola: Where does this word come from? Which words are related to it?") errors.push(`ask: quick questions do not add to the text (${box})`);
+  if (await p.locator(".drawer-body button", { hasText: /right ending|Explain this rule/ }).count()) errors.push("ask: the old quick questions are still there");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(400);
+  const originAsked = await lastAsked();
+  if (!originAsked.includes("Relatives (checked)") || !originAsked.includes("agriculture")) errors.push("ask: a question about a word's origin carries no checked relatives");
   // the grammar engine's facts go with a question that names Latin words, the model thinks harder,
   // and an answer with a grammar mistake gets a note with the right form and a way to fix it
   await p.evaluate(() => { window.__reply = 'It is «Timida agricola spectat.»'; });

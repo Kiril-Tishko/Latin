@@ -93,3 +93,11 @@ describe("the learner's own words, quoted back", () => {
     expect(checkAnswer("Your answer «leges» used the pattern of «docēs».", lex)).toEqual([]);
   });
 });
+
+describe("facts for a question about where a word comes from", () => {
+  it("carry the extra lines given for each word (the site's checked relatives)", () => {
+    const facts = engineFacts([{ text: "where does agricola come from?", mixed: true }], lex, known, 10, (e) => (e.id === "agricola" ? "Relatives (checked): borrowed from Latin: English agriculture." : undefined));
+    expect(facts).toContain("noun, masculine");
+    expect(facts).toContain("Relatives (checked): borrowed from Latin: English agriculture.");
+  });
+});

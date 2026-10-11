@@ -46,7 +46,14 @@ Artifact URL: https://claude.ai/artifact/3cvi4ofuaPLg6LfXXf7efX (also in README.
 Runtime capabilities used:
 - `sample`: the Ask Claude drawer and "I think my answer is right" (judge).
   Ask buttons only put a suggested question in the box; nothing goes to Claude
-  until the learner presses Ask. A failed answer shows plain advice, Try again,
+  until the learner presses Ask. A suggestion is added after what the learner
+  has typed, never in its place (`withQuestion`); only an earlier untouched
+  suggestion is replaced. A new conversation offers four quick questions:
+  where the word comes from, which words are related to it, a memory trick,
+  and a comparison with Russian / Ukrainian. A question about origins or
+  relatives carries the site's checked relatives of each word in its facts
+  (borrowed vs. same root vs. look-alike, from `wordInEnglish`), so Claude does
+  not invent etymologies. A failed answer shows plain advice, Try again,
   and the error code under "Details" (ask the learner for it when debugging).
   Keep the sample function in state as `setSample(() => fn)`: Preact calls a
   function given to a state setter, which once broke every question.

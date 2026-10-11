@@ -102,7 +102,7 @@ export interface FactSource {
  * question first), what each written form can be, and its word's grammar.
  * Empty when there is no Latin.
  */
-export function engineFacts(sources: FactSource[], lex: Lexicon, known: Set<string>, max = 10): string {
+export function engineFacts(sources: FactSource[], lex: Lexicon, known: Set<string>, max = 10, extra?: (e: Entry) => string | undefined): string {
   const forms = new Map<string, Token>();
   const entries = new Map<string, Entry>();
   for (const s of sources) {
@@ -127,7 +127,10 @@ export function engineFacts(sources: FactSource[], lex: Lexicon, known: Set<stri
     const of = [...new Set(rs.map((r) => (r.entry.kind === "verb" ? r.entry.pp[0] : (r.entry as { lemma: string }).lemma)))].join(" / ");
     lines.push(`- ${name}, from ${of}: ${what.length > 1 ? `can be ${what.join("; or ")}` : what[0]}.`);
   }
-  for (const e of entries.values()) lines.push(`- ${entryFacts(e, known, lex)}`);
+  for (const e of entries.values()) {
+    const more = extra?.(e);
+    lines.push(`- ${entryFacts(e, known, lex)}${more ? ` ${more}` : ""}`);
+  }
   return `[Facts from the site's grammar engine. They are certain: build your answer on them and never contradict them. Do not mention this note.\n${lines.join("\n")}]`;
 }
 

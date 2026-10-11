@@ -4,8 +4,10 @@
 // Conversations are saved (see chats.ts) and can be continued on any device;
 // what is typed in the box survives a reload.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { wordInEnglish } from "../content/english";
 import { LESSONS } from "../content/lessons";
 import { checkAnswer, engineFacts, Finding } from "../latin/facts";
+import { Entry } from "../latin/types";
 import { dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, SKILLS } from "../latin/skills";
 import { Exercise, Result } from "../trainer/exercises";
@@ -119,6 +121,7 @@ How to answer:
 - If the question is about a mistake, the bold line names the wrong ending and the right one; the bullets give the rule that decides it.
 - Be exact. The rules under "Skills learned" are this site's rules and they are correct: follow them. Check every Latin form before you write it. Never invent a grammar rule or pattern, and give only memory tricks that are true (an English relative, a real pattern). When there is no reliable way to tell (which infinitive a verb has, for example), say so plainly and suggest learning the pair («discō, discere»).
 - A question may end with [Facts from the site's grammar engine]: every Latin word in it, what each form can be, and its word's gender, group and forms. These facts are certain. Build your answer on them, never contradict them, and don't mention the note.
+- Where a word comes from and what it is related to: use the relatives in the facts, which are checked. Say which kind each is: borrowed (English, Russian or Ukrainian took it from Latin) or same ancient root (cousins from the common Indo-European ancestor, not borrowed). Never call a look-alike related, and never invent a relative; if the facts have none, say what you know and that it is less certain. Keep it short: the origin in one bold line, then the relatives as a short list.
 - Easy to get wrong: an adjective agrees with its noun in gender, case and number, not in the look of the ending. «agricola» and «poēta» are masculine, so «agricola timidus», «poēta pulcher», «agricolam timidum».
 - If the learner says they are just curious, or asks about something other than the exercise, answer that alone and do not lead back to the exercise.
 - If a short drill would help, end with one final line exactly like: PRACTICE: skill-id, skill-id (1-3 ids from the skill list below). Otherwise leave that line out.
@@ -210,7 +213,18 @@ ${engineFacts([{ text: answer, mixed: true }, { text: ex.context, mixed: true }]
 
 // ------------------------------------------------------------- drawer
 
-const QUICK = ["Why is this the right ending?", "Explain this rule simply", "Give me a memory trick", "Compare it with Russian or Ukrainian"];
+const QUICK = ["Where does this word come from?", "Which words are related to it?", "Give me a memory trick", "Compare it with Russian or Ukrainian"];
+
+/** A suggested question joins what is already in the box (it never replaces the learner's words). */
+export function withQuestion(box: string, q: string): string {
+  const now = box.trim();
+  if (!now) return q;
+  if (now.includes(q)) return now;
+  return `${now} ${q}`;
+}
+
+/** The last suggestion put in each conversation's box, so a new one replaces it rather than piling up. */
+const lastSuggestion: Record<string, string> = {};
 
 const TIER_NAME: Record<string, string> = { quick: "quick model", default: "balanced model, thinking harder", complex: "most capable model" };
 /** The model for explanations and checks: the balanced one at high effort (a step smarter than its default). */
@@ -237,6 +251,28 @@ function toMessages(chat: Chat): { role: "user" | "assistant"; content: string }
   return msgs;
 }
 
+/** A question about where a word comes from or what it is related to. */
+const ORIGIN = /etymolog|\bcomes? from|origin|relat(ed|ive)|\broots?\b|cognate|borrow|deriv|english|russian|ukrainian|kin\b/i;
+
+/** The site's checked relatives of a word: borrowed ones, cousins of the same root, a look-alike to avoid. */
+function relatives(e: Entry): string | undefined {
+  const w = wordInEnglish(e.id);
+  if (!w) return undefined;
+  const list = (r?: { en?: string[]; ru?: string[]; uk?: string[] }) =>
+    r ? [r.en?.length ? `English ${r.en.join(", ")}` : "", r.ru?.length ? `Russian ${r.ru.join(", ")}` : "", r.uk?.length ? `Ukrainian ${r.uk.join(", ")}` : ""].filter(Boolean).join("; ") : "";
+  const from = list(w.from);
+  const kin = list(w.kin);
+  return [
+    "Relatives (checked):",
+    from ? `borrowed from Latin: ${from}.` : "",
+    kin ? `Same ancient root, not borrowed: ${kin}.` : "",
+    w.trap ? `Looks related but is not: ${w.trap}.` : "",
+    w.note ? `Note: ${w.note}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function factsFor(question: ChatTurn, context: AskContext | null, lastAnswer?: ChatTurn): string {
   const d = derived();
   return engineFacts(
@@ -248,6 +284,8 @@ function factsFor(question: ChatTurn, context: AskContext | null, lastAnswer?: C
     ],
     d.lexicon,
     d.knowledge.skills,
+    10,
+    ORIGIN.test(question.content) ? relatives : undefined,
   );
 }
 
@@ -318,9 +356,13 @@ export function AskDrawer() {
       const draft = state.draft;
       set({ draft: undefined });
       if (draft) {
-        setInputState(draft);
-        keepDraft(key, draft);
-        setSuggested(draft);
+        // what the learner typed stays; only an earlier, untouched suggestion is replaced
+        const typed = (drafts[key] ?? "").trim();
+        const text = typed && typed !== lastSuggestion[key] ? withQuestion(typed, draft) : draft;
+        lastSuggestion[key] = text;
+        setInputState(text);
+        keepDraft(key, text);
+        setSuggested(text === draft ? draft : "");
       } else if (shownKey.current !== key) setInputState(drafts[key] ?? "");
       shownKey.current = key;
       setTimeout(() => {
@@ -603,9 +645,13 @@ export function AskDrawer() {
                       class="btn ghost small"
                       disabled={busy}
                       onClick={() => {
-                        setInput(q);
-                        setSuggested(q);
-                        inputRef.current?.focus();
+                        // added to what is already written, never in its place
+                        const text = withQuestion(input, q);
+                        setInput(text);
+                        setSuggested(text === q ? q : "");
+                        const el = inputRef.current;
+                        el?.focus();
+                        setTimeout(() => el?.setSelectionRange(el.value.length, el.value.length), 0);
                       }}
                     >
                       {q}

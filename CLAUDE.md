@@ -13,7 +13,9 @@ published as a private claude.ai artifact.
   very simple at first ("I want to think little").
 - Wants: only words and constructions from the videos (plus words they open
   in Discover), lots of written exercises, colored endings, Roman classic look,
-  silly sentences allowed, light motivation (daily goal + streak).
+  light motivation (daily goal + streak), and only sensible sentences: silly
+  pairings ("the bull reads the letter") confused them, so `settings.silly`
+  defaults to 0 and progress version 3 switched existing saves to it.
 - Follows the original playlist, with corrections from the 2025 "New Easy
   Latin Lessons" playlist (PLjqqMkeHFt1FjCaUrdcdMxF15sKUk9rHs) where they differ.
 
@@ -81,14 +83,26 @@ rules of the lessons up to the step (`derived().stepKnowledge`; "All lessons
 mixed" and the check-up use everything). A step session opens with a one-screen
 rule refresher (the step's endings table and its two main rules, once a day),
 and each exercise has a Rule button. While a rule is new (mastery < 0.4) the
-exercises are mostly "choose the right word" and reading, with colors on, and
-sentences are bare and sensible (`sentenceStyle` in `src/trainer/session.ts`:
-richness 0, silliness 0, one extra only when it is the thing practised). As the
-rule settles, whole sentences to write, adjectives and "of" phrases, the object
-first, and silly pairings come in to test real understanding. The next step is
+exercises are mostly "choose the right word", "what does it mean?" (pick the
+English) and word tiles (build the sentence from its words plus a wrong form or
+two), with colors on, and sentences are bare (`sentenceStyle` in
+`src/trainer/session.ts`: richness 0, one extra only when it is the thing
+practised). As the rule settles, whole sentences to write, adjectives and "of"
+phrases and the object first come in to test real understanding. The next step is
 offered (never forced) when the step's practised skills average 80% and none is
 under 60% (`readiness`). Saves from before the steps (version 1) restart at
 Lesson I.
+
+Exercise builders work on any sentence: `writeOn`, `endingOn`, `chooseOn`,
+`tilesOn`, `meaningOn` in `src/trainer/exercises.ts` take tokens and an English
+text, so generated clauses and fixed sentences share them. "Sentences from the
+videos" (`src/trainer/video.ts`) reads each lesson's sentences into tokens (role
+and ending of each word; a neuter with I / you acting is the object) and keeps
+those whose endings are within the step; a lesson page's "Practise them" runs
+one lesson. "Fix my mistakes" (`mistakesSession`): unfixed mistakes within the
+step come back as fresh exercises of the same kind on the same rules and words;
+a right answer marks one fixed (`Mistake.fixed`), a wrong one never duplicates
+it. Home and the practice chooser show how many wait.
 
 ## Audio
 
@@ -100,7 +114,9 @@ antepenult) is marked with an acute accent, which Spanish voices follow anywhere
 in a word. Italian gets no accent marks: Italian voices spell out an accent in
 the middle of a word (*videō* came out as "u i accento grave deo").
 `src/audio/speech.ts` picks the best Spanish voice and speaks; `speakSequence`
-drives Listen & repeat. Audio buttons are hidden when the device has no Spanish
+drives Listen & repeat. Only Latin words reach the voice (`speakable`: reading
+hints go, separators such as the · of a word list become pauses), and a word's
+speaker says just the word, never its whole dictionary entry. Audio buttons are hidden when the device has no Spanish
 or Italian voice (Settings explains how to add one). The smoke test fakes an
 Italian and a Spanish voice to exercise the audio paths.
 

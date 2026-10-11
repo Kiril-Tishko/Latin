@@ -22,6 +22,10 @@ published as a private claude.ai artifact.
 - **Audio**: every Latin sentence can be heard in classical pronunciation
   (through the device's Spanish or Italian voice), Listen & repeat on lesson pages, and a
   Listen and write exercise.
+- **Sentences from the videos**: the sentences you heard, as exercises: choose
+  the form, pick the meaning, build them from word tiles, write them.
+- **Fix my mistakes**: your mistakes come back later as new exercises on the
+  same rules and words.
 - **Latin in English**: what English took from Latin, from Roman traders to
   modern science; the English words that grew from each word you know; Latin
   verb forms, plurals, grammar rules and abbreviations inside English; and a

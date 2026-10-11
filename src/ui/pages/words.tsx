@@ -4,7 +4,7 @@ import { useMemo, useState } from "preact/hooks";
 import { CARD_BY_ID } from "../../content/deck";
 import { LESSONS } from "../../content/lessons";
 import { STORY_ONLY } from "../../content/words";
-import { conjugate, declineAdj, declineNoun, dictionaryForm } from "../../latin/morph";
+import { conjugate, declineAdj, declineNoun, dictionaryForm, headword as latinHeadword } from "../../latin/morph";
 import { nounSkill, adjDecl } from "../../latin/skills";
 import { latinKey, roman } from "../../latin/text";
 import { Case, CASE_NAMES, Entry, full, Gender, NounKey, PN, VerbKey } from "../../latin/types";
@@ -125,7 +125,7 @@ function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
           <div class="stack" style={{ gap: "2px" }}>
             <span>
               <span class="latin latin-lg">{dictionaryForm(e).replace(/, (m|f|n)\.$/, "")}</span>
-              <Speak text={dictionaryForm(e).replace(/, (m|f|n)\.$/, "")} id={`word-${e.id}`} />
+              <Speak text={latinHeadword(e)} id={`word-${e.id}`} />
             </span>
             <span>
               {e.kind === "noun" ? `${e.gender === "m" ? "masculine" : e.gender === "f" ? "feminine" : "neuter"} noun · ` : ""}

@@ -27,6 +27,10 @@ export interface Mistake {
   expected: string;
   skills: string[];
   notes: string[];
+  /** The words of the exercise. */
+  words?: string[];
+  /** Put right later in "Fix my mistakes". */
+  fixed?: boolean;
 }
 
 export interface Settings {
@@ -46,7 +50,7 @@ export interface Settings {
 }
 
 export interface Progress {
-  version: 2;
+  version: 3;
   updatedAt: number;
   settings: Settings;
   /** Lessons the learner has watched; their words and rules are unlocked. */
@@ -69,11 +73,12 @@ export interface Progress {
   placementDone: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { macrons: true, dailyGoal: 20, silly: 0.35, hints: true, rate: 0.85, autoplay: false };
+// sensible sentences only: silly pairings confused the learner
+export const DEFAULT_SETTINGS: Settings = { macrons: true, dailyGoal: 20, silly: 0, hints: true, rate: 0.85, autoplay: false };
 
 export function newProgress(): Progress {
   return {
-    version: 2,
+    version: 3,
     updatedAt: 0,
     settings: { ...DEFAULT_SETTINGS },
     lessonsDone: [1, 2, 3, 4],
@@ -97,7 +102,7 @@ export function migrate(raw: unknown): Progress {
   const out = {
     ...base,
     ...p,
-    version: 2,
+    version: 3,
     settings: { ...base.settings, ...(p.settings ?? {}) },
     skills: p.skills ?? {},
     words: p.words ?? {},
@@ -110,6 +115,8 @@ export function migrate(raw: unknown): Progress {
   // Version 2 practises step by step. The learner remembered the words but not
   // the rules, so saves from version 1 start again at Lesson I.
   if ((p.version ?? 1) < 2) out.focusLesson = out.lessonsDone.length ? Math.min(...out.lessonsDone) : 1;
+  // Version 3: sensible sentences only, as the learner asked (silly ones confused them).
+  if ((p.version ?? 1) < 3) out.settings.silly = 0;
   return out;
 }
 

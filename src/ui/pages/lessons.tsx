@@ -2,7 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import { speakSequence } from "../../audio/speech";
 import { audioReady, Speak } from "../speak";
 import { Lesson, LESSONS, LESSON_BY_N, Rule, videoUrl } from "../../content/lessons";
-import { dictionaryForm } from "../../latin/morph";
+import { dictionaryForm, headword } from "../../latin/morph";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
 import { openAsk } from "../ask";
@@ -167,6 +167,9 @@ export function LessonPage({ n }: { n: number }) {
         <div class="spread">
           <span class="eyebrow">Sentences from the video</span>
           <div class="row">
+            <button class="btn ghost small" onClick={() => { startSession({ kind: "video", n: l.n }); go({ page: "train" }); }} title="Practise these sentences: choose, build, write">
+              <Icon.stylus /> Practise them
+            </button>
             {audioReady() &&
               (playing?.part === "sentences" ? (
                 <button class="btn small" onClick={stopPlaying}><Icon.stop /> Stop</button>
@@ -250,7 +253,7 @@ export function LessonPage({ n }: { n: number }) {
             <div key={w.id} class="panel tight stack" style={{ gap: "2px" }}>
               <span>
                 <LatinText text={dictionaryForm(w).replace(/, (m|f|n)\.$/, "")} />
-                <Speak text={dictionaryForm(w).replace(/, (m|f|n)\.$/, "")} id={`w-${w.id}`} />
+                <Speak text={headword(w)} id={`w-${w.id}`} />
               </span>
               <span class="small muted">
                 {w.kind === "noun" ? `${w.gender === "m" ? "masculine" : w.gender === "f" ? "feminine" : "neuter"} · ` : ""}

@@ -549,6 +549,11 @@ export function fixed(lemma: string, role: FixedEntry["role"], spec: FixedSpec, 
 
 // --------------------------------------------------------------- lookup
 
+/** The word itself, as it is said on its own: nominative, first person, or masculine form. */
+export function headword(e: Entry): string {
+  return e.kind === "verb" ? e.pp[0] : e.lemma;
+}
+
 export function dictionaryForm(e: Entry): string {
   switch (e.kind) {
     case "noun":

@@ -74,7 +74,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
               <button key={label} aria-pressed={Math.abs(p.settings.silly - v) < 0.01} onClick={() => update((x) => void (x.settings.silly = v))}>{label}</button>
             ))}
           </div>
-          <span class="small muted">Silly sentences ("the bull reads the letter") force you to read the endings instead of guessing.</span>
+          <span class="small muted">Sensible is the default. Silly sentences ("the bull reads the letter") make you read the endings instead of guessing, but they can be confusing.</span>
         </div>
 
         <AudioSettings />

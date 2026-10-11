@@ -311,6 +311,39 @@ p { margin: 0; }
 .word-btn.choice .latin { font-size: 1em; }
 .word-btn.chosen-good { border-color: var(--good); box-shadow: 0 0 0 2px color-mix(in srgb, var(--good) 35%, transparent); }
 .word-btn.chosen-bad { border-color: var(--bad); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 35%, transparent); }
+/* what does it mean: whole English sentences, one per line */
+.meaning-choices { display: grid; gap: 8px; }
+.exercise .word-btn.choice.meaning { font-family: var(--f-text); font-size: 0.72em; text-align: left; justify-content: flex-start; width: 100%; }
+/* word tiles: the sentence being built on a wax line, the words to pick below */
+.tile-board { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+.tile-line {
+  min-height: 3.1em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--wax);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.tile-hint { color: color-mix(in srgb, var(--wax-ink) 65%, transparent); font-size: 0.95rem; }
+.tile-tray { display: flex; flex-wrap: wrap; gap: 8px; }
+.tile {
+  font-size: clamp(1.05rem, 2.4vw, 1.35rem);
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.tile:hover:not(:disabled) { border-color: var(--gold); }
+.tile:disabled { opacity: 0.35; cursor: default; box-shadow: none; }
+.tile.placed { background: var(--panel-2); color: var(--ink); border-color: var(--gold-soft); }
+.tile-board.done .tile.placed { opacity: 1; }
+.ex-source { color: var(--ink-2); font-weight: 600; letter-spacing: 0.04em; text-transform: none; }
 
 /* ------------------------------------------------------------ panels */
 

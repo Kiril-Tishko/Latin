@@ -9,7 +9,8 @@ import { roman } from "../../latin/text";
 import { Exercise, ExerciseKind, KIND_LABEL, plainText, Result } from "../../trainer/exercises";
 import { buildKnowledge } from "../../trainer/knowledge";
 import { dayKey, mastery } from "../../trainer/progress";
-import { applyResult, buildSession, nextExercise, placementSession, readiness, SessionOpts } from "../../trainer/session";
+import { applyResult, buildSession, mistakesSession, mistakesToFix, nextExercise, placementSession, readiness, SessionOpts } from "../../trainer/session";
+import { videoSession } from "../../trainer/video";
 import { openAsk, judge } from "../ask";
 import { CaseChip, Icon, Laurel, Mosaic, toast } from "../components";
 import { LatinTokens } from "../latin";
@@ -32,7 +33,9 @@ export type Mode =
   | { kind: "endings" }
   | { kind: "words" }
   | { kind: "listening" }
-  | { kind: "english" };
+  | { kind: "english" }
+  | { kind: "video"; n?: number }
+  | { kind: "mistakes" };
 
 interface Attempt {
   ex: Exercise;
@@ -83,6 +86,10 @@ export function modeLabel(m: Mode): string {
       return "Listening";
     case "english":
       return "Latin in English";
+    case "video":
+      return m.n ? `Lesson ${roman(m.n)}: sentences from the video` : "Sentences from the videos";
+    case "mistakes":
+      return "Fix my mistakes";
   }
 }
 
@@ -100,6 +107,8 @@ function levelOf(mode: Mode): number {
       return top;
     case "lesson":
       return mode.n;
+    case "video":
+      return mode.n ?? p.focusLesson;
     case "skills":
       return Math.max(p.focusLesson, ...mode.skills.map((id) => lessonOfSkill(id) ?? 1));
     default:
@@ -126,7 +135,7 @@ export function startSession(mode: Mode) {
   const c = ctx(level);
   const vocab = derived().words.filter((w) => w.kind !== "fixed");
   // a step meets a rule in single forms and endings first, whole sentences later
-  const stepwise: Partial<SessionOpts> = { adaptive: true, focusLesson: level, kinds: ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen"] };
+  const stepwise: Partial<SessionOpts> = { adaptive: true, focusLesson: level, kinds: ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen", "tiles", "meaning"] };
   let items: Exercise[];
   switch (mode.kind) {
     case "step":
@@ -139,7 +148,7 @@ export function startSession(mode: Mode) {
       items = buildSession(p, c, { size: 12, ...stepwise, skills: LESSON_BY_N.get(mode.n)?.skills });
       break;
     case "skills":
-      items = buildSession(p, c, { size: 10, ...stepwise, skills: mode.skills, kinds: ["en2la", "ending", "choose", "form", "transform", "la2en"] });
+      items = buildSession(p, c, { size: 10, ...stepwise, skills: mode.skills, kinds: ["en2la", "ending", "choose", "form", "transform", "la2en", "tiles", "meaning"] });
       break;
     case "writing":
       items = buildSession(p, c, { size: SIZE, kinds: ["en2la", "transform"], focusLesson: level });
@@ -155,6 +164,12 @@ export function startSession(mode: Mode) {
       break;
     case "english":
       items = buildSession(p, c, { size: 10, kinds: ["derive"], vocab: derived().words.filter((w) => !STORY_ONLY.has(w.id)) });
+      break;
+    case "video":
+      items = videoSession(p, c, mode.n ? [mode.n] : p.lessonsDone.filter((n) => n <= level));
+      break;
+    case "mistakes":
+      items = mistakesSession(p, c, vocab);
       break;
     default:
       items = buildSession(p, c, { size: SIZE, vocab });
@@ -201,7 +216,10 @@ function Chooser() {
   const ready = readiness(p, level);
   const nextLesson = p.lessonsDone.filter((n) => n > level).sort()[0];
   const upTo = level === 1 ? "the rules of Lesson I" : `the rules of Lessons I-${roman(level)}`;
+  const toFix = mistakesToFix(p, derived().stepKnowledge).length;
   const modes: { mode: Mode; title: string; text: string }[] = [
+    ...(toFix ? [{ mode: { kind: "mistakes" } as Mode, title: `Fix my mistakes (${toFix})`, text: "Your mistakes come back as new exercises on the same rules and words." }] : []),
+    { mode: { kind: "video" }, title: "Sentences from the videos", text: `The sentences you heard, up to Lesson ${roman(level)}: choose, build, write.` },
     { mode: { kind: "writing" }, title: "Write Latin", text: `Whole sentences into Latin, with ${upTo}.` },
     { mode: { kind: "endings" }, title: "Endings drill", text: "Quick: choose and fill in endings." },
     { mode: { kind: "words" }, title: "Word recall", text: "Your words, both ways, just before you would forget them." },
@@ -296,7 +314,7 @@ function shownLatin(ex: Exercise, answered: boolean): string {
 
 /** The answer given, as the learner sees it (a choice is shown by its word). */
 function givenAnswer(ex: Exercise, answer: string): string {
-  if (ex.kind === "choose") return ex.choices?.find((c) => c.id === answer)?.label ?? answer;
+  if (ex.kind === "choose" || ex.kind === "meaning") return ex.choices?.find((c) => c.id === answer)?.label ?? answer;
   if (ex.kind === "identify") return ex.latin?.[Number(answer)]?.text ?? answer;
   return answer;
 }
@@ -320,9 +338,13 @@ function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
     identify: `the sentence "${shownLatin(ex, true)}"; the learner taps the word asked for.`,
     vocab: ex.ask ?? "",
     derive: `the English word "${ex.ask}"; the learner names the Latin word it comes from.`,
+    tiles: `the English sentence "${ex.english}", to build in Latin from word tiles: ${ex.tiles?.join(" / ")}.`,
+    meaning: `the Latin sentence "${shownLatin(ex, true)}", with English meanings to choose from: ${ex.choices?.map((c) => c.label).join(" / ")}.`,
   };
   const lines = [
     `Practising: ${modeLabel(s.mode)} (only the rules up to Lesson ${s.level}). Exercise ${s.index + 1} of ${s.items.length}, "${ex.instruction}".`,
+    ex.video ? `A sentence from the video of Lesson ${ex.video}.` : "",
+    ex.fixes !== undefined ? "This exercise brings back one of the learner's earlier mistakes." : "",
     `On screen: ${shown[ex.kind]}`,
     `The exercise with its answer: ${plainText(ex.context)}`,
   ];
@@ -337,7 +359,7 @@ function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
     if (notes.length) lines.push(`The checker's notes: ${notes.join(" ")}`);
     if (st.judgement) lines.push(`Claude's earlier check of the answer: ${plainText(st.judgement)}`);
   }
-  return lines.join("\n");
+  return lines.filter(Boolean).join("\n");
 }
 
 function Runner({ s }: { s: Session }) {
@@ -351,6 +373,12 @@ function Runner({ s }: { s: Session }) {
   const [showEnglish, setShowEnglish] = useState(false);
   const [judging, setJudging] = useState(false);
   const [judgement, setJudgement] = useState<string | null>(null);
+  // word tiles placed so far (indices into ex.tiles); the answer is their words
+  const [picked, setPicked] = useState<number[]>([]);
+  const pickTiles = (next: number[]) => {
+    setPicked(next);
+    setAnswer(next.map((i) => ex.tiles![i]).join(" "));
+  };
   const inputRef = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const sideRef = useRef<HTMLDivElement>(null);
@@ -393,6 +421,25 @@ function Runner({ s }: { s: Session }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [ex.id, res]);
 
+  // tiles: 1-9 place a word, Backspace takes the last one back, Enter checks
+  useEffect(() => {
+    if (ex.answer !== "tiles" || res || !ex.tiles) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest?.("input, textarea, select, [contenteditable]")) return;
+      const n = Number(e.key);
+      if (n >= 1 && n <= ex.tiles!.length && !picked.includes(n - 1)) pickTiles([...picked, n - 1]);
+      else if (e.key === "Backspace" && picked.length) {
+        e.preventDefault();
+        pickTiles(picked.slice(0, -1));
+      } else if (e.key === "Enter" && picked.length) {
+        e.preventDefault();
+        check();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ex.id, res, picked, answer]);
+
   function check(given = answer) {
     if (res) return;
     if (!given.trim() && ex.answer !== "choice") return;
@@ -414,7 +461,8 @@ function Runner({ s }: { s: Session }) {
     let items = s.items;
     // a wrong sentence comes back once more at the end of the round
     if (res.verdict === "wrong" && ex.kind !== "identify" && s.items.length < s.size + 4) {
-      const again = nextExercise(getProgress(), ctx(s.level), { size: 1, skills: Object.keys(res.credit).filter((k) => res.credit[k] < 0.5), kinds: [ex.kind === "vocab" ? "vocab" : ex.kind], vocab: derived().words.filter((w) => ex.words.includes(w.id)) }, new Set(s.items.map((e) => e.context)));
+      const again = ex.retry ? ex.retry() : nextExercise(getProgress(), ctx(s.level), { size: 1, skills: Object.keys(res.credit).filter((k) => res.credit[k] < 0.5), kinds: [ex.kind === "vocab" ? "vocab" : ex.kind], vocab: derived().words.filter((w) => ex.words.includes(w.id)) }, new Set(s.items.map((e) => e.context)));
+      if (again && ex.fixes !== undefined) again.fixes = ex.fixes;
       if (again) items = [...items, again];
     }
     setSession({ ...s, items, attempts, index: s.index + 1 });
@@ -466,7 +514,11 @@ function Runner({ s }: { s: Session }) {
 
       <div class={`panel frame exercise${res ? " answered" : ""}`} ref={panelRef}>
         <div class="ex-main">
-          <span class="eyebrow ex-instruction">{ex.instruction}</span>
+          <span class="eyebrow ex-instruction">
+            {ex.instruction}
+            {ex.video ? <span class="ex-source"> · from the video of Lesson {roman(ex.video)}</span> : null}
+            {ex.fixes !== undefined ? <span class="ex-source"> · an earlier mistake</span> : null}
+          </span>
           <div class="prompt">
             <Prompt
               ex={ex}
@@ -479,7 +531,9 @@ function Runner({ s }: { s: Session }) {
             />
           </div>
 
-          {ex.answer !== "choice" && (
+          {ex.answer === "tiles" && ex.tiles && <TileBoard tiles={ex.tiles} picked={picked} onPick={pickTiles} done={!!res} />}
+
+          {ex.answer !== "choice" && ex.answer !== "tiles" && (
             <div class={`tablet ${res ? "done" : ""}`}>
               {ex.answer === "ending" ? (
                 <input
@@ -581,6 +635,32 @@ function Runner({ s }: { s: Session }) {
   );
 }
 
+/** Word tiles: tap them in order to build the sentence; tap a placed word to put it back. */
+function TileBoard({ tiles, picked, onPick, done }: { tiles: string[]; picked: number[]; onPick: (next: number[]) => void; done: boolean }) {
+  return (
+    <div class={`tile-board${done ? " done" : ""}`}>
+      <div class="tile-line" aria-label="Your sentence">
+        {picked.length ? (
+          picked.map((i, k) => (
+            <button key={`${i}-${k}`} class="tile placed latin" lang="la" disabled={done} onClick={() => onPick(picked.filter((_, j) => j !== k))}>
+              {tiles[i]}
+            </button>
+          ))
+        ) : (
+          <span class="muted ui tile-hint">Tap the words in order…</span>
+        )}
+      </div>
+      <div class="tile-tray" role="group" aria-label="Words">
+        {tiles.map((t, i) => (
+          <button key={i} class="tile latin" lang="la" disabled={done || picked.includes(i)} onClick={() => onPick([...picked, i])}>
+            {t}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** The English of a Latin prompt, hidden behind a button so the meaning is worked out first. */
 function Translation({ text, shown, onShow }: { text?: string; shown: boolean; onShow: () => void }) {
   if (!text) return null;
@@ -606,7 +686,27 @@ function Prompt(props: {
   const translation = !res && <Translation text={ex.english} shown={props.english} onShow={props.onEnglish} />;
   switch (ex.kind) {
     case "en2la":
+    case "tiles":
       return <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }}>{ex.english}</p>;
+    case "meaning":
+      return (
+        <div class="stack" style={{ gap: "8px" }}>
+          <p class="latin-lg">
+            <LatinTokens tokens={ex.latin!} plain={!showColors} />
+            {ex.audio && <Speak text={ex.audio} id={`prompt-${ex.id}`} />}
+          </p>
+          <div class="choices meaning-choices" role="group" aria-label="Meanings">
+            {ex.choices!.map((c, i) => {
+              const state = !res ? "" : c.id === ex.correctChoice ? "chosen-good" : c.id === chosen ? "chosen-bad" : "";
+              return (
+                <button key={c.id} class={`word-btn choice meaning ${state}`} disabled={!!res} onClick={() => onChoose(c.id)}>
+                  <span class="kbd">{i + 1}</span> <span>{c.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
     case "la2en":
       return (
         <p class="latin-lg">
@@ -702,7 +802,7 @@ function Prompt(props: {
 
 function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: string }) {
   const v = VERDICT[res.verdict];
-  const latinAnswer = ex.answer === "la" && res.tokens;
+  const latinAnswer = (ex.answer === "la" || ex.answer === "tiles") && res.tokens;
   const meaning = ex.kind === "transform" || ex.kind === "derive" ? ex.answerEnglish : ex.kind === "ending" || ex.kind === "choose" ? ex.english : undefined;
   // after a mistake: the one-line rule for each skill it was about
   const blamed = res.verdict === "correct" ? [] : [...new Set(res.issues.filter((i) => i.kind !== "tip" && i.kind !== "typo").map((i) => i.skill).filter(Boolean) as string[])];
@@ -728,7 +828,9 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
       )}
       <div class="stack answer" style={{ gap: "4px" }}>
         <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{res.verdict === "correct" ? "Model answer" : "Correct answer"}</span>
-        {ex.answer === "en" ? (
+        {ex.kind === "meaning" ? (
+          <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }}>{res.expected}</p>
+        ) : ex.answer === "en" ? (
           <div class="stack" style={{ gap: "4px" }}>
             <p class="latin-lg">{res.expected}</p>
             {res.expectedTokens && (
@@ -838,11 +940,12 @@ function Summary({ s }: { s: Session }) {
       {wrong.length > 0 && (
         <div class="panel stack">
           <h3>To review</h3>
+          <p class="small muted">They come back later in Fix my mistakes, as new exercises on the same rules.</p>
           {wrong.map((a, i) => (
             <div key={i} class="stack" style={{ gap: "2px", borderBottom: "1px dashed var(--rule)", paddingBottom: "8px" }}>
-              <span class="small muted ui">{a.ex.english ?? a.ex.ask ?? a.ex.instruction}</span>
+              <span class="small muted ui">{a.ex.kind === "meaning" && a.ex.latin ? latinText(a.ex.latin) : a.ex.english ?? a.ex.ask ?? a.ex.instruction}</span>
               {a.res.expectedTokens && a.ex.kind !== "identify" ? <LatinTokens tokens={a.res.expectedTokens} period={a.ex.kind !== "form"} /> : <span>{a.res.expected}</span>}
-              {a.answer && a.answer !== "—" && <span class="small muted ui">You wrote: {a.answer}</span>}
+              {a.answer && a.answer !== "—" && <span class="small muted ui">{a.ex.answer === "choice" ? "You chose" : "You wrote"}: {givenAnswer(a.ex, a.answer)}</span>}
             </div>
           ))}
           <div>

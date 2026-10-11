@@ -96,12 +96,28 @@ export function useSpeaking(): string | null {
   return speakingId;
 }
 
+/**
+ * Only Latin words and plain punctuation reach the voice: reading hints go,
+ * and separators (the · of a word list, slashes, arrows) become a short pause,
+ * so a voice never reads them out as extra words ("punto", "barra").
+ */
+export function speakable(latin: string): string {
+  return latin
+    .replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "")
+    .replace(/\s*(?:[·•|/→←+=]|\.\.\.|…)\s*/g, ", ")
+    .replace(/[()[\]{}«»"“”‘’*_]/g, "")
+    .replace(/(?:,\s*)+/g, ", ")
+    .replace(/\s+/g, " ")
+    .replace(/^[,\s]+|[,\s]+$/g, "");
+}
+
 /** What the voice will actually read for this Latin text. */
 export function spokenText(latin: string, voice: SpeechSynthesisVoice | null): string {
   const lang = voice?.lang.toLowerCase() ?? "";
-  if (lang.startsWith("it")) return respell(latin, "it");
-  if (lang.startsWith("es")) return respell(latin, "es");
-  return latin.replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "");
+  const text = speakable(latin);
+  if (lang.startsWith("it")) return respell(text, "it");
+  if (lang.startsWith("es")) return respell(text, "es");
+  return text;
 }
 
 let generation = 0;

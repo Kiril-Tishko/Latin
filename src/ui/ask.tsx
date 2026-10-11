@@ -470,7 +470,6 @@ export function AskDrawer() {
   // a question with no answer: one still on its way on another device, or one whose answer was lost
   const unanswered = !thisBusy && !failure && last?.role === "user";
   const fresh = unanswered && Date.now() - last.at < 3 * 60_000;
-  const latestOther = chats.find((c) => c.id !== chat?.id);
 
   return (
     <>
@@ -544,7 +543,6 @@ export function AskDrawer() {
           <div class="drawer-body" ref={bodyRef} onScroll={onScroll}>
             {turns.length === 0 && !thisBusy && (
               <div class="stack small">
-                <p class="muted ui">Ask anything about the rule, the word or your answer. Claude sees what you have learned, your weak spots and what is on your screen (the exercise, the part of the lesson in view, the word or card you opened), so you can say “here” or “this sentence”. Conversations are saved and you can continue them on any device.</p>
                 <div class="row" style={{ gap: "6px" }}>
                   {QUICK.map((q) => (
                     <button
@@ -561,11 +559,6 @@ export function AskDrawer() {
                     </button>
                   ))}
                 </div>
-                {latestOther && (
-                  <button class="linkish" style={{ alignSelf: "flex-start", textAlign: "left" }} onClick={() => set({ chatId: latestOther.id })}>
-                    Continue “{latestOther.title}” ({when(latestOther.updatedAt)})
-                  </button>
-                )}
               </div>
             )}
             {turns.map((t, i) => (

@@ -4,7 +4,7 @@ import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
 import { mastery, streak, todayDone } from "../../trainer/progress";
-import { readiness } from "../../trainer/session";
+import { mistakesToFix, readiness } from "../../trainer/session";
 import { dueWords } from "../../trainer/srs";
 import { openAsk } from "../ask";
 import { CardBack, Icon, Laurel, Mosaic } from "../components";
@@ -94,6 +94,7 @@ export function Home() {
   const due = dueWords(p, vocab).length;
   const card = nextCard(p.revealed, d.knowledge, new Set(d.words.map((w) => w.id)));
   const openedNotAdded = p.revealed.filter((id) => !p.added.includes(id)).length;
+  const toFix = mistakesToFix(p, d.stepKnowledge).length;
   const tabletLessons = p.lessonsDone.filter((n) => n <= p.focusLesson);
   useScreen("page", "Home", () => {
     const sentence = sentenceOfTheDay(tabletLessons);
@@ -165,10 +166,15 @@ export function Home() {
               </div>
             );
           })}
-          <div>
+          <div class="row">
             <button class="btn ghost small" onClick={() => { startSession({ kind: "skills", skills: weak, label: "Weak spots" }); go({ page: "train" }); }}>
               Practise all four
             </button>
+            {toFix > 0 && (
+              <button class="btn small" onClick={() => { startSession({ kind: "mistakes" }); go({ page: "train" }); }}>
+                Fix {toFix} mistake{toFix === 1 ? "" : "s"}
+              </button>
+            )}
           </div>
         </section>
 

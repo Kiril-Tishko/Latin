@@ -7,9 +7,9 @@ import { Lexicon } from "../latin/analyze";
 import { Knowledge, pick, Rand } from "../latin/generate";
 import { latinKey } from "../latin/text";
 import { Entry } from "../latin/types";
-import { Ctx, deriveExercise, Exercise, ExerciseKind, makeExercise, Result, vocabExercise } from "./exercises";
+import { Ctx, deriveExercise, Exercise, ExerciseKind, MadeKind, makeExercise, Result, vocabExercise } from "./exercises";
 import { quizWords, wordInEnglish } from "../content/english";
-import { mastery, Progress, recordDay, recordMistake, recordSkill } from "./progress";
+import { mastery, Mistake, Progress, recordDay, recordMistake, recordSkill } from "./progress";
 import { dueWords, exposeWord, reviewWord } from "./srs";
 
 export const KIND_WEIGHTS: [ExerciseKind, number][] = [
@@ -22,6 +22,8 @@ export const KIND_WEIGHTS: [ExerciseKind, number][] = [
   ["identify", 6],
   ["vocab", 6],
   ["derive", 3],
+  ["tiles", 10],
+  ["meaning", 6],
   ["listen", 10],
 ];
 
@@ -54,9 +56,10 @@ export function pickFocus(p: Progress, k: Knowledge, r: Rand, only?: string[], f
  * forms, endings and reading; whole sentences to write come as it settles.
  */
 export function kindWeights(m: number): [ExerciseKind, number][] {
-  if (m < 0.35) return [["choose", 40], ["la2en", 24], ["ending", 16], ["form", 12], ["en2la", 8]];
-  if (m < 0.7) return [["ending", 22], ["choose", 14], ["form", 16], ["la2en", 14], ["en2la", 22], ["transform", 6], ["identify", 2], ["listen", 4]];
-  return [["en2la", 36], ["transform", 18], ["la2en", 14], ["ending", 12], ["form", 6], ["choose", 2], ["identify", 4], ["listen", 8]];
+  // a new rule: pick the form, read the meaning, build from tiles; little typing
+  if (m < 0.35) return [["choose", 30], ["meaning", 16], ["tiles", 16], ["la2en", 14], ["ending", 12], ["form", 8], ["en2la", 4]];
+  if (m < 0.7) return [["ending", 20], ["tiles", 14], ["choose", 10], ["form", 14], ["la2en", 12], ["meaning", 4], ["en2la", 18], ["transform", 4], ["identify", 2], ["listen", 2]];
+  return [["en2la", 34], ["transform", 18], ["la2en", 14], ["ending", 12], ["tiles", 6], ["form", 6], ["choose", 2], ["meaning", 2], ["identify", 2], ["listen", 4]];
 }
 
 /**
@@ -120,6 +123,49 @@ export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set
   return null;
 }
 
+/** Mistakes that can come back now: not fixed yet, and about rules of the step (or about a word). */
+export function mistakesToFix(p: Progress, k: Knowledge): Mistake[] {
+  return p.mistakes.filter((m) => !m.fixed && (m.skills.length ? m.skills.every((s) => k.skills.has(s)) : !!m.words?.length));
+}
+
+/** Gentle exercise kinds close to the one a mistake was made in. */
+function sameFamily(kind: string): ExerciseKind[] {
+  if (["en2la", "tiles", "transform", "listen"].includes(kind)) return ["tiles", "en2la"];
+  if (["ending", "choose", "form"].includes(kind)) return ["choose", "ending", "form"];
+  if (["la2en", "meaning", "identify"].includes(kind)) return ["meaning", "la2en", "choose"];
+  return [];
+}
+
+/**
+ * "Fix my mistakes": each mistake comes back as a fresh exercise on the same
+ * rules (and words), sensible and not too long. A right answer marks it fixed.
+ */
+export function mistakesSession(p: Progress, ctx: Ctx, vocab: Entry[], size = 10): Exercise[] {
+  const c: Ctx = { ...ctx, k: { ...ctx.k, richness: 0.5 } };
+  const out: Exercise[] = [];
+  const seen = new Set<string>();
+  for (const m of mistakesToFix(p, ctx.k)) {
+    if (out.length >= size) break;
+    const words = vocab.filter((w) => m.words?.includes(w.id));
+    let ex: Exercise | null = null;
+    if ((m.kind === "vocab" || m.kind === "derive") && words.length) {
+      ex = m.kind === "vocab" ? vocabExercise(c, words[0], c.r() < 0.5 ? "la2en" : "en2la") : deriveFrom(c, words);
+      if (ex && seen.has(ex.context)) continue;
+      if (ex) seen.add(ex.context);
+    } else if (m.skills.length) {
+      // the same kind of exercise first, then a close one (nextExercise keeps `seen` itself)
+      const kinds = sameFamily(m.kind);
+      ex =
+        nextExercise(p, c, { size: 1, skills: m.skills, kinds: [m.kind as ExerciseKind], vocab }, seen) ??
+        nextExercise(p, c, { size: 1, skills: m.skills, kinds: kinds.length ? kinds : undefined, vocab }, seen);
+    }
+    if (!ex) continue;
+    ex.fixes = m.at;
+    out.push(ex);
+  }
+  return out;
+}
+
 /**
  * A "find the Latin" question on one of these words, mostly with an English
  * word where the Latin is easy to spot (dormitory, aquarium) and now and then
@@ -176,7 +222,7 @@ export function placementSession(p: Progress, ctx: Ctx): Exercise[] {
   const out: Exercise[] = [];
   for (const [kind, focus] of plan) {
     const usable = focus.filter((f) => ctx.k.skills.has(f));
-    const ex = makeExercise(kind as Exclude<ExerciseKind, "vocab" | "derive">, ctx, usable);
+    const ex = makeExercise(kind as MadeKind, ctx, usable);
     if (ex) out.push(ex);
   }
   void p;
@@ -191,15 +237,21 @@ export function applyResult(p: Progress, ex: Exercise, res: Result, answer: stri
     else exposeWord(p, word, ok, now);
   }
   recordDay(p, res.verdict !== "wrong", now);
-  if (res.verdict !== "correct") {
+  // a mistake brought back and now answered right is fixed; answered wrong, it stays (no second copy)
+  const old = ex.fixes !== undefined ? p.mistakes.find((m) => m.at === ex.fixes) : undefined;
+  if (old) {
+    if (res.verdict !== "wrong") old.fixed = true;
+  } else if (res.verdict !== "correct") {
     recordMistake(p, {
       at: now,
       kind: ex.kind,
       prompt: ex.english ?? ex.ask ?? ex.context,
-      answer,
+      // a choice is kept as the word chosen, not its number
+      answer: ex.choices?.find((c) => c.id === answer)?.label ?? answer,
       expected: res.expected,
       skills: Object.entries(res.credit).filter(([, v]) => v < 0.5).map(([s]) => s),
       notes: res.issues.filter((i) => i.message).map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "")),
+      words: ex.words,
     });
   }
   p.updatedAt = now;

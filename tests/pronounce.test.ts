@@ -89,3 +89,20 @@ describe("samples (for reading)", () => {
     console.log(lines.join("\n"));
   });
 });
+
+describe("what reaches the voice", () => {
+  const es = { lang: "es-ES" } as SpeechSynthesisVoice;
+  it("reads only Latin words: separators become pauses, hints go", async () => {
+    const { speakable, spokenText } = await import("../src/audio/speech");
+    expect(speakable("puella · puellam · puellae#gen.sg · puellā")).toBe("puella, puellam, puellae, puellā");
+    expect(speakable("in + «portāre» → import")).toBe("in, portāre, import");
+    expect(spokenText("puella · puellam", es)).not.toMatch(/[·]/);
+    expect(spokenText("Vēnī, vīdī, vīcī.", es)).toBe(respell("Vēnī, vīdī, vīcī.", "es"));
+  });
+
+  it("never sends a symbol a voice would read out, in any Latin line of the site", async () => {
+    const { speakable } = await import("../src/audio/speech");
+    const lines = LESSONS.flatMap((l) => [...l.sentences, ...(l.story?.lines ?? []), ...l.phrases, ...l.rules.flatMap((r) => r.examples)].map((x) => x.la));
+    for (const line of lines) expect(speakable(line), line).toMatch(/^[\p{L}\s.,!?:;'-]*$/u);
+  });
+});

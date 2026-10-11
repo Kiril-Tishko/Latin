@@ -12,7 +12,10 @@ import { SKILL_BY_ID, adjDecl, declGroup, nounSkill } from "../latin/skills";
 import { latinKey, words } from "../latin/text";
 import { AdjEntry, Case, CASE_NAMES, Entry, full, NounKey, Num, PN, VerbEntry, VerbKey } from "../latin/types";
 
-export type ExerciseKind = "en2la" | "la2en" | "ending" | "choose" | "form" | "transform" | "identify" | "vocab" | "listen" | "derive";
+export type ExerciseKind = "en2la" | "la2en" | "ending" | "choose" | "form" | "transform" | "identify" | "vocab" | "listen" | "derive" | "tiles" | "meaning";
+
+/** Kinds made from the generator (the others need a word or a sentence to work on). */
+export type MadeKind = Exclude<ExerciseKind, "vocab" | "derive">;
 
 export const KIND_LABEL: Record<ExerciseKind, string> = {
   en2la: "Translate into Latin",
@@ -25,6 +28,8 @@ export const KIND_LABEL: Record<ExerciseKind, string> = {
   vocab: "Word recall",
   listen: "Listen and write",
   derive: "Find the Latin word",
+  tiles: "Build the sentence",
+  meaning: "What does it mean?",
 };
 
 export interface Result {
@@ -59,7 +64,7 @@ export interface Exercise {
   askNum?: Num;
   /** Dictionary forms that help, revealed on request. */
   hints: string[];
-  answer: "la" | "en" | "ending" | "choice";
+  answer: "la" | "en" | "ending" | "choice" | "tiles";
   choices?: { id: string; label: string }[];
   /** For "choice": the correct choice id. */
   correctChoice?: string;
@@ -72,6 +77,14 @@ export interface Exercise {
   audio?: string;
   /** Aimed at a rule that is still new: shown with colors and as plainly as possible. */
   easy?: boolean;
+  /** For "tiles": the words to build the answer from (the right ones and a wrong form or two). */
+  tiles?: string[];
+  /** A sentence from the video of this lesson. */
+  video?: number;
+  /** The mistake (its time) this exercise brings back in "Fix my mistakes". */
+  fixes?: number;
+  /** Another exercise on the same material, for a wrong answer to come back to. */
+  retry?: () => Exercise | null;
 }
 
 export interface Ctx {
@@ -123,23 +136,20 @@ function wordsCredit(ids: string[], ok: boolean): Record<string, boolean> {
 
 // ---------------------------------------------------------- translate
 
-function en2la(ctx: Ctx, focus: string[]): Exercise | null {
-  const c = generate(ctx.k, ctx.r, focus);
-  if (!c) return null;
-  const tokens = latinTokens(c, ctx.k);
-  const en = english(c, ctx.k);
+/** Write a sentence in Latin from its English (a generated one or one from a video); any word order counts. */
+export function writeOn(ctx: Ctx, tokens: LToken[], englishText: string, skills: string[]): Exercise {
   const slots = slotsFor(tokens, ctx.k);
   const ids = wordIds(tokens);
   return {
     id: nextId(),
     kind: "en2la",
     instruction: KIND_LABEL.en2la,
-    english: en.text,
+    english: englishText,
     hints: hintsFor(tokens),
     answer: "la",
-    skills: c.skills,
+    skills,
     words: ids,
-    context: `Translate into Latin: "${en.text}". Model answer: ${latinText(tokens)}`,
+    context: `Translate into Latin: "${englishText}". Model answer: ${latinText(tokens)}`,
     check(answer) {
       const r = checkLatin(answer, slots, ctx.lex);
       const blamedWords = new Set(r.tokens.filter((t) => t.status === "word").map((t) => t.slot?.analysis?.entry.id));
@@ -149,11 +159,104 @@ function en2la(ctx: Ctx, focus: string[]): Exercise | null {
         expected: latinText(tokens),
         expectedTokens: tokens,
         tokens: r.tokens,
-        credit: creditFrom(c.skills, r.verdict, r.issues),
+        credit: creditFrom(skills, r.verdict, r.issues),
         wordCredit: Object.fromEntries(ids.map((id) => [id, !blamedWords.has(id)])),
       };
     },
   };
+}
+
+function en2la(ctx: Ctx, focus: string[]): Exercise | null {
+  const c = generate(ctx.k, ctx.r, focus);
+  if (!c) return null;
+  return writeOn(ctx, latinTokens(c, ctx.k), english(c, ctx.k).text, c.skills);
+}
+
+/**
+ * Build the Latin sentence from word tiles: the right words and a wrong form or
+ * two of them, so the choice is about endings, not spelling. Any order counts.
+ */
+export function tilesOn(ctx: Ctx, tokens: LToken[], englishText: string, skills: string[], focus: string[] = []): Exercise | null {
+  if (tokens.length < 2 || tokens.length > 7) return null;
+  const right = tokens.map((t) => latinKey(t.text));
+  const candidates = tokens
+    .map((t) => ({ t, wrong: t.analysis && (t.analysis.entry.kind === "verb" || t.analysis.entry.kind === "noun") ? wrongForms(ctx.k, t).filter((w) => !right.includes(latinKey(w.text))) : [] }))
+    .filter((x) => x.wrong.length > 0);
+  const focused = candidates.filter((x) => x.t.skill && focus.includes(x.t.skill));
+  const chosen = shuffle(ctx.r, focused.length ? focused : candidates).slice(0, tokens.length <= 3 ? 1 : 2);
+  if (!chosen.length) return null;
+  const tiles = shuffle(ctx.r, [...tokens.map((t) => t.text), ...chosen.map((x) => pick(ctx.r, x.wrong).text)]);
+  const ex = writeOn(ctx, tokens, englishText, skills);
+  return {
+    ...ex,
+    kind: "tiles",
+    instruction: KIND_LABEL.tiles,
+    answer: "tiles",
+    tiles,
+    hints: [],
+    context: `Build the Latin for "${englishText}" from the tiles ${tiles.join(" / ")}. Model answer: ${latinText(tokens)}`,
+  };
+}
+
+function tilesEx(ctx: Ctx, focus: string[]): Exercise | null {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const c = generate(ctx.k, ctx.r, focus);
+    if (!c) return null;
+    // with ego / tū in sight the verb form is the choice that matters
+    const shown: Clause = c.subj.kind === "pron" ? { ...c, subj: { ...c.subj, shown: true } } : c;
+    const ex = tilesOn(ctx, latinTokens(shown, ctx.k), english(shown, ctx.k).text, shown.skills, focus);
+    if (ex) return ex;
+  }
+  return null;
+}
+
+/** Which English sentence says what the Latin says? Two others are the wrong options. */
+export function meaningOn(ctx: Ctx, tokens: LToken[], englishText: string, skills: string[], others: string[]): Exercise | null {
+  const same = normalizeEnglish(englishText);
+  const wrong = [...new Map(others.filter((o) => normalizeEnglish(o) !== same).map((o) => [normalizeEnglish(o), o])).values()].slice(0, 2);
+  if (wrong.length < 2) return null;
+  const all = shuffle(ctx.r, [englishText, ...wrong]);
+  const correct = String(all.indexOf(englishText));
+  const ids = wordIds(tokens);
+  return {
+    id: nextId(),
+    kind: "meaning",
+    instruction: KIND_LABEL.meaning,
+    latin: tokens,
+    audio: latinText(tokens),
+    hints: hintsFor(tokens),
+    answer: "choice",
+    choices: all.map((en, i) => ({ id: String(i), label: en })),
+    correctChoice: correct,
+    skills,
+    words: ids,
+    context: `Which English sentence means "${latinText(tokens)}"? Options: ${all.join(" / ")}. Answer: ${englishText}`,
+    check(answer) {
+      const ok = answer === correct;
+      return {
+        verdict: ok ? "correct" : "wrong",
+        issues: ok ? [] : [{ kind: "word", message: `Read the endings again: ${hinted(latinText(tokens))} means "${englishText}".` }],
+        expected: englishText,
+        credit: Object.fromEntries(skills.map((sk) => [sk, ok ? 1 : 0.3])),
+        wordCredit: wordsCredit(ids, ok),
+      };
+    },
+  };
+}
+
+/** The meaning of a generated sentence, against the same words with the roles swapped and another sentence. */
+function meaningEx(ctx: Ctx, focus: string[]): Exercise | null {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const c = generate(ctx.k, ctx.r, focus);
+    if (!c) return null;
+    const tokens = latinTokens(c, ctx.k);
+    const swapped = swapRoles(c);
+    const more = [0, 1, 2].map(() => generate(ctx.k, ctx.r, focus));
+    const others = [swapped, ...more].filter(Boolean).map((x) => english(x!, ctx.k).text);
+    const ex = meaningOn(ctx, tokens, english(c, ctx.k).text, c.skills, others);
+    if (ex) return ex;
+  }
+  return null;
 }
 
 function la2en(ctx: Ctx, focus: string[]): Exercise | null {
@@ -200,7 +303,11 @@ function la2en(ctx: Ctx, focus: string[]): Exercise | null {
 function ending(ctx: Ctx, focus: string[]): Exercise | null {
   const c = generate(ctx.k, ctx.r, focus);
   if (!c) return null;
-  const tokens = latinTokens(c, ctx.k);
+  return endingOn(ctx, latinTokens(c, ctx.k), english(c, ctx.k).text, focus);
+}
+
+/** Fill in the ending of one word of a sentence (a generated one or one from a video). */
+export function endingOn(ctx: Ctx, tokens: LToken[], englishText: string, focus: string[]): Exercise | null {
   // before subject and object are told apart (Lesson II), a subject's ending is
   // just the dictionary form: blank something that tests a rule instead
   const trivial = (t: LToken) => !ctx.k.skills.has("s.svo") && t.analysis?.key === "nom.sg";
@@ -212,7 +319,6 @@ function ending(ctx: Ctx, focus: string[]): Exercise | null {
   const focused = candidates.filter(({ t }) => t.skill && focus.includes(t.skill));
   const { t: target, i: blank } = pick(ctx.r, focused.length ? focused : candidates);
   const a = target.analysis!;
-  const en = english(c, ctx.k);
   const skills = [target.skill!].filter(Boolean);
   return {
     id: nextId(),
@@ -220,12 +326,12 @@ function ending(ctx: Ctx, focus: string[]): Exercise | null {
     instruction: KIND_LABEL.ending,
     latin: tokens,
     blank,
-    english: en.text,
+    english: englishText,
     hints: [`${dictionaryForm(a.entry)}: ${a.entry.en}`],
     answer: "ending",
     skills,
     words: [a.entry.id],
-    context: `Fill in the ending of "${a.form.stem}___" in: ${latinText(tokens)} ("${en.text}"). Answer: -${a.form.ending}`,
+    context: `Fill in the ending of "${a.form.stem}___" in: ${latinText(tokens)} ("${englishText}"). Answer: -${a.form.ending}`,
     check(answer) {
       const typed = latinKey(answer.trim().replace(/^-/, ""));
       const end = latinKey(a.form.ending);
@@ -299,55 +405,59 @@ function choose(ctx: Ctx, focus: string[]): Exercise | null {
     if (!generated) return null;
     // with ego / tū in sight only one verb form fits
     const c: Clause = generated.subj.kind === "pron" ? { ...generated, subj: { ...generated.subj, shown: true } } : generated;
-    const tokens = latinTokens(c, ctx.k);
-    const options = tokens
-      .map((t, i) => ({ t, i, wrong: t.analysis && (t.analysis.entry.kind === "verb" || t.analysis.entry.kind === "noun") ? wrongForms(ctx.k, t) : [] }))
-      .filter((x) => x.wrong.length > 0);
-    if (!options.length) continue;
-    const focused = options.filter((x) => x.t.skill && focus.includes(x.t.skill));
-    const { t: target, i: blank, wrong } = pick(ctx.r, focused.length ? focused : options);
-    const all = shuffle(ctx.r, [target, ...shuffle(ctx.r, wrong).slice(0, 2)]);
-    const correct = String(all.indexOf(target));
-    const a = target.analysis!;
-    const en = english(c, ctx.k);
-    const skills = [target.skill].filter(Boolean) as string[];
-    return {
-      id: nextId(),
-      kind: "choose",
-      instruction: KIND_LABEL.choose,
-      latin: tokens,
-      blank,
-      english: en.text,
-      hints: [`${dictionaryForm(a.entry)}: ${a.entry.en}`],
-      answer: "choice",
-      choices: all.map((x, i) => ({ id: String(i), label: x.text })),
-      correctChoice: correct,
-      skills,
-      words: [a.entry.id],
-      context: `Choose the word for the gap in: ${latinText(tokens)} ("${en.text}"). Options: ${all.map((x) => x.text).join(" / ")}. Answer: ${target.text}`,
-      check(answer) {
-        const ok = answer === correct;
-        const chosen = all[Number(answer)];
-        const issues: Issue[] = [];
-        if (!ok && chosen?.analysis) {
-          issues.push({
-            kind: "form",
-            message: `${hinted(chosen.text, chosen.analysis)} is ${whatForm(chosen.analysis)}. Here it must be ${whatForm(a)}: ${hinted(target.text, a)}.`,
-            skill: target.skill,
-          });
-        }
-        return {
-          verdict: ok ? "correct" : "wrong",
-          issues,
-          expected: target.text,
-          expectedTokens: tokens,
-          credit: Object.fromEntries(skills.map((sk) => [sk, ok ? 1 : 0])),
-          wordCredit: { [a.entry.id]: ok },
-        };
-      },
-    };
+    const ex = chooseOn(ctx, latinTokens(c, ctx.k), english(c, ctx.k).text, focus);
+    if (ex) return ex;
   }
   return null;
+}
+
+/** The right form for a gap in a sentence (a generated one or one from a video), out of two or three. */
+export function chooseOn(ctx: Ctx, tokens: LToken[], englishText: string, focus: string[]): Exercise | null {
+  const options = tokens
+    .map((t, i) => ({ t, i, wrong: t.analysis && (t.analysis.entry.kind === "verb" || t.analysis.entry.kind === "noun") ? wrongForms(ctx.k, t) : [] }))
+    .filter((x) => x.wrong.length > 0);
+  if (!options.length) return null;
+  const focused = options.filter((x) => x.t.skill && focus.includes(x.t.skill));
+  const { t: target, i: blank, wrong } = pick(ctx.r, focused.length ? focused : options);
+  const all = shuffle(ctx.r, [target, ...shuffle(ctx.r, wrong).slice(0, 2)]);
+  const correct = String(all.indexOf(target));
+  const a = target.analysis!;
+  const skills = [target.skill].filter(Boolean) as string[];
+  return {
+    id: nextId(),
+    kind: "choose",
+    instruction: KIND_LABEL.choose,
+    latin: tokens,
+    blank,
+    english: englishText,
+    hints: [`${dictionaryForm(a.entry)}: ${a.entry.en}`],
+    answer: "choice",
+    choices: all.map((x, i) => ({ id: String(i), label: x.text })),
+    correctChoice: correct,
+    skills,
+    words: [a.entry.id],
+    context: `Choose the word for the gap in: ${latinText(tokens)} ("${englishText}"). Options: ${all.map((x) => x.text).join(" / ")}. Answer: ${target.text}`,
+    check(answer) {
+      const ok = answer === correct;
+      const chosen = all[Number(answer)];
+      const issues: Issue[] = [];
+      if (!ok && chosen?.analysis) {
+        issues.push({
+          kind: "form",
+          message: `${hinted(chosen.text, chosen.analysis)} is ${whatForm(chosen.analysis)}. Here it must be ${whatForm(a)}: ${hinted(target.text, a)}.`,
+          skill: target.skill,
+        });
+      }
+      return {
+        verdict: ok ? "correct" : "wrong",
+        issues,
+        expected: target.text,
+        expectedTokens: tokens,
+        credit: Object.fromEntries(skills.map((sk) => [sk, ok ? 1 : 0])),
+        wordCredit: { [a.entry.id]: ok },
+      };
+    },
+  };
 }
 
 // ----------------------------------------------------------------- form
@@ -797,7 +907,7 @@ function listen(ctx: Ctx, focus: string[]): Exercise | null {
 
 // ---------------------------------------------------------------- entry
 
-const FACTORIES: Record<Exclude<ExerciseKind, "vocab" | "derive">, (ctx: Ctx, focus: string[]) => Exercise | null> = {
+const FACTORIES: Record<MadeKind, (ctx: Ctx, focus: string[]) => Exercise | null> = {
   en2la,
   la2en,
   ending,
@@ -806,9 +916,11 @@ const FACTORIES: Record<Exclude<ExerciseKind, "vocab" | "derive">, (ctx: Ctx, fo
   transform,
   identify,
   listen,
+  tiles: tilesEx,
+  meaning: meaningEx,
 };
 
-export function makeExercise(kind: Exclude<ExerciseKind, "vocab" | "derive">, ctx: Ctx, focus: string[]): Exercise | null {
+export function makeExercise(kind: MadeKind, ctx: Ctx, focus: string[]): Exercise | null {
   return FACTORIES[kind](ctx, focus);
 }
 

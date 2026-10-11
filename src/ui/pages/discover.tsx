@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { Card, CARD_BY_ID, DECK_CARDS } from "../../content/deck";
 import { seeded } from "../../latin/generate";
-import { dictionaryForm } from "../../latin/morph";
+import { dictionaryForm, headword as latinHeadword } from "../../latin/morph";
 import { roman } from "../../latin/text";
 import { cardExamples, cardUnlocked } from "../../trainer/discover";
 import { lessonWords } from "../../trainer/knowledge";
@@ -69,7 +69,7 @@ export function CardView({ card, n, onDone, onNext, onClose }: { card: Card; n?:
         <div class="stack" style={{ gap: "4px" }}>
           <div class="card-word">
             <LatinText text={plainDict(card)} />
-            <Speak text={plainDict(card)} id={`card-${card.id}`} />
+            <Speak text={latinHeadword(card.entry)} id={`card-${card.id}`} />
           </div>
           <div class="card-meaning">
             {e.en}

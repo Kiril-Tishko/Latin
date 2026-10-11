@@ -66,6 +66,36 @@ async function run(name, viewport, colorScheme) {
   await p.screenshot({ path: `${out}/${name}-english-quiz.png` });
   await p.locator(".trainer-top button", { hasText: "End" }).click();
   await p.locator("button", { hasText: "Choose another practice" }).click();
+  // a round on the sentences of the videos (tiles and meanings among them), then the mistakes come back
+  await p.locator(".mode-card", { hasText: "Sentences from the videos" }).click();
+  const kinds = new Set();
+  for (let i = 0; i < 20 && !(await p.locator(".summary-head").count()); i++) {
+    await p.waitForTimeout(120);
+    if (await p.locator(".tile-board").count()) {
+      kinds.add("tiles");
+      await p.locator(".tile-tray .tile").first().click();
+      await p.locator("button", { hasText: "Check" }).click();
+    } else if (await p.locator(".meaning-choices").count()) {
+      kinds.add("meaning");
+      await p.locator(".meaning-choices .word-btn").first().click();
+    } else if (await p.locator(".word-btn.choice").count()) await p.locator(".word-btn.choice").first().click();
+    else {
+      await p.locator("#answer-input").fill("a");
+      await p.locator("#answer-input").press("Enter");
+    }
+    await p.waitForTimeout(120);
+    if (!(await p.locator(".ex-source", { hasText: "video" }).count())) errors.push(`${name}: a video round exercise does not say where it is from`);
+    await p.locator("button", { hasText: "Next" }).click();
+  }
+  if (!kinds.has("tiles") || !kinds.has("meaning")) errors.push(`${name}: the video round had no tiles or no meanings (${[...kinds]})`);
+  await p.screenshot({ path: `${out}/${name}-video-summary.png`, fullPage: true });
+  await p.locator("button", { hasText: "Choose another practice" }).click();
+  await p.locator(".mode-card", { hasText: "Fix my mistakes" }).click();
+  await p.waitForTimeout(200);
+  if (!(await p.locator(".ex-source", { hasText: "earlier mistake" }).count())) errors.push(`${name}: Fix my mistakes does not bring a mistake back`);
+  await p.screenshot({ path: `${out}/${name}-fix.png` });
+  await p.locator(".trainer-top button", { hasText: "End" }).click();
+  await p.locator("button", { hasText: "Choose another practice" }).click();
   // train: the current step (Lesson I), its rule refresher first, then three exercises
   await p.locator(nav, { hasText: "Exercitium" }).first().click();
   await p.waitForTimeout(200);
@@ -81,7 +111,10 @@ async function run(name, viewport, colorScheme) {
       await p.waitForTimeout(100);
       if (!(await p.locator(".rule-box").count())) errors.push(`${name}: the Rule button shows no rule`);
     }
-    if (await p.locator(".word-btn").count()) await p.locator(".word-btn").first().click();
+    if (await p.locator(".tile-board").count()) {
+      await p.locator(".tile-tray .tile").first().click();
+      await p.locator("button", { hasText: "Check" }).click();
+    } else if (await p.locator(".word-btn").count()) await p.locator(".word-btn").first().click();
     else {
       await p.locator("#answer-input").fill(i === 0 ? "puella" : "agricola aquam portat");
       await p.screenshot({ path: `${out}/${name}-train-${i}-q.png` });

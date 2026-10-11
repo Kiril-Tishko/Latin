@@ -25,7 +25,7 @@ export function fullLexicon(extra: Entry[] = []): Lexicon {
  * `grammarLessons`: step-by-step practice uses every word the learner knows but
  * only the rules up to the current step.
  */
-export function buildKnowledge(lessonsUnlocked: number[], extraWords: Entry[] = [], silly = 0.35, grammarLessons = lessonsUnlocked): Knowledge {
+export function buildKnowledge(lessonsUnlocked: number[], extraWords: Entry[] = [], silly = 0, grammarLessons = lessonsUnlocked): Knowledge {
   const words = [...lessonWords(lessonsUnlocked), ...extraWords].filter((w) => !STORY_ONLY.has(w.id));
   const seen = new Set<string>();
   const unique = words.filter((w) => (seen.has(w.id) ? false : (seen.add(w.id), true)));

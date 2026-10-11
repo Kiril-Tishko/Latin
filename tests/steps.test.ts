@@ -56,8 +56,10 @@ describe("step-by-step practice", () => {
       const total = w.reduce((s, [, x]) => s + x, 0);
       return w.filter(([kind]) => ks.includes(kind)).reduce((s, [, x]) => s + x, 0) / total;
     };
-    expect(share(0, ["choose", "la2en"])).toBeGreaterThan(0.6);
-    expect(share(0, ["choose", "la2en", "ending", "form"])).toBeGreaterThan(0.9);
+    // a new rule: choosing a form, reading the meaning, building from tiles; hardly any typing
+    expect(share(0, ["choose", "meaning", "tiles", "la2en"])).toBeGreaterThan(0.6);
+    expect(share(0, ["choose", "meaning", "tiles", "la2en", "ending", "form"])).toBeGreaterThan(0.9);
+    expect(share(0, ["en2la"])).toBeLessThan(0.1);
     expect(share(0, ["transform", "identify", "listen"])).toBe(0);
     expect(share(0.9, ["en2la", "transform"])).toBeGreaterThan(0.5);
   });
@@ -126,9 +128,16 @@ describe("step-by-step practice", () => {
   it("restarts saves from before the steps at Lesson I, and keeps later choices", () => {
     const old = migrate({ version: 1, lessonsDone: [1, 2, 3, 4], focusLesson: 4, updatedAt: 5 });
     expect(old.focusLesson).toBe(1);
-    expect(old.version).toBe(2);
+    expect(old.version).toBe(3);
     expect(old.rulesShown).toEqual({});
     const now = migrate({ ...old, focusLesson: 2 });
     expect(now.focusLesson).toBe(2);
+  });
+
+  it("switches saves to sensible sentences once, and keeps a later choice", () => {
+    const v2 = migrate({ version: 2, settings: { silly: 0.35 }, lessonsDone: [1, 2, 3, 4], focusLesson: 1 });
+    expect(v2.settings.silly).toBe(0);
+    expect(migrate({ ...v2, settings: { ...v2.settings, silly: 0.8 } }).settings.silly).toBe(0.8);
+    expect(newProgress().settings.silly).toBe(0);
   });
 });

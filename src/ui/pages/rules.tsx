@@ -11,6 +11,7 @@ import { LatinTokens } from "../latin";
 import { derived, useProgress } from "../store";
 import { RuleView } from "./lessons";
 import { useScreen } from "../screen";
+import { go } from "../nav";
 
 const word = (id: string) => Object.values(LESSON_WORDS).flat().find((w) => w.id === id)!;
 
@@ -158,6 +159,17 @@ export function Rules() {
           {l.rules.map((r) => <RuleView key={r.id} r={r} />)}
         </section>
       ))}
+
+      <section class="panel stack" data-ask="Latin rules inside English">
+        <h3>Latin rules inside English</h3>
+        <p class="small">
+          Why "It is I", why no preposition at the end, why alumni and algae, why debt has a b: the rules English took from Latin, and the Latin words and
+          endings you can already spot in English.
+        </p>
+        <div>
+          <button class="btn ghost small" onClick={() => go({ page: "english" })}>Latin in English</button>
+        </div>
+      </section>
     </div>
   );
 }

@@ -50,6 +50,22 @@ async function run(name, viewport, colorScheme) {
   await p.locator(".lesson-card").nth(3).click();
   await p.waitForTimeout(300);
   await p.screenshot({ path: `${out}/${name}-lesson4.png`, fullPage: true });
+  // Latin in English, from the lessons list, and its find-the-Latin round
+  await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();
+  await p.locator(".lesson-card", { hasText: "Latin in English" }).click();
+  await p.waitForTimeout(300);
+  if ((await p.locator(".en-section").count()) !== 12) errors.push(`${name}: the Latin in English page is missing sections`);
+  if (!(await p.locator(".en-card").count())) errors.push(`${name}: no words of yours on the Latin in English page`);
+  await p.screenshot({ path: `${out}/${name}-english.png` });
+  await p.locator("button", { hasText: "Practise: find the Latin" }).first().click();
+  await p.waitForTimeout(200);
+  await p.locator("#answer-input").fill("aqua");
+  await p.locator("#answer-input").press("Enter");
+  await p.waitForTimeout(200);
+  if (!(await p.locator(".verdict").count())) errors.push(`${name}: the find-the-Latin exercise gives no verdict`);
+  await p.screenshot({ path: `${out}/${name}-english-quiz.png` });
+  await p.locator(".trainer-top button", { hasText: "End" }).click();
+  await p.locator("button", { hasText: "Choose another practice" }).click();
   // train: the current step (Lesson I), its rule refresher first, then three exercises
   await p.locator(nav, { hasText: "Exercitium" }).first().click();
   await p.waitForTimeout(200);
@@ -228,6 +244,7 @@ async function askClaude() {
   await p.locator("button", { hasText: "Ask Claude about it" }).click();
   await p.waitForTimeout(150);
   if (!(await p.locator(".modal").count())) errors.push("ask: asking about a word closed the word");
+  if (!(await p.locator(".modal", { hasText: "In English" }).count())) errors.push("ask: the word dialog shows no English relatives");
   await p.locator("#ask-input").press("Enter");
   await p.waitForTimeout(200);
   if (!(await lastAsked()).includes("Text of the open dialog")) errors.push("ask: the open word is not described");

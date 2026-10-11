@@ -19,6 +19,7 @@ import { derived, useProgress } from "../store";
 import { startSession } from "./train";
 import { Speak } from "../speak";
 import { Sayings } from "../saying";
+import { wordInEnglish } from "../../content/english";
 import { useScreen } from "../screen";
 
 const CASE_ORDER: Case[] = ["nom", "acc", "gen", "abl", "dat", "voc"];
@@ -155,6 +156,7 @@ function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
         )}
         <Sayings wordId={e.id} max={2} />
         {card && <p class="small"><span class="eyebrow" style={{ marginRight: "8px" }}>Remember</span>{card.hook}</p>}
+        <InEnglish e={e} onMore={() => { onClose(); go({ page: "english" }); }} />
         <div class="row">
           <button class="btn ghost small" onClick={() => openAsk({ label: `Word: ${dictionaryForm(e)}`, detail: `The learner opened the dictionary entry ${dictionaryForm(e)} (${e.en}).` }, "How is this word used? Give me two short examples with words I know.")}>
             <Icon.quill /> Ask Claude about it
@@ -162,6 +164,25 @@ function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** The English words a word gave, its cousins and its traps, with a way to the whole story. */
+function InEnglish({ e, onMore }: { e: Entry; onMore: () => void }) {
+  const rel = wordInEnglish(e.id);
+  if (!rel || !(rel.from.en?.length || rel.kin?.en?.length)) return null;
+  return (
+    <div class="small stack" style={{ gap: "2px" }}>
+      <div>
+        <span class="eyebrow" style={{ marginRight: "8px" }}>In English</span>
+        {rel.from.en?.join(", ")}
+        {rel.kin?.en?.length ? <span class="muted">{rel.from.en?.length ? " · " : ""}same ancient root: {rel.kin.en.join(", ")}</span> : null}
+      </div>
+      {rel.trap && <div class="muted">Not related: {rel.trap}</div>}
+      <div>
+        <button class="linkish" onClick={onMore}>Latin in English</button>
+      </div>
+    </div>
   );
 }
 

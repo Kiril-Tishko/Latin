@@ -1,5 +1,5 @@
 // Page routing. Only a bare #token survives in an artifact link, so routes
-// are plain words: #home, #lessons, #lesson-3, #train, #words, #discover, #rules.
+// are plain words: #home, #lessons, #lesson-3, #train, #words, #discover, #rules, #english.
 import { useEffect, useState } from "preact/hooks";
 
 export type Route =
@@ -9,13 +9,14 @@ export type Route =
   | { page: "train" }
   | { page: "words" }
   | { page: "discover" }
-  | { page: "rules" };
+  | { page: "rules" }
+  | { page: "english" };
 
 export function parse(hash: string): Route {
   const h = hash.replace(/^#/, "");
   const m = h.match(/^lesson-(\d+)$/);
   if (m) return { page: "lesson", n: Number(m[1]) };
-  if (["lessons", "train", "words", "discover", "rules"].includes(h)) return { page: h as "lessons" };
+  if (["lessons", "train", "words", "discover", "rules", "english"].includes(h)) return { page: h as "lessons" };
   return { page: "home" };
 }
 

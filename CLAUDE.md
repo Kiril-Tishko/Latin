@@ -123,7 +123,10 @@ Italian and a Spanish voice to exercise the audio paths.
    9 etJy99U1YBc, 10 _O360QTciZo, 11 Z6YCvOnWyi4, 12 ARW59NnVttE.
 2. **Words**: add them to `LESSON_WORDS[n]` in `src/content/words.ts` with
    full grammar (`noun`, `verb`, `adj`, `adj3`, `fixed`). Story-only words go
-   in `STORY_ONLY`.
+   in `STORY_ONLY`. Give each one its English (and Russian / Ukrainian)
+   relatives in `LESSON_WORDS_IN_ENGLISH` (`src/content/english.ts`): the test
+   fails on a lesson word without an entry, and the "find the Latin" exercise
+   quizzes the plain English words listed there.
 3. **Skills**: new endings or constructions get ids in `src/latin/skills.ts`
    (e.g. `n1.acc.pl`, `v.1pl`, `n3.nom.sg`). The generator only uses a form when
    its skill is unlocked; add templates in `src/latin/generate.ts` for new
@@ -149,6 +152,14 @@ Italian and a Spanish voice to exercise the audio paths.
 - Famous sayings live in `src/content/sayings.ts`, linked to word ids; the
   Words dialog and Discover cards show them. Check each one's colors with the
   analyzer before adding it.
+- Latin in English (`#english`, `src/content/english.ts`, `src/ui/pages/english.tsx`):
+  how English took Latin (waves), each known word's English relatives, Latin
+  verb forms and plurals inside English, grammar rules English took from Latin,
+  word parts, spelling, grammar terms, abbreviations, phrases, Russian /
+  Ukrainian parallels. It sits under Lectiōnēs (a card after the lessons) and
+  has its own practice mode, "find the Latin" (`derive` exercises: any form of
+  the right word counts). Claims there must be etymologically sound: borrowed
+  vs. cousin (kin) vs. look-alike (trap), as in the deck.
 - Each case owns one color (see `src/styles.css`); nothing else in the UI uses
   those hues.
 - Roman touches, in gold and brown only: the hedera (ivy-leaf mark, `Hedera`),

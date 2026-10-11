@@ -2,6 +2,7 @@
 // detailed feedback with colored endings, and Claude on hand for "why?".
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { LESSON_BY_N } from "../../content/lessons";
+import { STORY_ONLY } from "../../content/words";
 import { Knowledge, latinText, seeded } from "../../latin/generate";
 import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
@@ -30,7 +31,8 @@ export type Mode =
   | { kind: "writing" }
   | { kind: "endings" }
   | { kind: "words" }
-  | { kind: "listening" };
+  | { kind: "listening" }
+  | { kind: "english" };
 
 interface Attempt {
   ex: Exercise;
@@ -79,6 +81,8 @@ export function modeLabel(m: Mode): string {
       return "Word recall";
     case "listening":
       return "Listening";
+    case "english":
+      return "Latin in English";
   }
 }
 
@@ -149,6 +153,9 @@ export function startSession(mode: Mode) {
     case "listening":
       items = buildSession(p, c, { size: 12, kinds: ["listen"], focusLesson: level });
       break;
+    case "english":
+      items = buildSession(p, c, { size: 10, kinds: ["derive"], vocab: derived().words.filter((w) => !STORY_ONLY.has(w.id)) });
+      break;
     default:
       items = buildSession(p, c, { size: SIZE, vocab });
   }
@@ -198,6 +205,7 @@ function Chooser() {
     { mode: { kind: "writing" }, title: "Write Latin", text: `Whole sentences into Latin, with ${upTo}.` },
     { mode: { kind: "endings" }, title: "Endings drill", text: "Quick: choose and fill in endings." },
     { mode: { kind: "words" }, title: "Word recall", text: "Your words, both ways, just before you would forget them." },
+    { mode: { kind: "english" }, title: "Latin in English", text: "Find the Latin word inside an English one: dormitory, aquarium…" },
     ...(audioReady() ? [{ mode: { kind: "listening" } as Mode, title: "Listening", text: "Hear a sentence, write it down." }] : []),
     { mode: { kind: "mixed" }, title: "All lessons mixed", text: "Every rule at once. The hardest." },
     ...(!p.placementDone ? [{ mode: { kind: "placement" } as Mode, title: "Check-up (3 min)", text: "Twelve questions across Lessons I-IV." }] : []),
@@ -311,6 +319,7 @@ function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
     form: plainText(ex.ask ?? ""),
     identify: `the sentence "${shownLatin(ex, true)}"; the learner taps the word asked for.`,
     vocab: ex.ask ?? "",
+    derive: `the English word "${ex.ask}"; the learner names the Latin word it comes from.`,
   };
   const lines = [
     `Practising: ${modeLabel(s.mode)} (only the rules up to Lesson ${s.level}). Exercise ${s.index + 1} of ${s.items.length}, "${ex.instruction}".`,
@@ -496,7 +505,7 @@ function Runner({ s }: { s: Session }) {
                   autocapitalize="off"
                   spellcheck={false}
                   lang={isLatinAnswer ? "la" : "en"}
-                  placeholder={ex.kind === "listen" ? "Write what you hear, in Latin…" : isLatinAnswer ? "Scrībe Latīnē… (long marks not needed)" : "Write it in English…"}
+                  placeholder={ex.kind === "listen" ? "Write what you hear, in Latin…" : ex.kind === "derive" ? "The Latin word, any form (aqua, dormiō…)" : isLatinAnswer ? "Scrībe Latīnē… (long marks not needed)" : "Write it in English…"}
                   onInput={(e) => setAnswer((e.target as HTMLTextAreaElement).value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -681,13 +690,20 @@ function Prompt(props: {
       );
     case "vocab":
       return <p class="latin-lg">{ex.answer === "en" ? <Inline text={`«${ex.ask}»`} /> : ex.ask}</p>;
+    case "derive":
+      return (
+        <div class="stack" style={{ gap: "4px" }}>
+          <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }} lang="en">{ex.ask}</p>
+          <span class="muted ui" style={{ fontSize: "0.95rem" }}>an English word</span>
+        </div>
+      );
   }
 }
 
 function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: string }) {
   const v = VERDICT[res.verdict];
   const latinAnswer = ex.answer === "la" && res.tokens;
-  const meaning = ex.kind === "transform" ? ex.answerEnglish : ex.kind === "ending" || ex.kind === "choose" ? ex.english : undefined;
+  const meaning = ex.kind === "transform" || ex.kind === "derive" ? ex.answerEnglish : ex.kind === "ending" || ex.kind === "choose" ? ex.english : undefined;
   // after a mistake: the one-line rule for each skill it was about
   const blamed = res.verdict === "correct" ? [] : [...new Set(res.issues.filter((i) => i.kind !== "tip" && i.kind !== "typo").map((i) => i.skill).filter(Boolean) as string[])];
   const ruleHints = blamed.map((id) => SKILL_BY_ID.get(id)?.hint).filter(Boolean).slice(0, 2) as string[];

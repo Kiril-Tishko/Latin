@@ -6,7 +6,7 @@ import { dictionaryForm } from "../../latin/morph";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
 import { openAsk } from "../ask";
-import { Icon, Modal, Mosaic } from "../components";
+import { Hedera, Icon, Modal, Mosaic } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
 import { go } from "../nav";
@@ -40,6 +40,17 @@ export function Lessons() {
             </button>
           );
         })}
+        <button class="panel lesson-card" onClick={() => go({ page: "english" })}>
+          <span class="numeral" aria-hidden="true"><Hedera /></span>
+          <div class="stack" style={{ gap: "6px" }}>
+            <div class="spread">
+              <h2 style={{ fontSize: "1.3rem" }}>Latin in English</h2>
+              <span class="chip">extra</span>
+            </div>
+            <p class="muted small">What English took from Latin: your words in English, Latin verbs and plurals hiding in it, grammar rules, abbreviations, and the same words in Russian and Ukrainian.</p>
+            <span class="small ui muted">Read it, then practise finding the Latin inside English words.</span>
+          </div>
+        </button>
       </div>
     </div>
   );

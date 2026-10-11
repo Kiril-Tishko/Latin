@@ -228,6 +228,9 @@ export function Home() {
               <Mosaic value={lessonMastery(l.n, p.skills)} thin />
             </div>
           ))}
+          <div>
+            <button class="linkish" onClick={() => go({ page: "english" })}>Extra: Latin in English</button>
+          </div>
         </section>
       </div>
 

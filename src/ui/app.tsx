@@ -9,6 +9,7 @@ import { LessonPage, Lessons } from "./pages/lessons";
 import { Rules } from "./pages/rules";
 import { startSession, Train } from "./pages/train";
 import { Words } from "./pages/words";
+import { English } from "./pages/english";
 import { Settings } from "./settings";
 import { connect, getSync, useProgress } from "./store";
 import { connectChats } from "./chats";
@@ -26,9 +27,10 @@ const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.El
   { route: { page: "rules" }, label: "Rēgulae", en: "Rules", icon: Icon.column },
 ];
 
-const active = (r: Route, t: Route) => r.page === t.page || (r.page === "lesson" && t.page === "lessons");
+// a lesson page and Latin in English belong to Lectiōnēs
+const active = (r: Route, t: Route) => r.page === t.page || ((r.page === "lesson" || r.page === "english") && t.page === "lessons");
 
-const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", train: "Practice", words: "Words", discover: "Discover", rules: "Rules" };
+const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", train: "Practice", words: "Words", discover: "Discover", rules: "Rules", english: "Latin in English" };
 
 const SYNC_TEXT = { local: "saved in this browser", connecting: "connecting…", synced: "saved to your account", saving: "saving…", error: "saving failed, will retry" };
 
@@ -68,6 +70,9 @@ export function App() {
       break;
     case "rules":
       page = <Rules />;
+      break;
+    case "english":
+      page = <English />;
       break;
     default:
       page = <Home />;

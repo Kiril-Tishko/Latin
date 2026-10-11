@@ -7,7 +7,7 @@ import { mastery, migrate, newProgress } from "../src/trainer/progress";
 import { buildSession, kindWeights, readiness, sentenceStyle } from "../src/trainer/session";
 
 const lex = fullLexicon();
-const kinds: Exclude<ExerciseKind, "vocab">[] = ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen"];
+const kinds: Exclude<ExerciseKind, "vocab" | "derive">[] = ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen"];
 
 describe("step-by-step practice", () => {
   // every word of Lessons I-IV, but only the rules of Lesson I
@@ -65,7 +65,7 @@ describe("step-by-step practice", () => {
   it("keeps sentences short, sensible and in the usual order while a rule is new", () => {
     const k2 = buildKnowledge([1, 2, 3, 4], [], 0.35, [1, 2, 3, 4]);
     const style = (m: number) => ({ ...k2, ...sentenceStyle(m, 0.35) });
-    const longest = (k: typeof k2, kind: Exclude<ExerciseKind, "vocab">) => {
+    const longest = (k: typeof k2, kind: Exclude<ExerciseKind, "vocab" | "derive">) => {
       let max = 0;
       let objFirst = 0;
       for (let seed = 1; seed <= 200; seed++) {

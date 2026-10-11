@@ -5,8 +5,10 @@
 import { LESSON_BY_N } from "../content/lessons";
 import { Lexicon } from "../latin/analyze";
 import { Knowledge, pick, Rand } from "../latin/generate";
+import { latinKey } from "../latin/text";
 import { Entry } from "../latin/types";
-import { Ctx, Exercise, ExerciseKind, makeExercise, Result, vocabExercise } from "./exercises";
+import { Ctx, deriveExercise, Exercise, ExerciseKind, makeExercise, Result, vocabExercise } from "./exercises";
+import { quizWords, wordInEnglish } from "../content/english";
 import { mastery, Progress, recordDay, recordMistake, recordSkill } from "./progress";
 import { dueWords, exposeWord, reviewWord } from "./srs";
 
@@ -19,6 +21,7 @@ export const KIND_WEIGHTS: [ExerciseKind, number][] = [
   ["transform", 12],
   ["identify", 6],
   ["vocab", 6],
+  ["derive", 3],
   ["listen", 10],
 ];
 
@@ -104,6 +107,8 @@ export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set
       const id = due.length && ctx.r() < 0.8 ? due[0] : pick(ctx.r, pool).id;
       const entry = pool.find((e) => e.id === id)!;
       ex = vocabExercise(ctx, entry, ctx.r() < 0.5 ? "la2en" : "en2la");
+    } else if (kind === "derive") {
+      ex = deriveFrom(ctx, opts.vocab ?? []);
     } else {
       ex = makeExercise(kind, c, focus ?? pickFocus(p, ctx.k, ctx.r, opts.skills, opts.focusLesson));
     }
@@ -113,6 +118,21 @@ export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set
     return ex;
   }
   return null;
+}
+
+/**
+ * A "find the Latin" question on one of these words, mostly with an English
+ * word where the Latin is easy to spot (dormitory, aquarium) and now and then
+ * a harder one (wine, envy).
+ */
+function deriveFrom(ctx: Ctx, vocab: Entry[]): Exercise | null {
+  const pool = vocab.flatMap((e) => quizWords(e.id).map((en) => ({ e, en })));
+  if (!pool.length) return null;
+  const lemma = (e: Entry) => latinKey(e.kind === "verb" ? e.pp[0] : e.lemma);
+  const clear = pool.filter(({ e, en }) => en.includes(lemma(e).slice(0, 3)));
+  const { e, en } = pick(ctx.r, clear.length && ctx.r() < 0.8 ? clear : pool);
+  const accept = vocab.filter((x) => wordInEnglish(x.id)?.from.en?.includes(en)).map((x) => x.id);
+  return deriveExercise(ctx, e, en, accept, wordInEnglish(e.id)?.note);
 }
 
 export function buildSession(p: Progress, ctx: Ctx, opts: SessionOpts): Exercise[] {
@@ -156,7 +176,7 @@ export function placementSession(p: Progress, ctx: Ctx): Exercise[] {
   const out: Exercise[] = [];
   for (const [kind, focus] of plan) {
     const usable = focus.filter((f) => ctx.k.skills.has(f));
-    const ex = makeExercise(kind as Exclude<ExerciseKind, "vocab">, ctx, usable);
+    const ex = makeExercise(kind as Exclude<ExerciseKind, "vocab" | "derive">, ctx, usable);
     if (ex) out.push(ex);
   }
   void p;

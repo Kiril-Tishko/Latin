@@ -22,6 +22,10 @@ published as a private claude.ai artifact.
 - **Audio**: every Latin sentence can be heard in classical pronunciation
   (through the device's Spanish or Italian voice), Listen & repeat on lesson pages, and a
   Listen and write exercise.
+- **Latin in English**: what English took from Latin, from Roman traders to
+  modern science; the English words that grew from each word you know; Latin
+  verb forms, plurals, grammar rules and abbreviations inside English; and a
+  "find the Latin" practice (dormitory → dormiō).
 - **Ask Claude**: a tutor that sees your lessons, words and weak spots, and what
   is on your screen (the exercise, the lines of a lesson in view, the word or card
   you opened), so you can ask "what does this sentence mean?".

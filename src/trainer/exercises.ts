@@ -12,7 +12,7 @@ import { SKILL_BY_ID, adjDecl, declGroup, nounSkill } from "../latin/skills";
 import { latinKey, words } from "../latin/text";
 import { AdjEntry, Case, CASE_NAMES, Entry, full, NounKey, Num, PN, VerbEntry, VerbKey } from "../latin/types";
 
-export type ExerciseKind = "en2la" | "la2en" | "ending" | "choose" | "form" | "transform" | "identify" | "vocab" | "listen";
+export type ExerciseKind = "en2la" | "la2en" | "ending" | "choose" | "form" | "transform" | "identify" | "vocab" | "listen" | "derive";
 
 export const KIND_LABEL: Record<ExerciseKind, string> = {
   en2la: "Translate into Latin",
@@ -24,6 +24,7 @@ export const KIND_LABEL: Record<ExerciseKind, string> = {
   identify: "Find the word",
   vocab: "Word recall",
   listen: "Listen and write",
+  derive: "Find the Latin word",
 };
 
 export interface Result {
@@ -720,6 +721,40 @@ export function vocabExercise(_ctx: Ctx, entry: Entry, direction: "la2en" | "en2
   };
 }
 
+// --------------------------------------------------------------- derive
+
+/**
+ * "Which Latin word is inside 'dormitory'?" Any form of the word counts, and so
+ * does any other known word the English word comes from (`accept`).
+ */
+export function deriveExercise(ctx: Ctx, entry: Entry, english: string, accept: string[] = [], note?: string): Exercise {
+  const dict = dictionaryForm(entry);
+  const ok = new Set([entry.id, ...accept]);
+  return {
+    id: nextId(),
+    kind: "derive",
+    instruction: "Which Latin word that you know is inside this English word?",
+    ask: english,
+    hints: [`It means "${entry.en}".`],
+    answer: "la",
+    skills: [],
+    words: [entry.id],
+    context: `Which Latin word that the learner knows is inside the English word "${english}"? Answer: ${dict} (${entry.en}).`,
+    answerEnglish: `Means "${entry.en}".${note ? ` ${note}` : ""}`,
+    check(answer) {
+      const good = ctx.lex.analyze(words(answer)[0] ?? "").some((a) => ok.has(a.entry.id));
+      return {
+        verdict: good ? "correct" : "wrong",
+        // the answer and its meaning are shown below the verdict
+        issues: [],
+        expected: dict,
+        credit: {},
+        wordCredit: { [entry.id]: good },
+      };
+    },
+  };
+}
+
 // --------------------------------------------------------------- listen
 
 function listen(ctx: Ctx, focus: string[]): Exercise | null {
@@ -762,7 +797,7 @@ function listen(ctx: Ctx, focus: string[]): Exercise | null {
 
 // ---------------------------------------------------------------- entry
 
-const FACTORIES: Record<Exclude<ExerciseKind, "vocab">, (ctx: Ctx, focus: string[]) => Exercise | null> = {
+const FACTORIES: Record<Exclude<ExerciseKind, "vocab" | "derive">, (ctx: Ctx, focus: string[]) => Exercise | null> = {
   en2la,
   la2en,
   ending,
@@ -773,7 +808,7 @@ const FACTORIES: Record<Exclude<ExerciseKind, "vocab">, (ctx: Ctx, focus: string
   listen,
 };
 
-export function makeExercise(kind: Exclude<ExerciseKind, "vocab">, ctx: Ctx, focus: string[]): Exercise | null {
+export function makeExercise(kind: Exclude<ExerciseKind, "vocab" | "derive">, ctx: Ctx, focus: string[]): Exercise | null {
   return FACTORIES[kind](ctx, focus);
 }
 

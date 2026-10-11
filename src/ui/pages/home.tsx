@@ -107,7 +107,7 @@ export function Home() {
     ]
       .filter(Boolean)
       .join("\n");
-  });
+  }, { share: false });
 
   return (
     <div class="stack-lg">

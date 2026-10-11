@@ -13,7 +13,7 @@ import { Chat, ChatTurn, deleteChat, getChat, getChats, newChatId, saveChat, use
 import { Icon, toast } from "./components";
 import { Markup } from "./markup";
 import { SampleFn, sampleErrorText, sampler, storage } from "./platform";
-import { currentScreen, Screen, useScreenLabel } from "./screen";
+import { currentScreen, Screen, sharedByDefault, useScreenLabel } from "./screen";
 import { derived, getProgress } from "./store";
 
 export interface AskContext {
@@ -33,6 +33,8 @@ interface AskState {
   draft?: string;
   /** Showing the list of saved conversations. */
   history: boolean;
+  /** For a conversation not sent yet: whether Claude sees the screen (null: the page decides). */
+  share: boolean | null;
 }
 
 // the drawer comes back as it was after a reload: open or closed, on the same conversation
@@ -48,7 +50,7 @@ function loadUi(): Pick<AskState, "open" | "chatId"> {
   }
 }
 
-let state: AskState = { ...loadUi(), context: null, history: false };
+let state: AskState = { ...loadUi(), context: null, history: false, share: null };
 const listeners = new Set<() => void>();
 const set = (s: Partial<AskState>) => {
   state = { ...state, ...s };
@@ -87,8 +89,17 @@ export function onPractice(fn: (skills: string[]) => void) {
 export function openAsk(context: AskContext | null, suggestion?: string) {
   const current = getChat(state.chatId);
   const about = current ? current.context : state.context;
-  if (context && about?.detail !== context.detail) set({ open: true, chatId: null, context, draft: suggestion, history: false });
-  else set({ open: true, draft: suggestion, history: false });
+  // asking about a thing on screen (Why?, a word, a card) lets Claude see it
+  if (context && about?.detail !== context.detail) set({ open: true, chatId: null, context, draft: suggestion, history: false, share: true });
+  else {
+    if (context && current && current.share === false) saveChat({ ...current, share: true, updatedAt: Date.now() });
+    set({ open: true, draft: suggestion, history: false, ...(context && !current ? { share: true } : {}) });
+  }
+}
+
+/** Whether Claude sees the screen in a conversation: the learner's choice, else the page's default (off on the home page). */
+function sharing(chat: Chat | null): boolean {
+  return (chat ? chat.share : state.share) ?? sharedByDefault();
 }
 
 // ------------------------------------------------------------- prompts
@@ -127,10 +138,14 @@ function profile(): string {
   ].join("\n\n");
 }
 
+const NOT_SHARED =
+  "[Screen not shared: the learner switched this off to talk generally. Answer the question in general, and do not bring the conversation back to the screen, the exercise or earlier screens unless they ask.]";
+
 /** A question as Claude reads it: where the learner was, in full for the newest question. */
-function questionText(t: Pick<ChatTurn, "content" | "screen">, latest: boolean): string {
+function questionText(t: Pick<ChatTurn, "content" | "screen" | "noScreen">, latest: boolean, general = false): string {
+  if (latest && t.noScreen) return `${NOT_SHARED}\n\n${t.content}`;
   const s = t.screen;
-  if (!s) return t.content;
+  if (!s || general) return t.content;
   if (latest && s.detail) return `[Where the learner is: ${s.label}\n${s.detail}]\n\n${t.content}`;
   return `[Asked on: ${s.label}]\n${t.content}`;
 }
@@ -144,7 +159,8 @@ function openedFrom(context: AskContext | null, firstHasScreen: boolean): string
 
 /** One message with everything: for pasting into a Claude chat when the page cannot ask. */
 export function fullPrompt(question: string, screen: Screen | null, context: AskContext | null): string {
-  return [INSTRUCTIONS, profile(), openedFrom(context, !!screen), questionText({ content: question, screen: screen ?? undefined }, true)].filter(Boolean).join("\n\n");
+  const q = screen ? questionText({ content: question, screen }, true) : questionText({ content: question, noScreen: true }, true);
+  return [INSTRUCTIONS, profile(), screen ? openedFrom(context, true) : "", q].filter(Boolean).join("\n\n");
 }
 
 function splitPractice(text: string): { body: string; practice: string[] } {
@@ -200,8 +216,10 @@ function toMessages(chat: Chat): { role: "user" | "assistant"; content: string }
   while (hist.length && hist[0].role !== "user") hist = hist.slice(1);
   if (!hist.length) return [];
   const latest = hist.map((t) => t.role).lastIndexOf("user");
-  const msgs = hist.map((t, i) => ({ role: t.role, content: t.role === "user" ? questionText(t, i === latest) : t.content }));
-  msgs[0] = { role: "user", content: [INSTRUCTIONS, profile(), openedFrom(chat.context, !!hist[0].screen), msgs[0].content].filter(Boolean).join("\n\n") };
+  // with sharing switched off, nothing points back at screens: no "asked on" notes, no "opened from"
+  const general = !!hist[latest]?.noScreen;
+  const msgs = hist.map((t, i) => ({ role: t.role, content: t.role === "user" ? questionText(t, i === latest, general) : t.content }));
+  msgs[0] = { role: "user", content: [INSTRUCTIONS, profile(), general ? "" : openedFrom(chat.context, !!hist[0].screen), msgs[0].content].filter(Boolean).join("\n\n") };
   return msgs;
 }
 
@@ -239,6 +257,11 @@ export function AskDrawer() {
   const key = state.chatId ?? "new";
   const busy = busyChat !== null;
   const seeing = useScreenLabel(state.open);
+  const shared = sharing(chat);
+  const toggleShare = () => {
+    if (chat) saveChat({ ...chat, share: !shared, updatedAt: Date.now() });
+    else set({ share: !shared });
+  };
   const setInput = (text: string) => {
     setInputState(text);
     keepDraft(key, text);
@@ -346,10 +369,11 @@ export function AskDrawer() {
     if (!q || busy) return;
     const now = Date.now();
     const base: Chat = chat ?? { id: newChatId(), title: q.slice(0, 80), context: state.context, turns: [], createdAt: now, updatedAt: now };
-    // what is on screen goes with the question; earlier questions keep only its name
-    const screen = currentScreen();
+    // what is on screen goes with the question (unless sharing is off); earlier questions keep only its name
+    const screen = shared ? currentScreen() : null;
     const earlier = base.turns.map((t) => (t.screen?.detail ? { ...t, screen: { label: t.screen.label } } : t));
-    const next: Chat = { ...base, turns: [...earlier, { role: "user", content: q, at: now, ...(screen ? { screen } : {}) }], updatedAt: now };
+    const asked: ChatTurn = { role: "user", content: q, at: now, ...(screen ? { screen } : shared ? {} : { noScreen: true }) };
+    const next: Chat = { ...base, ...(chat ? {} : { share: state.share ?? undefined }), turns: [...earlier, asked], updatedAt: now };
     // the question is saved before Claude answers, so a reload or another device never loses it
     saveChat(next);
     keepDraft(key, "");
@@ -362,7 +386,7 @@ export function AskDrawer() {
 
   async function copyPrompt() {
     const q = input.trim() || chat?.turns.filter((t) => t.role === "user").at(-1)?.content || "Explain where I am and what to practise next.";
-    const text = fullPrompt(q, currentScreen(), chat?.context ?? state.context);
+    const text = fullPrompt(q, shared ? currentScreen() : null, chat?.context ?? state.context);
     try {
       await navigator.clipboard.writeText(text);
       toast("Copied. Paste it into a Claude chat.");
@@ -375,7 +399,7 @@ export function AskDrawer() {
   // closing keeps a running answer going: it is saved when it arrives
   const close = () => set({ open: false });
   const startNew = () => {
-    set({ chatId: null, context: null, history: false });
+    set({ chatId: null, context: null, history: false, share: null });
   };
 
   const turns = chat?.turns ?? [];
@@ -409,12 +433,25 @@ export function AskDrawer() {
 
         {/* (null, not "", when hidden: an empty text node here would make Preact rebuild the input box below) */}
         {!state.history && seeing ? (
-          <div class="drawer-sees small ui" title="Each question is sent with what is on your screen, so “here” and “this” point at it.">
-            <Icon.eye />
+          <button
+            class={`drawer-sees small ui${shared ? "" : " off"}`}
+            aria-pressed={shared}
+            onClick={toggleShare}
+            title={shared ? "Each question goes with what is on your screen, so “here” and “this” point at it. Click to stop sharing it." : "Click to let Claude see what is on your screen. It knows your lessons and progress either way."}
+          >
+            {shared ? <Icon.eye /> : <Icon.eyeOff />}
             <span>
-              Claude sees: <strong>{seeing}</strong>
+              {shared ? (
+                <>
+                  Claude sees: <strong>{seeing}</strong>
+                </>
+              ) : (
+                <>
+                  Claude doesn't see your screen <span class="muted">· tap to share it</span>
+                </>
+              )}
             </span>
-          </div>
+          </button>
         ) : null}
 
         {state.history ? (
@@ -473,6 +510,7 @@ export function AskDrawer() {
                 {t.role === "assistant" ? <Markup text={t.content} /> : <span class="msg-text">{t.content}</span>}
                 {t.role === "assistant" && t.tier && <div class="msg-meta">{TIER_NAME[t.tier] ?? t.tier}</div>}
                 {t.role === "user" && t.screen && <div class="msg-meta" title="What was on your screen when you asked">on {t.screen.label}</div>}
+                {t.role === "user" && t.noScreen && <div class="msg-meta" title="Asked with screen sharing switched off">screen not shared</div>}
                 {t.practice && t.practice.length > 0 && (
                   <div class="row" style={{ marginTop: "10px" }}>
                     <button

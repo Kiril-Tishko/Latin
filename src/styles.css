@@ -625,7 +625,10 @@ table.paradigm td .latin { font-size: 1.08rem; }
 }
 .drawer-head { padding: 14px 16px; border-bottom: 1px solid var(--rule); display: flex; gap: 10px; align-items: center; }
 .drawer-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.drawer-sees { display: flex; align-items: center; gap: 7px; padding: 7px 16px; border-bottom: 1px solid var(--rule); background: var(--panel-2); color: var(--ink-2); }
+.drawer-sees { display: flex; align-items: center; gap: 7px; width: 100%; padding: 7px 16px; border: 0; border-bottom: 1px solid var(--rule); background: var(--panel-2); color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.drawer-sees:hover { background: color-mix(in srgb, var(--panel-2) 80%, var(--gold-soft)); }
+.drawer-sees.off { background: var(--panel); }
+.drawer-sees.off svg { color: var(--ink-2); }
 .drawer-sees svg { width: 15px; height: 15px; flex: none; color: var(--gold); }
 .drawer-sees span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .drawer-sees strong { color: var(--ink); font-weight: 600; }

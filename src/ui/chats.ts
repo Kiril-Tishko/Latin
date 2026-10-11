@@ -16,6 +16,8 @@ export interface ChatTurn {
   tier?: string;
   /** For a question: what was on screen when it was asked (the full description only on the latest). */
   screen?: { label: string; detail?: string };
+  /** For a question: the learner had switched off sharing the screen. */
+  noScreen?: boolean;
 }
 
 export interface Chat {
@@ -23,6 +25,8 @@ export interface Chat {
   title: string;
   /** The screen the conversation started from (an exercise, a word, a rule). */
   context: AskContext | null;
+  /** Whether Claude sees the screen in this conversation, once the learner has chosen (unset: the page decides). */
+  share?: boolean;
   turns: ChatTurn[];
   createdAt: number;
   updatedAt: number;
@@ -65,6 +69,7 @@ function fromBody(id: string, b: unknown): Chat | null {
     id,
     title: typeof x.title === "string" ? x.title : turns[0]?.content.slice(0, 80) ?? "Conversation",
     context: x.context && typeof x.context === "object" ? (x.context as AskContext) : null,
+    share: typeof x.share === "boolean" ? x.share : undefined,
     turns,
     createdAt: Number(x.createdAt) || 0,
     updatedAt: Number(x.updatedAt) || 0,
@@ -77,6 +82,7 @@ const toBody = (c: Chat): Record<string, unknown> =>
     JSON.stringify({
       title: c.title,
       context: c.context,
+      share: c.share,
       turns: c.turns.slice(-MAX_TURNS),
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,

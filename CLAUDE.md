@@ -55,7 +55,12 @@ Runtime capabilities used:
   that are in view and the last line or Latin word tapped. Each question is saved
   with its screen (the full description only on the newest, older ones keep the
   label), and the drawer shows "Claude sees: …". A new page or dialog should
-  register itself the same way.
+  register itself the same way. The eye in that line switches sharing off for
+  the conversation (`Chat.share`); unset, the page decides, and the home page
+  registers with `{ share: false }`. A question asked with sharing off is sent
+  as general: no screen, no "asked on" notes, and Claude is told not to steer
+  back to the screen. Asking from a thing's own button (Why?, a word, a card)
+  switches sharing on.
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
   Ask Claude conversations: one private doc each at

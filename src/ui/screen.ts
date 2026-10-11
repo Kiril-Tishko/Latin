@@ -5,7 +5,8 @@
 // the topmost wins (a dialog over a page over the app's route). Parts of a page
 // or dialog marked with data-ask are described by their text while they are
 // scrolled into view, and the last line or Latin word tapped is noted. All of
-// it is read at the moment a question is sent.
+// it is read at the moment a question is sent. The learner can switch this off
+// in the drawer (see ask.tsx); on the home page it starts off.
 import { useEffect, useRef, useState } from "preact/hooks";
 
 export interface Screen {
@@ -23,6 +24,8 @@ interface Layer {
   label: string;
   detail: () => string;
   seq: number;
+  /** Whether Claude sees this screen unless the learner says otherwise. */
+  share: boolean;
 }
 
 let layers: Layer[] = [];
@@ -35,20 +38,26 @@ const topLayer = () => layers.reduce<Layer | undefined>((a, b) => (!a || b.rank 
 /**
  * Registers what a page or dialog shows while it is mounted. `detail` is read
  * when a question is sent, so it can describe the latest state (what is typed,
- * whether the answer was checked).
+ * whether the answer was checked). `share: false` keeps the screen from Claude
+ * until the learner switches sharing on (the home page).
  */
-export function useScreen(level: Level, label: string, detail: () => string = () => "") {
+export function useScreen(level: Level, label: string, detail: () => string = () => "", { share = true }: { share?: boolean } = {}) {
   const read = useRef(detail);
   read.current = detail;
   useEffect(() => {
-    const layer: Layer = { rank: RANK[level], label, detail: () => read.current(), seq: ++seq };
+    const layer: Layer = { rank: RANK[level], label, detail: () => read.current(), seq: ++seq, share };
     layers.push(layer);
     emit();
     return () => {
       layers = layers.filter((l) => l !== layer);
       emit();
     };
-  }, [level, label]);
+  }, [level, label, share]);
+}
+
+/** Whether the screen on top is shared with Claude when the learner has not chosen. */
+export function sharedByDefault(): boolean {
+  return topLayer()?.share ?? true;
 }
 
 // ------------------------------------------------------------ in view

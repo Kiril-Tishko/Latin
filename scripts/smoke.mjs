@@ -175,12 +175,16 @@ async function askClaude() {
   const answer = await p.locator(".msg.assistant").last().textContent();
   if (!answer.includes("marks the object")) errors.push(`ask: no answer shown (${answer.slice(0, 80)})`);
   const lastAsked = () => p.evaluate(() => window.__asked.at(-1).at(-1).content);
-  if (!(await lastAsked()).includes("[Where the learner is: Home")) errors.push("ask: the question does not say it was asked on the home page");
+  // on the home page Claude does not see the screen until the eye is switched on
+  if (!(await lastAsked()).includes("[Screen not shared")) errors.push("ask: on the home page the screen should not be shared by default");
+  await p.locator(".drawer-sees").click();
+  if ((await p.locator(".drawer-sees").getAttribute("aria-pressed")) !== "true") errors.push("ask: the eye does not switch sharing on");
   await p.evaluate(() => { window.__fail = { code: "upstream_error", message: "simulated" }; });
   await p.locator("#ask-input").fill("And the ablative?");
   await p.locator("#ask-input").press("Enter");
   await p.waitForTimeout(400);
   if (!(await p.locator("button", { hasText: "Try again" }).count())) errors.push("ask: a failed answer offers no Try again");
+  if (!(await lastAsked()).includes("[Where the learner is: Home")) errors.push("ask: with the eye on, the home page is not described");
   await p.screenshot({ path: `${out}/ask-error.png` });
   await p.evaluate(() => { window.__fail = null; });
   await p.keyboard.press("Escape");
@@ -201,6 +205,16 @@ async function askClaude() {
   await p.waitForTimeout(200);
   const ex = await askHere("What goes here?");
   if (!ex.sees.includes("Exercise 1 of") || !ex.sent.includes("Not answered yet")) errors.push(`ask: the exercise on screen is not described (${ex.sees})`);
+  // switched off mid-conversation: the next question goes without the screen or any pointer back to it
+  await p.locator(".ask-btn").click();
+  await p.locator(".drawer-sees").click();
+  await p.locator("#ask-input").fill("And in general?");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(200);
+  const general = await p.evaluate(() => window.__asked.at(-1).map((m) => m.content).join("\n"));
+  if (!general.includes("[Screen not shared") || general.includes("Not answered yet") || general.includes("[Asked on:")) errors.push("ask: with the eye off, the screen still reaches Claude");
+  await p.locator(".drawer-sees").click();
+  await p.keyboard.press("Escape");
   // a lesson page scrolled to its story, a word tapped
   await p.locator(".nav button", { hasText: "Lectiōnēs" }).click();
   await p.locator(".lesson-card").nth(1).click();

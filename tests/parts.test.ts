@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LESSONS } from "../src/content/lessons";
-import { Part, PARTS, partsOf } from "../src/content/parts";
+import { Part, PARTS, partsOf, rulesOfPart } from "../src/content/parts";
 import { STORY_ONLY } from "../src/content/words";
 import { annotate } from "../src/latin/analyze";
 import { seeded } from "../src/latin/generate";
@@ -46,6 +46,16 @@ describe("the parts of the lessons' rules", () => {
       for (const s of l.skills) expect(PARTS.find((x) => x.skills.includes(s))?.lesson, `${s} of Lesson ${l.n}`).toBe(l.n);
     }
     expect(owner.size).toBe(new Set(LESSONS.flatMap((l) => l.skills)).size);
+  });
+
+  it("keep every full rule of the lessons under some part's More detail, in its own lesson", () => {
+    for (const l of LESSONS) {
+      for (const r of l.rules) {
+        const parts = PARTS.filter((x) => rulesOfPart(x).includes(r));
+        expect(parts.length, `${r.id} is under no part`).toBeGreaterThan(0);
+        expect(parts.every((x) => x.lesson === l.n), r.id).toBe(true);
+      }
+    }
   });
 
   it("are numbered in order, a few to a lesson", () => {

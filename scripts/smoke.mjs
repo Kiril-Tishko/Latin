@@ -65,7 +65,20 @@ async function run(name, viewport, colorScheme) {
   await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();
   await p.locator(".lesson-card").nth(3).click();
   await p.waitForTimeout(300);
-  if ((await p.locator(".part-row").count()) !== 5) errors.push(`${name}: Lesson IV does not list its five rules`);
+  if ((await p.locator(".rule-row").count()) !== 5) errors.push(`${name}: Lesson IV does not list its five rules`);
+  if (await p.locator(".rule-detail, .rule-block").count()) errors.push(`${name}: the lesson page still shows the long rule texts`);
+  // Rēgulae: every rule one line each, the current one marked; a tap opens it, with the full text closed under More detail
+  await p.locator(nav, { hasText: "Rēgulae" }).first().click();
+  await p.waitForTimeout(200);
+  if ((await p.locator(".rule-row").count()) !== 22) errors.push(`${name}: Rēgulae does not list the 22 rules`);
+  if ((await p.locator(".rule-row.current").count()) !== 1) errors.push(`${name}: Rēgulae does not mark the rule you are on`);
+  await p.locator(".rule-row.current").click();
+  await p.waitForTimeout(200);
+  if (!(await p.locator(".learn-line").count())) errors.push(`${name}: a tap on a rule does not open it`);
+  if (await p.locator(".rule-detail").first().isVisible()) errors.push(`${name}: More detail is open from the start`);
+  await p.locator(".rule-more summary").click();
+  if (!(await p.locator(".rule-detail").first().isVisible())) errors.push(`${name}: More detail does not open`);
+  await p.screenshot({ path: `${out}/${name}-rule-more.png`, fullPage: true });
   await p.screenshot({ path: `${out}/${name}-lesson4.png`, fullPage: true });
   // Latin in English, from the lessons list, and its find-the-Latin round
   await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();

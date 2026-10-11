@@ -24,7 +24,9 @@ published as a private claude.ai artifact.
 - **Discover**: mystery cards, five at a time, each in its own fixed spot, with
   Latin words related to English, Russian or Ukrainian words; opened cards turn
   face up where they lie; add them and they join the exercises.
-- **Rules**: color legend and ending tables.
+- **Rules**: every rule of the lessons you watched, one line each, with where you
+  are on it (learned, 3/10, new); a tap opens it. Then the endings at a glance
+  and the colors. The lessons' full rule texts wait under "More detail".
 - **Audio**: every Latin sentence can be heard in classical pronunciation
   (through the device's Spanish or Italian voice), Listen & repeat on lesson pages, and a
   Listen and write exercise.

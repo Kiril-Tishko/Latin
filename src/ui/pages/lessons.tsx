@@ -1,15 +1,14 @@
 import { useEffect, useState } from "preact/hooks";
 import { speakSequence } from "../../audio/speech";
 import { audioReady, Speak } from "../speak";
-import { Lesson, LESSONS, LESSON_BY_N, Rule, videoUrl } from "../../content/lessons";
+import { Lesson, LESSONS, LESSON_BY_N, videoUrl } from "../../content/lessons";
 import { STORIES } from "../../content/stories";
 import { dictionaryForm, headword } from "../../latin/morph";
 import { roman } from "../../latin/text";
 import { nextCard } from "../../trainer/discover";
-import { lessonProgress, PART_GOAL, partRight, partState, seenSkills } from "../../trainer/path";
+import { lessonProgress, partState, seenSkills } from "../../trainer/path";
 import { storyOpen } from "../../trainer/stories";
-import { Part, partsOf } from "../../content/parts";
-import { openAsk } from "../ask";
+import { partsOf } from "../../content/parts";
 import { Hedera, Icon, Modal, Mosaic } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
@@ -17,7 +16,7 @@ import { go } from "../nav";
 import { derived, useProgress } from "../store";
 import { useScreen } from "../screen";
 import { CardView } from "./discover";
-import { PartDots, partName, PartsStrip } from "./learn";
+import { PartsStrip, RuleList } from "./learn";
 import { startSession } from "./train";
 
 export function Lessons() {
@@ -73,88 +72,6 @@ export function Lessons() {
   );
 }
 
-function RuleView({ r }: { r: Rule }) {
-  const lesson = LESSONS.find((l) => l.rules.includes(r))?.n;
-  const seen = seenSkills(useProgress());
-  // a rule is practised once its parts are learned; before that, its first part is the way in
-  const firstNew = r.skills.some((s) => !seen.has(s)) ? partsOf(lesson ?? 0).find((x) => x.skills.some((s) => r.skills.includes(s) && !seen.has(s))) : undefined;
-  return (
-    <article class="panel stack" id={r.id} data-ask={`Rule${lesson ? ` of Lesson ${roman(lesson)}` : ""}: ${r.title}`}>
-      <div class="spread">
-        <h3>{r.title}</h3>
-        <div class="row" style={{ gap: "6px" }}>
-          {r.skills.length > 0 &&
-            (firstNew ? (
-              <button class="btn ghost small" onClick={() => go({ page: "learn", id: firstNew.id })} title={`${partName(firstNew)}: ${firstNew.title}`}>
-                <Icon.scroll /> Learn it
-              </button>
-            ) : (
-              <button class="btn ghost small" onClick={() => startSession({ kind: "skills", skills: r.skills, label: r.title }) && go({ page: "train" })}>
-                <Icon.stylus /> Practise
-              </button>
-            ))}
-          <button class="btn ghost small" aria-label={`Ask Claude about: ${r.title}`} onClick={() => openAsk({ label: `Rule: ${r.title}`, detail: `What: ${r.what} How: ${r.how} When: ${r.when}` }, "Explain this rule simply, with two short examples.")}>
-            <Icon.quill />
-          </button>
-        </div>
-      </div>
-      <dl class="rule-block">
-        <dt>What</dt>
-        <dd><Inline text={r.what} /></dd>
-        <dt>How</dt>
-        <dd><Inline text={r.how} /></dd>
-        <dt>When</dt>
-        <dd><Inline text={r.when} /></dd>
-      </dl>
-      {r.examples.length > 0 && (
-        <div class="well" style={{ paddingBlock: "6px" }}>
-          {r.examples.map((e, i) => (
-            <div key={i} class="ex-line">
-              <span>
-                <LatinText text={e.la} />
-                <Speak text={e.la} id={`${r.id}-${i}`} />
-              </span>
-              <span class="muted">{e.en}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {r.slavic && (
-        <p class="small"><span class="eyebrow" style={{ marginRight: "8px" }}>RU · UA</span>{r.slavic}</p>
-      )}
-    </article>
-  );
-}
-
-export { RuleView };
-
-/** One part of a lesson's rules: its state, and the way on (learn it, or practise it). */
-function PartRow({ part }: { part: Part }) {
-  const p = useProgress();
-  const state = partState(p, part);
-  return (
-    <div class={`part-row ${state}`}>
-      <button class="linkish part-row-title" onClick={() => go({ page: "learn", id: part.id })}>
-        <span class="part-row-id">{part.id}</span> {part.title}
-      </button>
-      <span class="part-row-state small ui">
-        {state === "learned" ? (
-          <span class="story-read">learned</span>
-        ) : state === "practising" ? (
-          <span class="row" style={{ gap: "6px" }}><PartDots part={part} /> {partRight(p, part)}/{PART_GOAL}</span>
-        ) : (
-          <span class="muted">new</span>
-        )}
-      </span>
-      {state === "new" ? (
-        <button class="btn small" onClick={() => go({ page: "learn", id: part.id })}>Learn</button>
-      ) : (
-        <button class="btn ghost small" onClick={() => startSession({ kind: "part", id: part.id }) && go({ page: "train" })}>Practise</button>
-      )}
-    </div>
-  );
-}
-
 export function LessonPage({ n }: { n: number }) {
   const l = LESSON_BY_N.get(n);
   const p = useProgress();
@@ -167,7 +84,7 @@ export function LessonPage({ n }: { n: number }) {
     l
       ? [
           `The page of Lesson ${l.n}, "${l.title}"${p.lessonsDone.includes(l.n) ? "" : " (not watched yet)"}. ${l.summary}`,
-          `The page, top to bottom: the rules one at a time (${partsOf(l.n).map((x) => `${x.id} ${x.title}: ${partState(p, x)}`).join("; ")}); the rules in full (${l.rules.map((r) => r.title).join("; ")}); ${l.sentences.length} sentences from the video; ${l.story ? `the story "${l.story.title}" (${l.story.lines.length} lines); ` : ""}${l.phrases.length ? `${l.phrases.length} famous phrases; ` : ""}${l.words.length} new words${l.fixes.length ? "; differences from the video" : ""}.`,
+          `The page, top to bottom: the lesson's rules, one line each (${partsOf(l.n).map((x) => `${x.id} ${x.title}: ${partState(p, x)}`).join("; ")}; each opens its own page with the full rule under "More detail"); ${l.sentences.length} sentences from the video; ${l.story ? `the story "${l.story.title}" (${l.story.lines.length} lines); ` : ""}${l.phrases.length ? `${l.phrases.length} famous phrases; ` : ""}${l.words.length} new words${l.fixes.length ? "; differences from the video" : ""}.`,
           `English translations of the sentences are ${showEn ? "shown" : "hidden"}.`,
         ].join("\n")
       : "",
@@ -218,17 +135,12 @@ export function LessonPage({ n }: { n: number }) {
 
       <section class="stack" data-ask={`Lesson ${roman(l.n)}: the rules, one at a time`}>
         <div class="stack" style={{ gap: "2px" }}>
-          <span class="eyebrow">The rules, one at a time</span>
-          <span class="small muted ui">Each rule: a short explanation, two questions, then exercises from simple to harder.</span>
+          <span class="eyebrow">Rules</span>
+          <span class="small muted ui">Tap a rule to read it and practise it.</span>
         </div>
-        <div class="panel parts-list">
-          {partsOf(l.n).map((x) => <PartRow key={x.id} part={x} />)}
+        <div class="panel rule-list-panel">
+          <RuleList lesson={l.n} />
         </div>
-      </section>
-
-      <section class="stack">
-        <span class="eyebrow">The rules in full</span>
-        {l.rules.map((r) => <RuleView key={r.id} r={r} />)}
       </section>
 
       <section class="stack" data-ask="Sentences from the video">

@@ -125,6 +125,17 @@ partly / wrong with a short feedback, balanced model at medium effort), and
 without Claude the learner compares with the good answer. With both questions
 answered the part is seen (`markSeen`) and its exercises open.
 
+The learner values simplicity and obviousness above all ("make it simple, make
+it obvious"): one clear way to each thing. Rēgulae (`src/ui/pages/rules.tsx`) is
+one short list: every rule of the lessons watched, one line each (`RuleList` in
+learn.tsx: ✓ learned, its right answers as dots and "3/10", or new; the rule to
+work on now marked "you are here"; the whole line opens the rule), a Continue
+button, then the endings at a glance (a ? for forms of rules not learned yet)
+and the colors. Lesson pages show the same list. The lessons' full What / How /
+When texts live only on each rule's page, under a closed "More detail"
+(`rulesOfPart`; general notes that teach no skill are attached with
+`Part.more`, and a test checks that every full rule is under some part).
+
 `src/trainer/path.ts` keeps the path: `Progress.parts[id]` = `{ seen, right,
 learned? }`. Practice uses every known word but only the rules of the parts seen
 (`seenSkills`, `derived().seenKnowledge`). The learner chose the count: every
@@ -261,6 +272,8 @@ Italian and a Spanish voice to exercise the audio paths.
    the video, story, phrases, rules as What / How / When with examples, a
    Russian / Ukrainian comparison where it helps, and `fixes` where this site
    departs from the video.
+   (The What / How / When texts appear under "More detail" on the parts; a rule
+   that teaches no skill needs a `more` entry on the part it belongs to.)
    Then split its rules into parts in `src/content/parts.ts` (`5.1`, `5.2`, …):
    each in a few very simple lines, with examples that need only the rules met
    so far, and two open questions whose good answer passes its own keys. Every

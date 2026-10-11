@@ -10,6 +10,8 @@
 //              needs one of its words (the good answer always passes; tested).
 //              An answer without them goes to Claude to judge, when it is there.
 
+import { LESSONS, Rule } from "./lessons";
+
 export interface PartQuestion {
   q: string;
   answer: string;
@@ -30,6 +32,8 @@ export interface Part {
   skills: string[];
   /** The rules its exercises can show, when not all of `skills` (the part holds when these do). */
   practised?: string[];
+  /** Notes from the lesson's full rules that teach no skill of their own, shown under "More detail". */
+  more?: string[];
 }
 
 export const PARTS: Part[] = [
@@ -62,6 +66,7 @@ export const PARTS: Part[] = [
       },
     ],
     skills: ["v.3sg", "s.sv", "n1.nom.sg"],
+    more: ["l1-sounds"],
   },
   {
     id: "1.2",
@@ -150,6 +155,7 @@ export const PARTS: Part[] = [
       },
     ],
     skills: ["v.inf"],
+    more: ["l1-patterns"],
   },
   {
     id: "1.5",
@@ -205,6 +211,7 @@ export const PARTS: Part[] = [
       },
     ],
     skills: ["n1.acc.sg", "s.svo"],
+    more: ["l2-order"],
   },
   {
     id: "2.2",
@@ -404,6 +411,7 @@ export const PARTS: Part[] = [
       },
     ],
     skills: ["n2.nom.sg", "n2.acc.sg"],
+    more: ["l3-liber"],
   },
   {
     id: "3.2",
@@ -458,6 +466,7 @@ export const PARTS: Part[] = [
       },
     ],
     skills: ["adj.gender"],
+    more: ["l3-meus"],
   },
   {
     id: "3.4",
@@ -657,6 +666,7 @@ export const PARTS: Part[] = [
       },
     ],
     skills: ["n1.nom.pl", "n2.nom.pl"],
+    more: ["l4-table"],
   },
 ];
 
@@ -664,3 +674,7 @@ export const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));
 
 /** The parts of a lesson, in order. */
 export const partsOf = (lesson: number) => PARTS.filter((p) => p.lesson === lesson);
+
+/** The lesson's full rules behind a part (its "More detail"): the ones that teach its skills, and its notes. */
+export const rulesOfPart = (part: Part): Rule[] =>
+  LESSONS.flatMap((l) => l.rules).filter((r) => r.skills.some((s) => part.skills.includes(s)) || part.more?.includes(r.id));

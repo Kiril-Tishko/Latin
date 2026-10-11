@@ -1136,15 +1136,41 @@ html, .drawer-body, .modal > .panel, .table-wrap { scrollbar-width: thin; scroll
 .learn-done .btn { margin-left: auto; letter-spacing: 0; }
 .learn-nav { gap: 12px; flex-wrap: wrap; }
 
-/* a lesson's rules as a list: learn the new ones, practise the others */
-.parts-list { padding-block: 4px; }
-.part-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px 14px; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--rule); }
-.part-row:last-child { border-bottom: 0; }
+/* a rule named in a list (the end of a round) */
 .part-row-title { color: var(--ink); text-align: left; text-decoration: none; font-size: 1rem; }
 .part-row-title:hover { text-decoration: underline; }
 .part-row-id { font-family: var(--f-display); color: var(--gold); margin-right: 6px; }
-.part-row.learned .part-row-title { color: var(--ink-2); }
-.part-row .mosaic.thin { width: 90px; }
+
+/* a lesson's rules, one line each: the whole line opens the rule */
+.rule-list-panel { padding: 4px 0; }
+.rule-list { display: flex; flex-direction: column; }
+.rule-row { display: grid; grid-template-columns: 3em minmax(0, 1fr) auto 1em; gap: 6px 12px; align-items: center; width: 100%; padding: 12px 18px; border: 0; border-bottom: 1px dashed var(--rule); background: none; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.rule-row:last-child { border-bottom: 0; }
+.rule-row:hover { background: color-mix(in srgb, var(--gold-soft) 12%, transparent); }
+.rule-row:focus-visible { outline: 2px solid var(--gold-soft); outline-offset: -2px; }
+.rule-row-id { font-family: var(--f-display); color: var(--gold); font-size: 0.95rem; }
+.rule-row-title { font-size: 1.05rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.rule-row-now { font-family: var(--f-ui); font-size: 0.78rem; color: var(--panel); background: var(--gold); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.rule-row-state { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; white-space: nowrap; }
+.rule-row-state svg { width: 14px; height: 14px; }
+.rule-row-go { color: var(--ink-2); font-size: 1.4rem; line-height: 1; text-align: right; }
+.rule-row.current { background: color-mix(in srgb, var(--gold-soft) 16%, transparent); box-shadow: inset 4px 0 0 var(--gold); }
+.rule-row.learned .rule-row-title { color: var(--ink-2); }
+@media (max-width: 600px) {
+  .rule-row { grid-template-columns: 2.6em minmax(0, 1fr) 1em; grid-template-areas: "id title go" "id state go"; padding: 10px 14px; }
+  .rule-row-id { grid-area: id; }
+  .rule-row-title { grid-area: title; }
+  .rule-row-state { grid-area: state; }
+  .rule-row-go { grid-area: go; }
+}
+.rules-lesson-head h2 { font-size: 1.3rem; display: flex; gap: 10px; align-items: baseline; }
+.color-key { gap: 6px 8px; align-items: center; }
+
+/* "More detail": the lesson's full text of a rule, closed until wanted */
+.rule-more { border: 1px solid var(--rule); border-radius: var(--radius); padding: 12px 16px; background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.rule-more > summary { cursor: pointer; font-family: var(--f-ui); font-weight: 600; }
+.rule-more .rule-detail + .rule-detail { border-top: 1px solid var(--rule); padding-top: 12px; }
+.rule-detail h3 { font-size: 1.05rem; }
 .part-done h3 { font-size: 1.1rem; }
 .story-locked .linkish { font-size: inherit; }
 /* an ending in bold (-t, -us) never breaks after its hyphen */

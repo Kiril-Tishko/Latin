@@ -4,8 +4,8 @@
 // learner against a good answer). Only then do its exercises open, simple ones
 // first (trainer/path.ts).
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { LESSON_BY_N } from "../../content/lessons";
-import { Part, PART_BY_ID, PartQuestion, PARTS, partsOf } from "../../content/parts";
+import { LESSON_BY_N, Rule } from "../../content/lessons";
+import { Part, PART_BY_ID, PartQuestion, PARTS, partsOf, rulesOfPart } from "../../content/parts";
 import { roman } from "../../latin/text";
 import { currentPart, markSeen, meetsKeys, PART_GOAL, PART_PHASES, partProgress, partRight, partState } from "../../trainer/path";
 import { Progress } from "../../trainer/progress";
@@ -71,6 +71,78 @@ export function PartsStrip({ lesson, here }: { lesson: number; here?: string }) 
         );
       })}
     </div>
+  );
+}
+
+/**
+ * A lesson's rules, one line each: tap a line to read the rule and practise it.
+ * Each line says where the learner is with it: learned, its right answers so
+ * far, or new; the rule to work on now is marked.
+ */
+export function RuleList({ lesson }: { lesson: number }) {
+  const p = useProgress();
+  const current = currentPart(p)?.id;
+  return (
+    <div class="rule-list" role="list" aria-label={`The rules of Lesson ${roman(lesson)}`}>
+      {partsOf(lesson).map((part) => {
+        const state = partState(p, part);
+        const here = part.id === current;
+        return (
+          <button key={part.id} role="listitem" class={`rule-row ${state}${here ? " current" : ""}`} onClick={() => go({ page: "learn", id: part.id })}>
+            <span class="rule-row-id">{part.id}</span>
+            <span class="rule-row-title">
+              {part.title}
+              {here && <span class="rule-row-now">{state === "new" ? "next to learn" : "you are here"}</span>}
+            </span>
+            <span class="rule-row-state">
+              {state === "learned" ? (
+                <span class="story-read"><Icon.check /> learned</span>
+              ) : state === "practising" ? (
+                <>
+                  <PartDots part={part} /> <span class="ui">{partRight(p, part)}/{PART_GOAL}</span>
+                </>
+              ) : (
+                <span class="muted ui">new</span>
+              )}
+            </span>
+            <span class="rule-row-go" aria-hidden="true">›</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One of the lesson's full rules: what, how, when, with examples. */
+function RuleDetail({ r }: { r: Rule }) {
+  return (
+    <article class="stack rule-detail">
+      <h3>{r.title}</h3>
+      <dl class="rule-block">
+        <dt>What</dt>
+        <dd><Inline text={r.what} /></dd>
+        <dt>How</dt>
+        <dd><Inline text={r.how} /></dd>
+        <dt>When</dt>
+        <dd><Inline text={r.when} /></dd>
+      </dl>
+      {r.examples.length > 0 && (
+        <div class="well" style={{ paddingBlock: "6px" }}>
+          {r.examples.map((e, i) => (
+            <div key={i} class="ex-line">
+              <span>
+                <LatinText text={e.la} />
+                <Speak text={e.la} id={`${r.id}-${i}`} />
+              </span>
+              <span class="muted">{e.en}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {r.slavic && (
+        <p class="small"><span class="eyebrow" style={{ marginRight: "8px" }}>RU · UA</span><Inline text={r.slavic} /></p>
+      )}
+    </article>
   );
 }
 
@@ -326,6 +398,15 @@ export function LearnPage({ id }: { id: string }) {
           </button>
         </div>
       </section>
+
+      {rulesOfPart(part).length > 0 && (
+        <details class="rule-more" data-ask={`${partName(part)}: more detail`}>
+          <summary>More detail <span class="muted small ui">the lesson's full rule{rulesOfPart(part).length > 1 ? "s" : ""}, for later</span></summary>
+          <div class="stack" style={{ marginTop: "12px" }}>
+            {rulesOfPart(part).map((r) => <RuleDetail key={r.id} r={r} />)}
+          </div>
+        </details>
+      )}
 
       <section class="stack" data-ask={`${partName(part)}: questions`}>
         <div class="stack" style={{ gap: "2px" }}>

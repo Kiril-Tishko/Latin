@@ -1,15 +1,18 @@
-// All the rules learned so far, the color legend, and the ending tables.
+// Rēgulae: every rule of the lessons watched, one line each (a tap opens the
+// rule's own page), then the ending tables and the colors.
 import { LESSONS } from "../../content/lessons";
 import { LESSON_WORDS } from "../../content/words";
 import { conjugate, declineNoun } from "../../latin/morph";
 import { nounSkill } from "../../latin/skills";
 import { roman } from "../../latin/text";
 import { Knowledge } from "../../latin/generate";
-import { Case, CASE_NAMES, CASE_ROLE, CASE_SLAVIC, full, NounEntry, NounKey, PN, VerbEntry, VerbKey } from "../../latin/types";
-import { CaseChip } from "../components";
+import { Case, CASE_NAMES, full, NounEntry, NounKey, PN, VerbEntry, VerbKey } from "../../latin/types";
+import { CaseChip, Icon } from "../components";
 import { LatinTokens } from "../latin";
 import { derived, useProgress } from "../store";
-import { RuleView } from "./lessons";
+import { partName, RuleList, rightWords } from "./learn";
+import { Part, partsOf } from "../../content/parts";
+import { currentPart, partState } from "../../trainer/path";
 import { useScreen } from "../screen";
 import { go } from "../nav";
 
@@ -79,7 +82,9 @@ export function VerbTable({ rows = VERB_ROWS.map(([r]) => r), cols = VERB_COLS.m
               {entries.map(([v]) => {
                 const key = (pn === "inf" ? "inf" : `pres.${pn}`) as VerbKey;
                 const form = conjugate(v)[key];
-                const known = pn === "inf" ? k.skills.has("v.inf") : v.irregular ? k.skills.has(`v.${v.irregular}`) && pn.endsWith("sg") : k.skills.has(`v.${pn}`);
+                // esse and posse wait for sum and possum, like their other forms
+                const own = !v.irregular || k.skills.has(`v.${v.irregular}`);
+                const known = pn === "inf" ? k.skills.has("v.inf") && own : v.irregular ? own && pn.endsWith("sg") : k.skills.has(`v.${pn}`);
                 if (!form || !known) return <td key={v.id} class="lock" title="Comes in a later lesson">?</td>;
                 return (
                   <td key={v.id}>
@@ -95,18 +100,79 @@ export function VerbTable({ rows = VERB_ROWS.map(([r]) => r), cols = VERB_COLS.m
   );
 }
 
+/** Rēgulae: every rule of the lessons watched, one line each, then the endings at a glance. */
 export function Rules() {
   const p = useProgress();
-  const cases: Case[] = ["nom", "acc", "gen", "abl"];
+  const k = derived().seenKnowledge;
+  const lessons = LESSONS.filter((l) => p.lessonsDone.includes(l.n));
+  const current = currentPart(p);
+  const stateWords = (x: Part) => (partState(p, x) === "learned" ? "learned" : partState(p, x) === "practising" ? rightWords(p, x) : "new");
   useScreen("page", "Rules", () =>
-    `The rules page: why endings matter, the case colors, the noun and verb ending tables ("?" marks a form from a later lesson), then the rules of each watched lesson (${LESSONS.filter((l) => p.lessonsDone.includes(l.n)).map((l) => `Lesson ${l.n}`).join(", ")}).`,
+    [
+      "The rules page: every rule of the lessons watched, one line each, grouped by lesson (a tap opens the rule: its simple explanation, its questions, its practice, and the lesson's full text under More detail). Below: the endings at a glance (a ? is a form of a rule not learned yet) and the case colors.",
+      ...lessons.map((l) => `Lesson ${l.n} (${l.title}): ${partsOf(l.n).map((x) => `${x.id} ${x.title} (${stateWords(x)})`).join("; ")}`),
+    ].join("\n"),
   );
   return (
-    <div class="stack-lg">
+    <div class="stack-lg rules-page">
+      <div class="stack" style={{ gap: "8px" }}>
+        <span class="eyebrow">Rēgulae</span>
+        <h1>Your rules</h1>
+        <p class="muted">Every rule of the lessons you watched, one line each. Tap a rule to read it and practise it.</p>
+        {current && (
+          <div class="row">
+            <button class="btn" onClick={() => go({ page: "learn", id: current.id })}>
+              {partState(p, current) === "new" ? "Next to learn" : "Continue"}: {partName(current)} · {current.title} <Icon.arrow />
+            </button>
+          </div>
+        )}
+      </div>
 
-      <section class="panel frame stack" data-ask="Why endings matter">
-        <h2>Why endings matter</h2>
-        <div class="prose stack">
+      {lessons.map((l) => {
+        const parts = partsOf(l.n);
+        const learned = parts.filter((x) => partState(p, x) === "learned").length;
+        return (
+          <section key={l.n} class="stack rules-lesson" data-ask={`Rules of Lesson ${roman(l.n)}`}>
+            <div class="spread rules-lesson-head">
+              <h2>
+                <span class="numeral">{roman(l.n)}</span> {l.title}
+              </h2>
+              <span class="small ui muted">
+                {learned === parts.length ? <span class="story-read"><Icon.check /> all learned</span> : `${learned} of ${parts.length} learned`}
+              </span>
+            </div>
+            <div class="panel rule-list-panel">
+              <RuleList lesson={l.n} />
+            </div>
+          </section>
+        );
+      })}
+
+      <section class="stack" data-ask="Endings at a glance">
+        <h2>Endings at a glance</h2>
+        <p class="muted small">A ? is a form of a rule you have not learned yet.</p>
+        <div class="panel stack">
+          <h3>Nouns</h3>
+          <NounTable k={k} />
+        </div>
+        <div class="panel stack">
+          <h3>Verbs</h3>
+          <VerbTable k={k} />
+        </div>
+        <div class="row color-key small ui">
+          <span>Colors:</span>
+          <CaseChip c="nom" label="subject" />
+          <CaseChip c="acc" label="object" />
+          <CaseChip c="gen" label="of / 's" />
+          <CaseChip c="abl" label="in / at" />
+          <CaseChip c="verb" label="who does it" />
+          <span>An underline marks a plural.</span>
+        </div>
+      </section>
+
+      <details class="rule-more" data-ask="Why endings matter">
+        <summary>Why endings matter</summary>
+        <div class="prose stack" style={{ marginTop: "10px" }}>
           <p>
             English shows who does what by word order: <em>dog bites man</em> is not <em>man bites dog</em>. Latin shows it with endings, the
             way English does with <em>he → him</em>. Imagine English adding ‑um to the object: <em>dog bites manum</em>, <em>manum dog bites</em>,
@@ -116,60 +182,11 @@ export function Rules() {
             From the channel's short video <a href="https://www.youtube.com/watch?v=TFf15Tt3ThI" target="_blank" rel="noopener">Understanding Latin Grammar</a>.
           </p>
         </div>
-      </section>
+      </details>
 
-      <section class="stack" data-ask="The case colors">
-        <h2>The colors</h2>
-        <div class="panel stack">
-          {cases.map((c) => (
-            <div key={c} class="spread" style={{ alignItems: "baseline" }}>
-              <div class="row" style={{ gap: "10px" }}>
-                <CaseChip c={c} />
-                <span>{CASE_ROLE[c]}</span>
-              </div>
-              <span class="small muted ui">RU {CASE_SLAVIC[c].ru} · UA {CASE_SLAVIC[c].uk}</span>
-            </div>
-          ))}
-          <div class="row" style={{ gap: "10px" }}>
-            <CaseChip c="verb" />
-            <span>verb endings: who is doing it (-ō, -s, -t, -nt)</span>
-          </div>
-          <p class="small muted">An underline marks a plural: <LatinTokens tokens={[{ text: "puellae", role: "subj", analysis: { entry: word("puella"), key: "nom.pl", gender: "f", form: { stem: "puell", ending: "ae" } } }]} period={false} cap={false} />. Hover over a word to see its form.</p>
-        </div>
-      </section>
-
-      <section class="stack" data-ask="Noun endings table">
-        <h2>Noun endings</h2>
-        <p class="muted small">The review table from Lesson IV. A ? is a form you will meet in a later lesson.</p>
-        <div class="panel"><NounTable /></div>
-      </section>
-
-      <section class="stack" data-ask="Verb endings table">
-        <h2>Verb endings</h2>
-        <p class="muted small">Present tense. The ending says who acts; the vowel before it depends on the verb's pattern.</p>
-        <div class="panel"><VerbTable /></div>
-      </section>
-
-      {LESSONS.filter((l) => p.lessonsDone.includes(l.n)).map((l) => (
-        <section key={l.n} class="stack">
-          <h2>
-            <span class="numeral" style={{ marginRight: "10px" }}>{roman(l.n)}</span>
-            {l.title}
-          </h2>
-          {l.rules.map((r) => <RuleView key={r.id} r={r} />)}
-        </section>
-      ))}
-
-      <section class="panel stack" data-ask="Latin rules inside English">
-        <h3>Latin rules inside English</h3>
-        <p class="small">
-          Why "It is I", why no preposition at the end, why alumni and algae, why debt has a b: the rules English took from Latin, and the Latin words and
-          endings you can already spot in English.
-        </p>
-        <div>
-          <button class="btn ghost small" onClick={() => go({ page: "english" })}>Latin in English</button>
-        </div>
-      </section>
+      <p class="small">
+        <button class="linkish" onClick={() => go({ page: "english" })}>The Latin rules inside English →</button>
+      </p>
     </div>
   );
 }

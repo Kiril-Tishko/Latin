@@ -11,12 +11,16 @@ import { LatinText } from "../latin";
 import { Inline } from "../markup";
 import { go } from "../nav";
 import { derived, useProgress } from "../store";
+import { useScreen } from "../screen";
 import { CardView } from "./discover";
 import { lessonMastery } from "./home";
 import { startSession } from "./train";
 
 export function Lessons() {
   const p = useProgress();
+  useScreen("page", "Lessons", () =>
+    `The list of lessons: ${LESSONS.map((l) => `${l.n}. ${l.title} (${p.lessonsDone.includes(l.n) ? `watched, ${Math.round(lessonMastery(l.n, p.skills) * 100)}% mastered` : "not watched yet"})`).join("; ")}.`,
+  );
   return (
     <div class="stack-lg">
       <div class="stack">
@@ -42,8 +46,9 @@ export function Lessons() {
 }
 
 function RuleView({ r }: { r: Rule }) {
+  const lesson = LESSONS.find((l) => l.rules.includes(r))?.n;
   return (
-    <article class="panel stack" id={r.id}>
+    <article class="panel stack" id={r.id} data-ask={`Rule${lesson ? ` of Lesson ${roman(lesson)}` : ""}: ${r.title}`}>
       <div class="spread">
         <h3>{r.title}</h3>
         <div class="row" style={{ gap: "6px" }}>
@@ -95,6 +100,15 @@ export function LessonPage({ n }: { n: number }) {
   const [playing, setPlaying] = useState<{ part: "sentences" | "story"; line: number | null } | null>(null);
   const [stopFn, setStopFn] = useState<(() => void) | null>(null);
   useEffect(() => () => stopFn?.(), [stopFn]);
+  useScreen("page", `Lesson ${roman(n)}`, () =>
+    l
+      ? [
+          `The page of Lesson ${l.n}, "${l.title}"${p.lessonsDone.includes(l.n) ? "" : " (not watched yet)"}. ${l.summary}`,
+          `The page, top to bottom: rules (${l.rules.map((r) => r.title).join("; ")}); ${l.sentences.length} sentences from the video; ${l.story ? `the story "${l.story.title}" (${l.story.lines.length} lines); ` : ""}${l.phrases.length ? `${l.phrases.length} famous phrases; ` : ""}${l.words.length} new words${l.fixes.length ? "; differences from the video" : ""}.`,
+          `English translations of the sentences are ${showEn ? "shown" : "hidden"}.`,
+        ].join("\n")
+      : "",
+  );
   const play = (part: "sentences" | "story", lines: string[], repeat: boolean) => {
     stopFn?.();
     const stop = speakSequence(lines, {
@@ -113,7 +127,7 @@ export function LessonPage({ n }: { n: number }) {
   const next = nextCard(p.revealed, d.knowledge, new Set(d.words.map((w) => w.id)));
   return (
     <div class="stack-lg">
-      <div class="stack" style={{ gap: "8px" }}>
+      <div class="stack" style={{ gap: "8px" }} data-ask={`Lesson ${roman(l.n)}: introduction`}>
         <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "lessons" })}>← All lessons</button>
         <span class="eyebrow">Lectiō {roman(l.n)}</span>
         <h1>{l.title}</h1>
@@ -138,7 +152,7 @@ export function LessonPage({ n }: { n: number }) {
         {l.rules.map((r) => <RuleView key={r.id} r={r} />)}
       </section>
 
-      <section class="stack">
+      <section class="stack" data-ask="Sentences from the video">
         <div class="spread">
           <span class="eyebrow">Sentences from the video</span>
           <div class="row">
@@ -170,7 +184,7 @@ export function LessonPage({ n }: { n: number }) {
       </section>
 
       {l.story && (
-        <section class="stack">
+        <section class="stack" data-ask={`Story: ${l.story.title}`}>
           <div class="spread">
             <span class="eyebrow">Story · {l.story.title}</span>
             {audioReady() &&
@@ -188,7 +202,7 @@ export function LessonPage({ n }: { n: number }) {
                 <span>
                   <LatinText text={s.la} />
                   <Speak text={s.la} id={`l${l.n}-st${i}`} />
-                  {s.unverified && <span class="flag-unverified" title="Rebuilt from the narration; the exact wording in the video may differ.">check</span>}
+                  {s.unverified && <> <span class="flag-unverified" title="Rebuilt from the narration; the exact wording in the video may differ.">check</span></>}
                 </span>
                 <span class="muted">{showEn ? s.en : ""}</span>
               </div>
@@ -201,7 +215,7 @@ export function LessonPage({ n }: { n: number }) {
       )}
 
       {l.phrases.length > 0 && (
-        <section class="stack">
+        <section class="stack" data-ask="Famous phrases">
           <span class="eyebrow">Famous phrases</span>
           <div class="grid-2">
             {l.phrases.map((ph, i) => (
@@ -218,7 +232,7 @@ export function LessonPage({ n }: { n: number }) {
         </section>
       )}
 
-      <section class="stack">
+      <section class="stack" data-ask="New words of the lesson">
         <span class="eyebrow">New words</span>
         <div class="grid-3">
           {l.words.map((w) => (
@@ -237,14 +251,14 @@ export function LessonPage({ n }: { n: number }) {
       </section>
 
       {l.fixes.length > 0 && (
-        <section class="stack">
+        <section class="stack" data-ask="Differences from the video">
           <span class="eyebrow">Differences from the video</span>
           {l.fixes.map((f, i) => <p key={i} class="small"><Inline text={f} /></p>)}
         </section>
       )}
 
       {card && next && (
-        <Modal onClose={() => setCard(false)} label="One more word" wide>
+        <Modal onClose={() => setCard(false)} label="One more word" screen={`Mystery card: ${dictionaryForm(next.entry)}`} wide>
           <CardView card={next} onDone={() => setCard(false)} onClose={() => setCard(false)} />
         </Modal>
       )}

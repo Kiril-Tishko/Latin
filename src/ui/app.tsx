@@ -14,6 +14,7 @@ import { connect, getSync, useProgress } from "./store";
 import { connectChats } from "./chats";
 import { SKILL_BY_ID } from "../latin/skills";
 import { setSpeechPrefs } from "../audio/speech";
+import { useScreen } from "./screen";
 
 // Section names in Latin; the English shows as a tooltip.
 const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.Element }[] = [
@@ -27,6 +28,8 @@ const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.El
 
 const active = (r: Route, t: Route) => r.page === t.page || (r.page === "lesson" && t.page === "lessons");
 
+const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", train: "Practice", words: "Words", discover: "Discover", rules: "Rules" };
+
 const SYNC_TEXT = { local: "saved in this browser", connecting: "connecting…", synced: "saved to your account", saving: "saving…", error: "saving failed, will retry" };
 
 export function App() {
@@ -34,6 +37,8 @@ export function App() {
   const p = useProgress();
   setSpeechPrefs({ voice: p.settings.voice, rate: p.settings.rate });
   const [settings, setSettings] = useState(false);
+  // what is on screen, for Ask Claude (each page and dialog says more about itself)
+  useScreen("app", PAGE_NAME[route.page], () => `The ${PAGE_NAME[route.page]} page.`);
 
   useEffect(() => {
     void connect();

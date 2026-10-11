@@ -48,6 +48,14 @@ Runtime capabilities used:
   and the error code under "Details" (ask the learner for it when debugging).
   Keep the sample function in state as `setSample(() => fn)`: Preact calls a
   function given to a state setter, which once broke every question.
+  Claude knows what is on screen, so "here" and "this sentence" work
+  (src/ui/screen.ts): pages call `useScreen("page", label, () => detail)`, every
+  `Modal` registers itself as a dialog, and the topmost wins. Long pages mark
+  their parts with `data-ask="name"`; a question carries the lines of those parts
+  that are in view and the last line or Latin word tapped. Each question is saved
+  with its screen (the full description only on the newest, older ones keep the
+  label), and the drawer shows "Claude sees: …". A new page or dialog should
+  register itself the same way.
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
   Ask Claude conversations: one private doc each at

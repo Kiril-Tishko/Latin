@@ -15,6 +15,7 @@ import { LatinText, LatinTokens } from "../latin";
 import { derived, getProgress, update, useProgress } from "../store";
 import { Speak } from "../speak";
 import { Sayings } from "../saying";
+import { useScreen } from "../screen";
 
 const LANG: [keyof Card["from"], string][] = [
   ["en", "EN"],
@@ -203,6 +204,16 @@ export function Discover() {
     if (state(id) === "new") setTurned((t) => new Set(t).add(id));
   };
 
+  useScreen("page", "Discover", () => {
+    const up = cards.filter((c) => state(c.id) !== "new");
+    return [
+      `The deck of mystery cards: ${seenCount} of ${all.length} opened, ${addedCount} in the learner's dictionary; ${fresh.length} unopened card${fresh.length === 1 ? "" : "s"} on the table.`,
+      up.length ? `Face up: ${up.map((c) => `${roman(number(c))} ${headword(c)} (${c.entry.en}${state(c.id) === "added" ? ", in the dictionary" : ""})`).join(", ")}.` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  });
+
   return (
     <div class="stack">
       <div class="spread deck-head">
@@ -228,7 +239,7 @@ export function Discover() {
       {later > 0 && <p class="small muted">{later} more card{later === 1 ? "" : "s"} open with later lessons.</p>}
 
       {current && (
-        <Modal wide className="card-modal" label={`Card ${roman(number(current))}`} onClose={() => setOpen(null)}>
+        <Modal wide className="card-modal" label={`Card ${roman(number(current))}`} screen={`Card ${roman(number(current))}: ${plainDict(current)} (${current.entry.en})`} onClose={() => setOpen(null)}>
           <div class="card-turn" key={current.id}>
             <CardView card={current} n={number(current)} onNext={next ? () => show(next.id) : undefined} onClose={() => setOpen(null)} />
           </div>

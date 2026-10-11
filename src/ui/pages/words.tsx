@@ -19,6 +19,7 @@ import { derived, useProgress } from "../store";
 import { startSession } from "./train";
 import { Speak } from "../speak";
 import { Sayings } from "../saying";
+import { useScreen } from "../screen";
 
 const CASE_ORDER: Case[] = ["nom", "acc", "gen", "abl", "dat", "voc"];
 const PN_ROWS: [PN, string][] = [
@@ -117,7 +118,7 @@ function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
   const [round, setRound] = useState(0);
   const examples = useMemo(() => wordExamples(e, derived().knowledge, seeded(hash(e.id) + round * 7919), 2), [e.id, round]);
   return (
-    <Modal onClose={onClose} label={e.en}>
+    <Modal onClose={onClose} label={e.en} screen={`Word: ${dictionaryForm(e)} (${e.en})`}>
       <div class="stack">
         <div class="spread">
           <div class="stack" style={{ gap: "2px" }}>
@@ -155,7 +156,7 @@ function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
         <Sayings wordId={e.id} max={2} />
         {card && <p class="small"><span class="eyebrow" style={{ marginRight: "8px" }}>Remember</span>{card.hook}</p>}
         <div class="row">
-          <button class="btn ghost small" onClick={() => { onClose(); openAsk({ label: `Word: ${dictionaryForm(e)}`, detail: `The learner opened the dictionary entry ${dictionaryForm(e)} (${e.en}).` }, "How is this word used? Give me two short examples with words I know."); }}>
+          <button class="btn ghost small" onClick={() => openAsk({ label: `Word: ${dictionaryForm(e)}`, detail: `The learner opened the dictionary entry ${dictionaryForm(e)} (${e.en}).` }, "How is this word used? Give me two short examples with words I know.")}>
             <Icon.quill /> Ask Claude about it
           </button>
         </div>
@@ -194,6 +195,11 @@ export function Words() {
   const shown = vocab.filter(
     (w) => (filter === "all" || (filter === "deck" ? "deck" in w.source : "lesson" in w.source && w.source.lesson === filter)) && matches(w, q, formHits),
   );
+  useScreen("page", "Words", () => {
+    const which = filter === "all" ? "all words" : filter === "deck" ? "the words added from Discover" : `the words of Lesson ${filter}`;
+    const list = shown.slice(0, 40).map((w) => `${headword(w)} (${w.en})`).join(", ");
+    return `The learner's dictionary: ${vocab.length} words, ${due} due for review. Showing ${which}${q ? `, searching "${q}"` : ""}: ${shown.length} word${shown.length === 1 ? "" : "s"}${shown.length ? `: ${list}${shown.length > 40 ? ", …" : ""}` : ""}.`;
+  });
   return (
     <div class="stack">
       <input

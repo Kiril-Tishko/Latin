@@ -142,7 +142,9 @@ async function audio() {
 }
 
 // Ask Claude, with a fake sample capability: a suggested question waits in the box
-// until it is sent, the answer appears, and a failure offers Try again.
+// until it is sent, the answer appears, and a failure offers Try again. Every
+// question carries what is on screen: the exercise, the lines of a lesson in view
+// and the line tapped, an open dialog (which stays open beside the chat).
 async function askClaude() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => {
@@ -172,12 +174,53 @@ async function askClaude() {
   await p.waitForTimeout(400);
   const answer = await p.locator(".msg.assistant").last().textContent();
   if (!answer.includes("marks the object")) errors.push(`ask: no answer shown (${answer.slice(0, 80)})`);
+  const lastAsked = () => p.evaluate(() => window.__asked.at(-1).at(-1).content);
+  if (!(await lastAsked()).includes("[Where the learner is: Home")) errors.push("ask: the question does not say it was asked on the home page");
   await p.evaluate(() => { window.__fail = { code: "upstream_error", message: "simulated" }; });
   await p.locator("#ask-input").fill("And the ablative?");
   await p.locator("#ask-input").press("Enter");
   await p.waitForTimeout(400);
   if (!(await p.locator("button", { hasText: "Try again" }).count())) errors.push("ask: a failed answer offers no Try again");
   await p.screenshot({ path: `${out}/ask-error.png` });
+  await p.evaluate(() => { window.__fail = null; });
+  await p.keyboard.press("Escape");
+  const askHere = async (q) => {
+    await p.locator(".ask-btn").click();
+    await p.waitForTimeout(150);
+    const sees = await p.locator(".drawer-sees").textContent();
+    await p.locator("#ask-input").fill(q);
+    await p.locator("#ask-input").press("Enter");
+    await p.waitForTimeout(200);
+    await p.keyboard.press("Escape");
+    return { sees, sent: await lastAsked() };
+  };
+  // an exercise: Claude sees it, and that it is not answered yet
+  await p.locator(".nav button", { hasText: "Exercitium" }).click();
+  await p.locator(".step-panel .btn.big").click();
+  await p.locator("button", { hasText: "Start exercises" }).click();
+  await p.waitForTimeout(200);
+  const ex = await askHere("What goes here?");
+  if (!ex.sees.includes("Exercise 1 of") || !ex.sent.includes("Not answered yet")) errors.push(`ask: the exercise on screen is not described (${ex.sees})`);
+  // a lesson page scrolled to its story, a word tapped
+  await p.locator(".nav button", { hasText: "Lectiōnēs" }).click();
+  await p.locator(".lesson-card").nth(1).click();
+  await p.locator("[data-ask^='Story']").scrollIntoViewIfNeeded();
+  await p.locator("[data-ask^='Story'] .ex-line .w").first().click();
+  const story = await askHere("What does this line mean?");
+  if (!story.sees.includes("Story") || !story.sent.includes("Last tapped") || !story.sent.includes("[Story")) errors.push(`ask: the lesson part in view or the line tapped is missing (${story.sees})`);
+  // a word dialog stays open beside the chat and is read; Escape closes the chat first
+  await p.locator(".nav button", { hasText: "Verba" }).click();
+  await p.locator(".word-tile").first().click();
+  await p.locator("button", { hasText: "Ask Claude about it" }).click();
+  await p.waitForTimeout(150);
+  if (!(await p.locator(".modal").count())) errors.push("ask: asking about a word closed the word");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(200);
+  if (!(await lastAsked()).includes("Text of the open dialog")) errors.push("ask: the open word is not described");
+  await p.screenshot({ path: `${out}/ask-beside-word.png` });
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(100);
+  if ((await p.locator(".drawer").count()) || !(await p.locator(".modal").count())) errors.push("ask: Escape should close the chat and leave the word open");
   await ctx.close();
 }
 
@@ -250,7 +293,7 @@ async function conversations() {
   await phone.p.locator("#ask-input").fill("And with tū?");
   await phone.p.locator("#ask-input").press("Enter");
   await pc.p.waitForTimeout(900);
-  const onPc = await pc.p.locator(".msg.user").allTextContents();
+  const onPc = await pc.p.locator(".msg.user .msg-text").allTextContents();
   if (!onPc.includes("And with tū?")) errors.push(`conversations: the follow-up did not reach the first device (${JSON.stringify(onPc)})`);
   await phone.p.locator("button", { hasText: "Conversations" }).click();
   await phone.p.locator(".chat-row button[title='Delete']").first().click();

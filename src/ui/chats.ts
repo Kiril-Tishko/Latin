@@ -14,6 +14,8 @@ export interface ChatTurn {
   practice?: string[];
   /** Which model tier answered ("quick", "default", "complex"). */
   tier?: string;
+  /** For a question: what was on screen when it was asked (the full description only on the latest). */
+  screen?: { label: string; detail?: string };
 }
 
 export interface Chat {
@@ -56,7 +58,9 @@ function saveLocal() {
 function fromBody(id: string, b: unknown): Chat | null {
   const x = b as Partial<Chat> | undefined;
   if (!id || !x || !Array.isArray(x.turns)) return null;
-  const turns = x.turns.filter((t): t is ChatTurn => !!t && (t.role === "user" || t.role === "assistant") && typeof t.content === "string");
+  const turns = x.turns
+    .filter((t): t is ChatTurn => !!t && (t.role === "user" || t.role === "assistant") && typeof t.content === "string")
+    .map((t) => (t.screen && typeof t.screen.label !== "string" ? { ...t, screen: undefined } : t));
   return {
     id,
     title: typeof x.title === "string" ? x.title : turns[0]?.content.slice(0, 80) ?? "Conversation",
@@ -67,13 +71,17 @@ function fromBody(id: string, b: unknown): Chat | null {
   };
 }
 
-const toBody = (c: Chat): Record<string, unknown> => ({
-  title: c.title,
-  context: c.context,
-  turns: c.turns.slice(-MAX_TURNS),
-  createdAt: c.createdAt,
-  updatedAt: c.updatedAt,
-});
+// plain JSON: fields left undefined are dropped rather than sent
+const toBody = (c: Chat): Record<string, unknown> =>
+  JSON.parse(
+    JSON.stringify({
+      title: c.title,
+      context: c.context,
+      turns: c.turns.slice(-MAX_TURNS),
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+    }),
+  );
 
 export const getChats = () => chats;
 export const getChat = (id: string | null) => (id ? chats.find((c) => c.id === id) ?? null : null);

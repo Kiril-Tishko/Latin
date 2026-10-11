@@ -5,7 +5,7 @@ import { LESSON_BY_N } from "../../content/lessons";
 import { Knowledge, latinText, seeded } from "../../latin/generate";
 import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
-import { Exercise, ExerciseKind, KIND_LABEL, Result } from "../../trainer/exercises";
+import { Exercise, ExerciseKind, KIND_LABEL, plainText, Result } from "../../trainer/exercises";
 import { buildKnowledge } from "../../trainer/knowledge";
 import { dayKey, mastery } from "../../trainer/progress";
 import { applyResult, buildSession, nextExercise, placementSession, readiness, SessionOpts } from "../../trainer/session";
@@ -14,11 +14,12 @@ import { CaseChip, Icon, Laurel, Mosaic, toast } from "../components";
 import { LatinTokens } from "../latin";
 import { Inline, Markup } from "../markup";
 import { go } from "../nav";
-import { lessonOfSkill, RuleBox, RuleIntro } from "../rulecard";
+import { lessonOfSkill, RuleBox, RuleIntro, rulesFor } from "../rulecard";
 import { fitToWindow } from "../fit";
 import { derived, getProgress, update, useProgress } from "../store";
 import { speak, stopSpeaking } from "../../audio/speech";
 import { audioReady, Speak } from "../speak";
+import { useScreen } from "../screen";
 
 export type Mode =
   | { kind: "step" }
@@ -201,6 +202,12 @@ function Chooser() {
     { mode: { kind: "mixed" }, title: "All lessons mixed", text: "Every rule at once. The hardest." },
     ...(!p.placementDone ? [{ mode: { kind: "placement" } as Mode, title: "Check-up (3 min)", text: "Twelve questions across Lessons I-IV." }] : []),
   ];
+  useScreen("page", "Practice: choosing", () =>
+    [
+      `The practice page, choosing what to practise. Current step: Lesson ${level} "${lesson?.title ?? ""}", ${Math.round(ready.value * 100)}% ready for the next step (it opens at 80%).`,
+      `On offer: Practise Lesson ${level} step by step; ${modes.map((m) => `${m.title} (${m.text})`).join("; ")}.`,
+    ].join("\n"),
+  );
   return (
     <div class="stack-lg">
       <section class="panel frame step-panel">
@@ -259,6 +266,71 @@ const VERDICT = {
   wrong: { la: "Errās…", en: "Not quite" },
 };
 
+interface RunnerState {
+  answer: string;
+  res: Result | null;
+  showHints: boolean;
+  showRule: boolean;
+  showEnglish: boolean;
+  judgement: string | null;
+}
+
+/** The exercise's Latin as shown, with the gap where a word or ending is asked for. */
+function shownLatin(ex: Exercise, answered: boolean): string {
+  const words = (ex.latin ?? []).map((t, i) => {
+    if (answered || i !== ex.blank) return t.text;
+    if (ex.kind === "choose") return "___";
+    return `${t.analysis?.form.stem ?? ""}___`;
+  });
+  const text = words.join(" ");
+  return text ? `${text[0].toUpperCase()}${text.slice(1)}.` : "";
+}
+
+/** The answer given, as the learner sees it (a choice is shown by its word). */
+function givenAnswer(ex: Exercise, answer: string): string {
+  if (ex.kind === "choose") return ex.choices?.find((c) => c.id === answer)?.label ?? answer;
+  if (ex.kind === "identify") return ex.latin?.[Number(answer)]?.text ?? answer;
+  return answer;
+}
+
+const stop = (t: string) => (/[.!?…]$/.test(t.trim()) ? t.trim() : `${t.trim()}.`);
+
+/** What Claude should know about the exercise on screen, as it stands right now. */
+function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
+  const answered = !!st.res;
+  const english = ex.english && (ex.kind === "ending" || ex.kind === "transform" || ex.kind === "choose") && !answered
+    ? st.showEnglish ? ` Its English, shown: "${ex.english}".` : " Its English is hidden behind a Translate button."
+    : "";
+  const shown: Record<ExerciseKind, string> = {
+    en2la: `the English sentence "${ex.english}", to write in Latin.`,
+    la2en: `the Latin sentence "${shownLatin(ex, true)}", to translate into English.`,
+    listen: answered ? `the sentence that was read aloud: "${shownLatin(ex, true)}"` : "a Latin sentence read aloud, not shown in writing until the answer is checked.",
+    ending: `"${shownLatin(ex, answered)}"${answered ? "" : ", with one ending left out (___)."}${english}`,
+    transform: `"${shownLatin(ex, true)}".${english}`,
+    choose: `"${shownLatin(ex, answered)}"; options: ${ex.choices?.map((c) => c.label).join(" / ")}.${english}`,
+    form: plainText(ex.ask ?? ""),
+    identify: `the sentence "${shownLatin(ex, true)}"; the learner taps the word asked for.`,
+    vocab: ex.ask ?? "",
+  };
+  const lines = [
+    `Practising: ${modeLabel(s.mode)} (only the rules up to Lesson ${s.level}). Exercise ${s.index + 1} of ${s.items.length}, "${ex.instruction}".`,
+    `On screen: ${shown[ex.kind]}`,
+    `The exercise with its answer: ${plainText(ex.context)}`,
+  ];
+  if (!st.res) {
+    lines.push(`Not answered yet${st.answer.trim() ? `; typed so far: "${givenAnswer(ex, st.answer.trim())}"` : ""}. Do not give the answer away unless the learner asks for it.`);
+    if (st.showHints) lines.push(`Hint open: ${ex.hints.filter(Boolean).map(plainText).join("; ")}`);
+    if (st.showRule) lines.push(`Rule box open: ${rulesFor(ex.skills, s.level).slice(0, 2).map((r) => r.title).join("; ") || ex.skills.map((id) => SKILL_BY_ID.get(id)?.title).join("; ")}`);
+  } else {
+    const given = st.answer === "—" ? "skipped it (\"I don't know\")" : `answered "${givenAnswer(ex, st.answer)}"`;
+    lines.push(`The learner ${given}. Verdict: ${st.res.verdict}. Correct answer: ${stop(plainText(st.res.expected))}`);
+    const notes = st.res.issues.map((i) => plainText(i.message)).filter(Boolean);
+    if (notes.length) lines.push(`The checker's notes: ${notes.join(" ")}`);
+    if (st.judgement) lines.push(`Claude's earlier check of the answer: ${plainText(st.judgement)}`);
+  }
+  return lines.join("\n");
+}
+
 function Runner({ s }: { s: Session }) {
   const ex = s.items[s.index];
   const [answer, setAnswer] = useState("");
@@ -274,6 +346,9 @@ function Runner({ s }: { s: Session }) {
   const nextRef = useRef<HTMLButtonElement>(null);
   const sideRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  useScreen("page", `Exercise ${s.index + 1} of ${s.items.length}: ${KIND_LABEL[ex.kind]}`, () =>
+    describeExercise(s, ex, { answer, res, showHints, showRule, showEnglish, judgement }),
+  );
 
   // the exercise always fits the window: shrink it (never below a readable size) when it would scroll
   useLayoutEffect(() => fitToWindow(panelRef.current, !!res), [ex.id, res, showHints, showRule, showEnglish, judgement, judging]);
@@ -707,6 +782,15 @@ function Summary({ s }: { s: Session }) {
   const wrong = s.attempts.filter((a) => a.res.verdict === "wrong");
   const touched = [...new Set(s.attempts.flatMap((a) => Object.keys(a.res.credit)))].filter((id) => SKILL_BY_ID.has(id));
   touched.sort((a, b) => mastery(p.skills[a]) - mastery(p.skills[b]));
+  useScreen("page", "End of the round", () =>
+    [
+      `The end of a practice round (${modeLabel(s.mode)}): ${right} correct, ${almost} almost, ${wrong.length} wrong, out of ${s.attempts.length}.`,
+      touched.length ? `Skills practised: ${touched.slice(0, 8).map((id) => `${SKILL_BY_ID.get(id)!.title} (${Math.round(mastery(p.skills[id]) * 100)}%)`).join("; ")}.` : "",
+      wrong.length ? `To review:\n${wrong.map((a) => `- ${plainText(a.ex.context)} | wrote: ${givenAnswer(a.ex, a.answer)}`).join("\n")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
   return (
     <div class="stack-lg" style={{ maxWidth: "980px", margin: "0 auto" }}>
       <div class="summary-head">

@@ -12,6 +12,7 @@ import { LatinText } from "../latin";
 import { go } from "../nav";
 import { Speak } from "../speak";
 import { derived, useProgress } from "../store";
+import { useScreen } from "../screen";
 import { openCardOnArrival } from "./discover";
 import { startSession } from "./train";
 
@@ -41,14 +42,19 @@ function Stylus() {
   );
 }
 
-/** Sentence of the day, written on a wax tablet: one short sentence from the current step or before. */
-function HeroTablet({ lessons }: { lessons: number[] }) {
-  const [english, setEnglish] = useState(false);
+/** One short sentence a day from these lessons. */
+function sentenceOfTheDay(lessons: number[]) {
   const pool = LESSONS.filter((l) => lessons.includes(l.n))
     .flatMap((l) => l.sentences)
     .filter((x) => /^[^.?!]+\.$/.test(x.la) && x.la.split(" ").length >= 2 && x.la.split(" ").length <= 5);
-  if (!pool.length) return null;
-  const s = pool[Math.floor(Date.now() / 86_400_000) % pool.length];
+  return pool.length ? pool[Math.floor(Date.now() / 86_400_000) % pool.length] : undefined;
+}
+
+/** Sentence of the day, written on a wax tablet: one short sentence from the current step or before. */
+function HeroTablet({ lessons }: { lessons: number[] }) {
+  const [english, setEnglish] = useState(false);
+  const s = sentenceOfTheDay(lessons);
+  if (!s) return null;
   return (
     <figure class="hero-art">
       <div class="wax-tablet">
@@ -88,6 +94,20 @@ export function Home() {
   const due = dueWords(p, vocab).length;
   const card = nextCard(p.revealed, d.knowledge, new Set(d.words.map((w) => w.id)));
   const openedNotAdded = p.revealed.filter((id) => !p.added.includes(id)).length;
+  const tabletLessons = p.lessonsDone.filter((n) => n <= p.focusLesson);
+  useScreen("page", "Home", () => {
+    const sentence = sentenceOfTheDay(tabletLessons);
+    return [
+      `The home page. Today: ${done} of ${goal} exercises done; ${days > 0 ? `a ${days}-day streak` : "no streak yet"}.`,
+      focus ? `Current step: Lesson ${p.focusLesson} "${focus.title}", ${Math.round(ready.value * 100)}% ready for the next step (it opens at 80%).` : "",
+      `Weak spots listed: ${weak.map((id) => `${SKILL_BY_ID.get(id)!.title} (${Math.round(mastery(p.skills[id]) * 100)}%)`).join("; ")}.`,
+      `Words due for review: ${due}.`,
+      sentence ? `Sentence of the day, on the wax tablet: ${sentence.la} (${sentence.en})` : "",
+      card ? "A new mystery card is waiting." : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  });
 
   return (
     <div class="stack-lg">
@@ -125,7 +145,7 @@ export function Home() {
           )}
         </div>
         </div>
-        <HeroTablet lessons={p.lessonsDone.filter((n) => n <= p.focusLesson)} />
+        <HeroTablet lessons={tabletLessons} />
       </section>
 
       <div class="grid-2 home-grid">

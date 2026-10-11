@@ -3,6 +3,7 @@ import { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Case, CASE_NAMES } from "../latin/types";
 import { roman } from "../latin/text";
+import { useScreen } from "./screen";
 
 const P = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -25,6 +26,7 @@ export const Icon = {
   play: () => P("M8 5v14l11-7L8 5Z"),
   speaker: () => P("M4 9.5h3.5L12 5.5v13l-4.5-4H4v-5Zm11.5-.5a4.5 4.5 0 0 1 0 6m2.5-8.5a8 8 0 0 1 0 11"),
   stop: () => P("M7 7h10v10H7z"),
+  eye: () => P("M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"),
   repeat: () => P("M4 12a8 8 0 0 1 13.7-5.6L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7 5.6L4 15.5M4 20v-4.5h4.5"),
   gear: () => P("M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.7 1.7 1l.4 2.5h4l.4-2.5c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6Z"),
 };
@@ -51,7 +53,9 @@ export function CaseChip({ c, label }: { c: Case | "verb"; label?: string }) {
   return <span class={`chip case c-${c}`}>{label ?? (c === "verb" ? "verb ending" : CASE_NAMES[c])}</span>;
 }
 
-export function Modal({ onClose, children, label, wide, className = "" }: { onClose: () => void; children: ComponentChildren; label: string; wide?: boolean; className?: string }) {
+/** A dialog. `screen` names it for Ask Claude (default: the label), which also reads its text. */
+export function Modal({ onClose, children, label, wide, className = "", screen }: { onClose: () => void; children: ComponentChildren; label: string; wide?: boolean; className?: string; screen?: string }) {
+  useScreen("dialog", screen ?? label);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -61,7 +65,9 @@ export function Modal({ onClose, children, label, wide, className = "" }: { onCl
     <>
       <div class="scrim" onClick={onClose} />
       <div class={`modal${wide ? " wide" : ""} ${className}`} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.target === e.currentTarget && onClose()}>
-        <div class="panel frame">{children}</div>
+        <div class="panel frame" data-ask={screen ?? label}>
+          {children}
+        </div>
       </div>
     </>
   );

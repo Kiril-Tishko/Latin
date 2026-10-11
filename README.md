@@ -22,7 +22,9 @@ published as a private claude.ai artifact.
 - **Audio**: every Latin sentence can be heard in classical pronunciation
   (through the device's Spanish or Italian voice), Listen & repeat on lesson pages, and a
   Listen and write exercise.
-- **Ask Claude**: a tutor that sees your lessons, words and weak spots.
+- **Ask Claude**: a tutor that sees your lessons, words and weak spots, and what
+  is on your screen (the exercise, the lines of a lesson in view, the word or card
+  you opened), so you can ask "what does this sentence mean?".
 
 ARTIFACT_URL: https://claude.ai/artifact/3cvi4ofuaPLg6LfXXf7efX
 

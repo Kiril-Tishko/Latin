@@ -1,5 +1,6 @@
 // Ask Claude: a chat drawer that always knows where the learner is (lessons,
-// skills with mastery, known words, recent mistakes, the current exercise).
+// skills with mastery, known words, recent mistakes) and what is on screen
+// when a question is asked (see screen.ts), so "here" and "this" make sense.
 // Conversations are saved (see chats.ts) and can be continued on any device;
 // what is typed in the box survives a reload.
 import { useEffect, useRef, useState } from "preact/hooks";
@@ -8,10 +9,11 @@ import { dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, SKILLS } from "../latin/skills";
 import { Exercise, Result } from "../trainer/exercises";
 import { mastery } from "../trainer/progress";
-import { Chat, deleteChat, getChat, getChats, newChatId, saveChat, useChats } from "./chats";
+import { Chat, ChatTurn, deleteChat, getChat, getChats, newChatId, saveChat, useChats } from "./chats";
 import { Icon, toast } from "./components";
 import { Markup } from "./markup";
 import { SampleFn, sampleErrorText, sampler, storage } from "./platform";
+import { currentScreen, Screen, useScreenLabel } from "./screen";
 import { derived, getProgress } from "./store";
 
 export interface AskContext {
@@ -101,7 +103,11 @@ How to answer:
 - Write every Latin word, form or sentence inside «guillemets», for example «puellam». For a form that could be read two ways, add #case.number inside the guillemets: «puellae#gen.sg», «discipulī#nom.pl». The page colors the endings.
 - Use **bold** for the key point. Do not use tables.
 - If the question is about a mistake, say exactly which ending was wrong, why, and the rule that decides it.
-- If a short drill would help, end with one final line exactly like: PRACTICE: skill-id, skill-id (1-3 ids from the skill list below). Otherwise leave that line out.`;
+- If a short drill would help, end with one final line exactly like: PRACTICE: skill-id, skill-id (1-3 ids from the skill list below). Otherwise leave that line out.
+
+Where the learner is: each question starts with a note in [square brackets] describing what was on their screen when they asked: the page or exercise, an open dialog, the part of a long page in view, and the last line or word they tapped. "Here", "this", "this sentence", "this word" or "this exercise" mean what the newest note describes; earlier questions may have been asked elsewhere. Use the note quietly: do not repeat it back. When the exercise on screen has not been answered yet, help with the rule and hints, and do not give the answer away unless the learner asks for it.
+
+On the page, endings are colored by case: nominative blue, accusative red, genitive purple, ablative amber, dative green, vocative pink; verb endings teal. A plural is underlined.`;
 
 function profile(): string {
   const p = getProgress();
@@ -121,8 +127,24 @@ function profile(): string {
   ].join("\n\n");
 }
 
-export function fullPrompt(question: string, context: AskContext | null): string {
-  return `${INSTRUCTIONS}\n\n${profile()}\n\nCurrent screen: ${context ? `${context.label}. ${context.detail}` : "browsing the site."}\n\nLearner's question: ${question}`;
+/** A question as Claude reads it: where the learner was, in full for the newest question. */
+function questionText(t: Pick<ChatTurn, "content" | "screen">, latest: boolean): string {
+  const s = t.screen;
+  if (!s) return t.content;
+  if (latest && s.detail) return `[Where the learner is: ${s.label}\n${s.detail}]\n\n${t.content}`;
+  return `[Asked on: ${s.label}]\n${t.content}`;
+}
+
+/** What a conversation opened from a button (an exercise's Why?, a word, a rule) is about. */
+function openedFrom(context: AskContext | null, firstHasScreen: boolean): string {
+  if (!context) return "";
+  // conversations saved before questions carried their screen keep the whole description here
+  return firstHasScreen ? `This conversation was opened from: ${context.label}.` : `Screen when this conversation started: ${context.label}. ${context.detail}`;
+}
+
+/** One message with everything: for pasting into a Claude chat when the page cannot ask. */
+export function fullPrompt(question: string, screen: Screen | null, context: AskContext | null): string {
+  return [INSTRUCTIONS, profile(), openedFrom(context, !!screen), questionText({ content: question, screen: screen ?? undefined }, true)].filter(Boolean).join("\n\n");
 }
 
 function splitPractice(text: string): { body: string; practice: string[] } {
@@ -167,13 +189,20 @@ const QUICK = ["Why is this the right ending?", "Explain this rule simply", "Giv
 
 const TIER_NAME: Record<string, string> = { quick: "quick model", default: "balanced model", complex: "most capable model" };
 
-/** The turns Claude reads: the conversation so far (last few), the first carrying the instructions and the learner's profile. */
+/**
+ * The turns Claude reads: the conversation so far (last few), the first carrying
+ * the instructions and the learner's profile, each question saying where it was
+ * asked, and the newest one describing the screen in full.
+ */
 function toMessages(chat: Chat): { role: "user" | "assistant"; content: string }[] {
-  let hist = chat.turns.filter((t) => t.content.trim()).map((t) => ({ role: t.role, content: t.content }));
+  let hist = chat.turns.filter((t) => t.content.trim());
   while (hist.length > 9) hist = hist.slice(2);
   while (hist.length && hist[0].role !== "user") hist = hist.slice(1);
   if (!hist.length) return [];
-  return [{ role: "user", content: fullPrompt(hist[0].content, chat.context) }, ...hist.slice(1)];
+  const latest = hist.map((t) => t.role).lastIndexOf("user");
+  const msgs = hist.map((t, i) => ({ role: t.role, content: t.role === "user" ? questionText(t, i === latest) : t.content }));
+  msgs[0] = { role: "user", content: [INSTRUCTIONS, profile(), openedFrom(chat.context, !!hist[0].screen), msgs[0].content].filter(Boolean).join("\n\n") };
+  return msgs;
 }
 
 function when(t: number): string {
@@ -209,6 +238,7 @@ export function AskDrawer() {
   const chat = getChat(state.chatId);
   const key = state.chatId ?? "new";
   const busy = busyChat !== null;
+  const seeing = useScreenLabel(state.open);
   const setInput = (text: string) => {
     setInputState(text);
     keepDraft(key, text);
@@ -253,6 +283,19 @@ export function AskDrawer() {
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   });
+
+  // with the drawer open, a dialog behind it moves aside (wide screens) and Escape closes the drawer first
+  useEffect(() => {
+    document.body.classList.toggle("ask-open", state.open);
+    if (!state.open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      set({ open: false });
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [state.open]);
 
   if (!state.open) return null;
 
@@ -303,7 +346,10 @@ export function AskDrawer() {
     if (!q || busy) return;
     const now = Date.now();
     const base: Chat = chat ?? { id: newChatId(), title: q.slice(0, 80), context: state.context, turns: [], createdAt: now, updatedAt: now };
-    const next: Chat = { ...base, turns: [...base.turns, { role: "user", content: q, at: now }], updatedAt: now };
+    // what is on screen goes with the question; earlier questions keep only its name
+    const screen = currentScreen();
+    const earlier = base.turns.map((t) => (t.screen?.detail ? { ...t, screen: { label: t.screen.label } } : t));
+    const next: Chat = { ...base, turns: [...earlier, { role: "user", content: q, at: now, ...(screen ? { screen } : {}) }], updatedAt: now };
     // the question is saved before Claude answers, so a reload or another device never loses it
     saveChat(next);
     keepDraft(key, "");
@@ -316,7 +362,7 @@ export function AskDrawer() {
 
   async function copyPrompt() {
     const q = input.trim() || chat?.turns.filter((t) => t.role === "user").at(-1)?.content || "Explain where I am and what to practise next.";
-    const text = fullPrompt(q, chat?.context ?? state.context);
+    const text = fullPrompt(q, currentScreen(), chat?.context ?? state.context);
     try {
       await navigator.clipboard.writeText(text);
       toast("Copied. Paste it into a Claude chat.");
@@ -339,7 +385,6 @@ export function AskDrawer() {
   const unanswered = !thisBusy && !failure && last?.role === "user";
   const fresh = unanswered && Date.now() - last.at < 3 * 60_000;
   const latestOther = chats.find((c) => c.id !== chat?.id);
-  const about = chat ? chat.context : state.context;
 
   return (
     <>
@@ -349,9 +394,9 @@ export function AskDrawer() {
           <span style={{ color: "var(--gold)", width: "22px", display: "inline-flex" }}><Icon.quill /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ fontFamily: "var(--f-display)", letterSpacing: "0.06em" }}>Ask Claude</h3>
-            <div class="small muted ui" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {state.history ? "Your conversations, on every device" : about ? about.label : chat ? chat.title : "Knows your lessons, words and weak spots"}
-            </div>
+            {(state.history || !seeing) && (
+              <div class="small muted ui drawer-sub">{state.history ? "Your conversations, on every device" : "Knows your lessons, words and weak spots"}</div>
+            )}
           </div>
           <button class="btn ghost small" aria-pressed={state.history} onClick={() => set({ history: !state.history })} title="Saved conversations">
             <Icon.scroll /> <span class="wide-only">Conversations</span>
@@ -361,6 +406,16 @@ export function AskDrawer() {
           </button>
           <button class="btn ghost small" onClick={close} aria-label="Close"><Icon.close /></button>
         </div>
+
+        {/* (null, not "", when hidden: an empty text node here would make Preact rebuild the input box below) */}
+        {!state.history && seeing ? (
+          <div class="drawer-sees small ui" title="Each question is sent with what is on your screen, so “here” and “this” point at it.">
+            <Icon.eye />
+            <span>
+              Claude sees: <strong>{seeing}</strong>
+            </span>
+          </div>
+        ) : null}
 
         {state.history ? (
           <div class="drawer-body">
@@ -389,7 +444,7 @@ export function AskDrawer() {
           <div class="drawer-body" ref={bodyRef}>
             {turns.length === 0 && !thisBusy && (
               <div class="stack small">
-                <p class="muted ui">Ask anything about the rule, the word or your answer. Claude sees what you have learned, your weak spots and the exercise on screen. Conversations are saved and you can continue them on any device.</p>
+                <p class="muted ui">Ask anything about the rule, the word or your answer. Claude sees what you have learned, your weak spots and what is on your screen (the exercise, the part of the lesson in view, the word or card you opened), so you can say “here” or “this sentence”. Conversations are saved and you can continue them on any device.</p>
                 <div class="row" style={{ gap: "6px" }}>
                   {QUICK.map((q) => (
                     <button
@@ -415,8 +470,9 @@ export function AskDrawer() {
             )}
             {turns.map((t, i) => (
               <div key={i} class={`msg ${t.role}`}>
-                {t.role === "assistant" ? <Markup text={t.content} /> : t.content}
+                {t.role === "assistant" ? <Markup text={t.content} /> : <span class="msg-text">{t.content}</span>}
                 {t.role === "assistant" && t.tier && <div class="msg-meta">{TIER_NAME[t.tier] ?? t.tier}</div>}
+                {t.role === "user" && t.screen && <div class="msg-meta" title="What was on your screen when you asked">on {t.screen.label}</div>}
                 {t.practice && t.practice.length > 0 && (
                   <div class="row" style={{ marginTop: "10px" }}>
                     <button

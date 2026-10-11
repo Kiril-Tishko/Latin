@@ -10,6 +10,7 @@ import { CaseChip } from "../components";
 import { LatinTokens } from "../latin";
 import { derived, useProgress } from "../store";
 import { RuleView } from "./lessons";
+import { useScreen } from "../screen";
 
 const word = (id: string) => Object.values(LESSON_WORDS).flat().find((w) => w.id === id)!;
 
@@ -96,10 +97,13 @@ export function VerbTable({ rows = VERB_ROWS.map(([r]) => r), cols = VERB_COLS.m
 export function Rules() {
   const p = useProgress();
   const cases: Case[] = ["nom", "acc", "gen", "abl"];
+  useScreen("page", "Rules", () =>
+    `The rules page: why endings matter, the case colors, the noun and verb ending tables ("?" marks a form from a later lesson), then the rules of each watched lesson (${LESSONS.filter((l) => p.lessonsDone.includes(l.n)).map((l) => `Lesson ${l.n}`).join(", ")}).`,
+  );
   return (
     <div class="stack-lg">
 
-      <section class="panel frame stack">
+      <section class="panel frame stack" data-ask="Why endings matter">
         <h2>Why endings matter</h2>
         <div class="prose stack">
           <p>
@@ -113,7 +117,7 @@ export function Rules() {
         </div>
       </section>
 
-      <section class="stack">
+      <section class="stack" data-ask="The case colors">
         <h2>The colors</h2>
         <div class="panel stack">
           {cases.map((c) => (
@@ -133,13 +137,13 @@ export function Rules() {
         </div>
       </section>
 
-      <section class="stack">
+      <section class="stack" data-ask="Noun endings table">
         <h2>Noun endings</h2>
         <p class="muted small">The review table from Lesson IV. A ? is a form you will meet in a later lesson.</p>
         <div class="panel"><NounTable /></div>
       </section>
 
-      <section class="stack">
+      <section class="stack" data-ask="Verb endings table">
         <h2>Verb endings</h2>
         <p class="muted small">Present tense. The ending says who acts; the vowel before it depends on the verb's pattern.</p>
         <div class="panel"><VerbTable /></div>

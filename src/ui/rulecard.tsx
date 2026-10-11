@@ -12,6 +12,7 @@ import { fitToWindow } from "./fit";
 import { LatinText } from "./latin";
 import { Inline } from "./markup";
 import { NounTable, VerbTable } from "./pages/rules";
+import { useScreen } from "./screen";
 
 /** The lesson that teaches a skill. */
 export function lessonOfSkill(id: string): number | undefined {
@@ -63,10 +64,13 @@ export function RuleIntro({ lesson, k, onStart }: { lesson: number; k: Knowledge
   const panel = useRef<HTMLElement>(null);
   useEffect(() => start.current?.focus(), []);
   useLayoutEffect(() => fitToWindow(panel.current, false), [lesson]);
+  useScreen("page", `Rules before Step ${roman(lesson)}`, () =>
+    `Before the exercises of step ${lesson} ("${l?.title ?? ""}"): a one-screen refresher with the endings to know and the lesson's main rules. The learner presses Start exercises when ready.`,
+  );
   if (!l) return null;
   return (
     <div class="trainer">
-      <section class="panel frame rule-intro" ref={panel}>
+      <section class="panel frame rule-intro" ref={panel} data-ask={`Rule refresher, Lesson ${roman(lesson)}`}>
         <div class="spread rule-intro-head">
           <div class="stack" style={{ gap: "4px" }}>
             <span class="eyebrow">Step {roman(lesson)} · first, the rules</span>
@@ -110,10 +114,10 @@ export function RuleBox({ skills, lesson }: { skills: string[]; lesson?: number 
   const rules = rulesFor(skills, lesson).slice(0, 2);
   if (!rules.length) {
     const hints = skills.map((s) => SKILL_BY_ID.get(s)?.hint).filter(Boolean) as string[];
-    return <div class="well ex-hints">{hints.map((h, i) => <p key={i}><Inline text={h} /></p>)}</div>;
+    return <div class="well ex-hints" data-ask="The rule, opened in the exercise">{hints.map((h, i) => <p key={i}><Inline text={h} /></p>)}</div>;
   }
   return (
-    <div class="well stack ex-hints rule-box" style={{ gap: "10px" }}>
+    <div class="well stack ex-hints rule-box" style={{ gap: "10px" }} data-ask="The rule, opened in the exercise">
       {rules.map((r) => (
         <RuleMini key={r.id} r={r} />
       ))}

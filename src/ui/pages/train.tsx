@@ -14,10 +14,11 @@ import { dayKey, Progress } from "../../trainer/progress";
 import { applyResult, buildSession, mistakesSession, mistakesToFix, nextExercise, partExercise } from "../../trainer/session";
 import { Line } from "../../trainer/lines";
 import { practiceLines, storyOpen, storySession } from "../../trainer/stories";
+import { answersSession } from "../../trainer/answers";
 import { videoSession } from "../../trainer/video";
 import { openAsk, judge } from "../ask";
 import { CaseChip, Icon, Laurel, toast } from "../components";
-import { LatinTokens } from "../latin";
+import { LatinText, LatinTokens } from "../latin";
 import { Inline, Markup } from "../markup";
 import { go } from "../nav";
 import { partsFor, RuleBox } from "../rulecard";
@@ -41,6 +42,7 @@ export type Mode =
   | { kind: "video"; n?: number }
   | { kind: "story"; id: string }
   | { kind: "stories" }
+  | { kind: "answers"; story?: string }
   | { kind: "mistakes" };
 
 interface Attempt {
@@ -117,6 +119,8 @@ export function modeLabel(m: Mode): string {
       return "Sentences from the stories";
     case "mistakes":
       return "Fix my mistakes";
+    case "answers":
+      return m.story ? `Answer in Latin: ${STORY_BY_ID.get(m.story)?.title ?? ""}` : "Answer in Latin";
   }
 }
 
@@ -195,6 +199,9 @@ export function startSession(mode: Mode): boolean {
       break;
     case "mistakes":
       items = mistakesSession(p, c, vocab);
+      break;
+    case "answers":
+      items = answersSession(p, c, { story: mode.story });
       break;
     default:
       items = buildSession(p, c, { size: SIZE, vocab });
@@ -315,6 +322,7 @@ function Chooser() {
         ...(toFix ? [{ mode: { kind: "mistakes" } as Mode, title: `Fix my mistakes (${toFix})`, text: "Your mistakes come back as new exercises on the same rules and words." }] : []),
         { mode: { kind: "video" }, title: "Sentences from the videos", text: "The sentences you heard, with the rules you have learned: choose, build, write." },
         { mode: { kind: "stories" }, title: "Sentences from the stories", text: "The stories whose rules you have learned, line by line: choose, build, write." },
+        { mode: { kind: "answers" }, title: "Answer in Latin", text: "Questions in Latin about you, the stories you read and small scenes: answer with your own words." },
         { mode: { kind: "writing" }, title: "Write Latin", text: "Whole sentences into Latin, with the rules you have learned." },
         { mode: { kind: "endings" }, title: "Endings drill", text: "Quick: choose and fill in endings." },
         { mode: { kind: "words" }, title: "Word recall", text: "Your words, both ways, just before you would forget them." },
@@ -402,6 +410,7 @@ function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
     derive: `the English word "${ex.ask}"; the learner names the Latin word it comes from.`,
     tiles: `the English sentence "${ex.english}", to build in Latin from word tiles: ${ex.tiles?.join(" / ")}.`,
     meaning: `the Latin sentence "${shownLatin(ex, true)}", with English meanings to choose from: ${ex.choices?.map((c) => c.label).join(" / ")}.`,
+    answer: `the Latin question "${ex.ask}"${ex.gloss?.length ? ` (${ex.gloss.join("; ")})` : ""}, to answer in Latin with the learner's own words (any correct, sensible answer counts).`,
   };
   const lines = [
     `Practising: ${modeLabel(s.mode)} (only the rules of the parts the learner has seen). Exercise ${s.index + 1} of ${roundSize(s)}, "${ex.instruction}".`,
@@ -455,6 +464,8 @@ function taskOf(ex: Exercise): { how: How; text: string; dir?: string } {
       return ex.answer === "en" ? { how: "write", text: "Write what it means", dir: "Latin → English" } : { how: "write", text: "Write the Latin word", dir: "English → Latin" };
     case "derive":
       return { how: "write", text: "Write the Latin word inside this English word" };
+    case "answer":
+      return { how: "write", text: ex.instruction, dir: "your own words" };
   }
 }
 
@@ -686,6 +697,7 @@ function Runner({ s }: { s: Session }) {
                     ex.kind === "listen" ? "Write what you hear, in Latin…"
                     : ex.kind === "derive" ? "The Latin word, any form (aqua, dormiō…)"
                     : ex.kind === "transform" ? "Change the sentence here…"
+                    : ex.kind === "answer" ? "Answer in Latin, with your own words… (no need for long marks)"
                     : isLatinAnswer ? "Write it in Latin… (no need for long marks)"
                     : "Write it in English…"
                   }
@@ -881,6 +893,17 @@ function Prompt(props: {
     case "en2la":
     case "tiles":
       return <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }}>{ex.english}</p>;
+    case "answer":
+      return (
+        <div class="stack" style={{ gap: "6px" }}>
+          <p class="latin-lg answer-q">
+            <LatinText text={ex.ask ?? ""} />
+            {ex.audio && <Speak text={ex.audio} id={`prompt-${ex.id}`} />}
+          </p>
+          {ex.gloss && ex.gloss.length > 0 && <p class="answer-gloss ui">{ex.gloss.join(" · ")}</p>}
+          {translation}
+        </div>
+      );
     case "meaning":
       return (
         <div class="stack" style={{ gap: "8px" }}>
@@ -1027,7 +1050,7 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
         </div>
       )}
       <div class="stack answer" style={{ gap: "4px" }}>
-        <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{res.verdict === "correct" ? "Model answer" : "Correct answer"}</span>
+        <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{ex.kind === "answer" ? "For example" : res.verdict === "correct" ? "Model answer" : "Correct answer"}</span>
         {ex.kind === "meaning" ? (
           <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }}>{res.expected}</p>
         ) : ex.answer === "en" ? (

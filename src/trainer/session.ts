@@ -126,6 +126,8 @@ export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set
       ex = vocabExercise(ctx, entry, ctx.r() < 0.5 ? "la2en" : "en2la");
     } else if (kind === "derive") {
       ex = deriveFrom(ctx, opts.vocab ?? []);
+    } else if (kind === "answer") {
+      continue; // open questions come from their own round (answers.ts)
     } else {
       ex = makeExercise(kind, c, focus ?? pickFocus(p, ctx.k, ctx.r, opts.skills, opts.focusLesson));
     }
@@ -226,15 +228,16 @@ export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], k
   const c: Ctx = { ...ctx, k: { ...ctx.k, ...sentenceStyle(level, ctx.k.silly) } };
   const focus = pickFocus(p, ctx.k, ctx.r, part.practised ?? part.skills, part.lesson);
   // the weakest piece of the rule, in the phase's kinds of exercise
-  for (let attempt = 0; attempt < 12 && phaseKinds.length; attempt++) {
+  for (let attempt = 0; attempt < 16 && phaseKinds.length; attempt++) {
     const ex =
       fixed.length && ctx.r() < 1 / 3
         ? lineExercise(c, pick(ctx.r, fixed), weighted(ctx.r, lineKinds) ?? "tiles", lines)
         : makeExercise(weighted(ctx.r, phaseKinds) as MadeKind, c, focus);
     if (fits(ex, focus)) return done(ex);
   }
-  // a piece only a single form can show: the form first, then any kind
-  for (const kind of [...allowed.filter((k) => k === "form"), ...shuffle(ctx.r, allowed.filter((k) => k !== "form"))]) {
+  // a piece only a single form can show: the form first, then the phase's kinds (the harder ones never while the rule is new)
+  const order = [...new Set([...allowed.filter((k) => k === "form"), ...phaseKinds.map(([k]) => k as MadeKind), ...(phase === "simple" ? [] : shuffle(ctx.r, allowed))])];
+  for (const kind of order) {
     for (let attempt = 0; attempt < 4; attempt++) {
       const ex = makeExercise(kind, c, focus);
       if (fits(ex, focus)) return done(ex);
@@ -279,7 +282,7 @@ export function applyResult(p: Progress, ex: Exercise, res: Result, answer: stri
   const old = ex.fixes !== undefined ? p.mistakes.find((m) => m.at === ex.fixes) : undefined;
   if (old) {
     if (res.verdict !== "wrong") old.fixed = true;
-  } else if (res.verdict !== "correct") {
+  } else if (res.verdict !== "correct" && ex.kind !== "answer") {
     recordMistake(p, {
       at: now,
       kind: ex.kind,

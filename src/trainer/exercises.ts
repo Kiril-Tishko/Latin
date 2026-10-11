@@ -12,10 +12,10 @@ import { SKILL_BY_ID, adjDecl, declGroup, nounSkill } from "../latin/skills";
 import { latinKey, words } from "../latin/text";
 import { AdjEntry, Case, CASE_NAMES, Entry, full, NounKey, Num, PN, VerbEntry, VerbKey } from "../latin/types";
 
-export type ExerciseKind = "en2la" | "la2en" | "ending" | "choose" | "form" | "transform" | "identify" | "vocab" | "listen" | "derive" | "tiles" | "meaning";
+export type ExerciseKind = "en2la" | "la2en" | "ending" | "choose" | "form" | "transform" | "identify" | "vocab" | "listen" | "derive" | "tiles" | "meaning" | "answer";
 
-/** Kinds made from the generator (the others need a word or a sentence to work on). */
-export type MadeKind = Exclude<ExerciseKind, "vocab" | "derive">;
+/** Kinds made from the generator (the others need a word, a sentence or a question to work on). */
+export type MadeKind = Exclude<ExerciseKind, "vocab" | "derive" | "answer">;
 
 export const KIND_LABEL: Record<ExerciseKind, string> = {
   en2la: "Translate into Latin",
@@ -30,6 +30,7 @@ export const KIND_LABEL: Record<ExerciseKind, string> = {
   derive: "Find the Latin word",
   tiles: "Build the sentence",
   meaning: "What does it mean?",
+  answer: "Answer in Latin",
 };
 
 export interface Result {
@@ -58,8 +59,10 @@ export interface Exercise {
   english?: string;
   /** English of the expected answer when it differs from `english` (transform). */
   answerEnglish?: string;
-  /** A short request line such as "puella → accusative singular". */
+  /** A short request line such as "puella → accusative singular", or a question to answer in Latin. */
   ask?: string;
+  /** The meanings of new words in the question ("quid = what"). */
+  gloss?: string[];
   askCase?: Case;
   askNum?: Num;
   /** Dictionary forms that help, revealed on request. */
@@ -98,7 +101,7 @@ export interface Ctx {
 }
 
 let counter = 0;
-const nextId = () => `ex${Date.now().toString(36)}${(counter++).toString(36)}`;
+export const nextId = () => `ex${Date.now().toString(36)}${(counter++).toString(36)}`;
 
 const plainText = (s: string) => s.replace(/«|»/g, "").replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "");
 
@@ -114,16 +117,16 @@ function contentWords(tokens: LToken[]): Entry[] {
   return out;
 }
 
-function wordIds(tokens: LToken[]): string[] {
+export function wordIds(tokens: LToken[]): string[] {
   return contentWords(tokens).map((e) => e.id);
 }
 
-function hintsFor(tokens: LToken[]): string[] {
+export function hintsFor(tokens: LToken[]): string[] {
   return contentWords(tokens).map((e) => `${dictionaryForm(e)}: ${e.en}`);
 }
 
 /** Credit every skill in the sentence; skills blamed by an issue get 0. */
-function creditFrom(skills: string[], verdict: Verdict, issues: Issue[]): Record<string, number> {
+export function creditFrom(skills: string[], verdict: Verdict, issues: Issue[]): Record<string, number> {
   const blamed = new Set(issues.filter((i) => i.kind !== "tip" && i.kind !== "typo").map((i) => i.skill).filter(Boolean) as string[]);
   const base = verdict === "correct" ? 1 : verdict === "almost" ? 0.85 : 0.55;
   const out: Record<string, number> = {};
@@ -967,7 +970,7 @@ const FACTORIES: Record<MadeKind, (ctx: Ctx, focus: string[]) => Exercise | null
 };
 
 export function makeExercise(kind: MadeKind, ctx: Ctx, focus: string[]): Exercise | null {
-  return FACTORIES[kind](ctx, focus);
+  return FACTORIES[kind]?.(ctx, focus) ?? null;
 }
 
 export { shuffle, plainText };

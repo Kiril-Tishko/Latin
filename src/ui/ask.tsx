@@ -208,7 +208,7 @@ Exercise: ${ex.instruction}. ${ex.context}
 Learner's answer: "${answer}"
 The automatic checker said "${res.verdict}" because: ${res.issues.map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "")).join(" ") || "it did not match the accepted answers."}
 
-Decide whether the learner's answer is a correct answer. Accept any Latin word order, missing long marks, and natural English variants (articles, progressive tense, synonyms). Reject wrong endings, wrong person or number, and missing or extra meaning.
+Decide whether the learner's answer is a correct answer. Accept any Latin word order, missing long marks, and natural English variants (articles, progressive tense, synonyms). Reject wrong endings, wrong person or number, and missing or extra meaning.${ex.kind === "answer" ? "\nThis is an open question: any correct, sensible Latin answer in the learner's own words counts, and the example is only one possibility. Judge the answer itself: is it correct Latin, does it answer the question, and (for a question about a story) does it say what the story says?" : ""}
 Reply with only JSON: {"correct": true or false, "explanation": "one or two sentences; put Latin inside «guillemets»"}
 
 ${engineFacts([{ text: answer, mixed: true }, { text: ex.context, mixed: true }], derived().lexicon, derived().seenKnowledge.skills)}`;

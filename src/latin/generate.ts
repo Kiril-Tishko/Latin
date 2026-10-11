@@ -445,6 +445,13 @@ const OBJECTS: Record<string, (n: NounEntry) => boolean> = {
   disco: isThing,
 };
 
+/** Whether a noun makes sense as what a verb acts on: what one reads, drinks, carries… (for the learner's own sentences). */
+export function sensibleObject(k: Knowledge, verb: VerbEntry, noun: NounEntry): boolean {
+  if (verb.id === "bibo") return noun.tags.includes("drink");
+  if (!takesObject(k, verb)) return false;
+  return OBJECTS[verb.id]?.(noun) ?? true;
+}
+
 function objectFor(k: Knowledge, r: Rand, verb: VerbEntry, exclude: string[], possChance?: number): NP | null {
   if (verb.id === "bibo") return makeNP(k, r, { case: "acc", num: "sg", require: tagged("drink"), exclude, adjChance: 0.15, possChance });
   const fits = OBJECTS[verb.id];

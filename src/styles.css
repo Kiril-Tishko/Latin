@@ -1205,3 +1205,7 @@ html, .drawer-body, .modal > .panel, .table-wrap { scrollbar-width: thin; scroll
 .part-plus strong { font-size: 1.1rem; margin-right: 4px; }
 .part-plus.none { color: var(--ink-2); font-size: 0.92rem; }
 .part-count .part-dots i { width: 13px; height: 13px; }
+
+/* a question to answer in Latin, and the meaning of its new question word */
+.answer-q { margin: 0; }
+.answer-gloss { margin: 0; color: var(--ink-2); font-size: 0.95rem; font-style: italic; }

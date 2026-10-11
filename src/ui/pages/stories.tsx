@@ -256,9 +256,14 @@ export function StoryPage({ id }: { id: string }) {
 
       <section class="row" data-ask="Story: what next">
         {practisable ? (
-          <button class="btn" onClick={() => { markRead(); if (startSession({ kind: "story", id: story.id })) go({ page: "train" }); }}>
-            <Icon.stylus /> Practise this story
-          </button>
+          <>
+            <button class="btn" onClick={() => { markRead(); if (startSession({ kind: "story", id: story.id })) go({ page: "train" }); }}>
+              <Icon.stylus /> Practise this story
+            </button>
+            <button class="btn ghost" onClick={() => { markRead(); if (startSession({ kind: "answers", story: story.id })) go({ page: "train" }); }}>
+              <Icon.quill /> Answer questions in Latin
+            </button>
+          </>
         ) : (
           <span class="small ui muted story-locked">
             Its exercises open after{" "}

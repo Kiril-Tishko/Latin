@@ -325,6 +325,17 @@ describe("practice of each part", () => {
     expect(late.filter((kind) => kind === "en2la" || kind === "transform").length).toBeGreaterThan(late.length * 0.3);
   });
 
+  it("never gives a hard exercise while a rule is new, even when the usual kinds cannot show it", () => {
+    for (const id of ["1.1", "1.4", "1.5", "2.2", "4.3"]) {
+      const part = PARTS.find((x) => x.id === id)!;
+      for (let seed = 1; seed <= 40; seed++) {
+        for (const { ex, phase } of playRound(part, seed, 5).out) {
+          if (phase === "simple") expect(["en2la", "transform", "listen", "identify"], `${id}: ${ex.context}`).not.toContain(ex.kind);
+        }
+      }
+    }
+  }, 30_000);
+
   it("rule 3.2: the -ī of an -us word is in every exercise (it once was in none)", () => {
     const part = PARTS.find((x) => x.id === "3.2")!;
     const { out } = playRound(part, 5, 5);

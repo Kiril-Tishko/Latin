@@ -151,6 +151,30 @@ async function run(name, viewport, colorScheme) {
   if (!inline) errors.push(`${name}: no ending or form was typed into the sentence`);
   await p.locator(".trainer-top button", { hasText: "End" }).click().catch(() => {});
   await p.locator("button", { hasText: "Choose another practice" }).click();
+  // Answer in Latin: a question about you, answered with your own words, then one answered wrong
+  // (the "why" questions first: "Cūr aquam bibis?" also contains "bibis")
+  const ANSWERS = { "Cūr labōrās": "Labōrō quod discō.", "Cūr aquam": "Aquam bibō quod labōrō.", legis: "Epistulam legō.", scrībis: "Epistulam scrībō.", bibis: "Aquam bibō.", vidēs: "Silvam videō.", habēs: "Librum habeō.", spectās: "Silvam spectō.", portās: "Aquam portō.", dēsīderās: "Amīcam dēsīderō.", discis: "Scrībere discō." };
+  await p.locator(".mode-card", { hasText: "Answer in Latin" }).click();
+  await p.waitForTimeout(200);
+  const question = (await p.locator(".answer-q").textContent()) ?? "";
+  const key = Object.keys(ANSWERS).find((k) => question.includes(k));
+  if (!key) errors.push(`${name}: the first open question is not about you (${question})`);
+  if (!((await p.locator(".answer-gloss").textContent()) ?? "").includes("=")) errors.push(`${name}: the question word is not explained`);
+  await p.locator("#answer-input").fill(key ? ANSWERS[key] : "x");
+  await p.screenshot({ path: `${out}/${name}-answer-q.png` });
+  await p.locator("#answer-input").press("Enter");
+  await p.waitForTimeout(200);
+  if (!(await p.locator(".verdict.correct").count())) errors.push(`${name}: a good answer of your own is not accepted (${question} → ${key && ANSWERS[key]})`);
+  await p.screenshot({ path: `${out}/${name}-answer-a.png` });
+  await p.locator("button", { hasText: "Next" }).click();
+  await p.waitForTimeout(150);
+  await p.locator("#answer-input").fill("Puella.");
+  await p.locator("#answer-input").press("Enter");
+  await p.waitForTimeout(200);
+  if (!(await p.locator(".answer .eyebrow", { hasText: "For example" }).count()) && !(await p.locator(".eyebrow", { hasText: "For example" }).count())) errors.push(`${name}: an open answer shows no example`);
+  await p.screenshot({ path: `${out}/${name}-answer-wrong.png` });
+  await p.locator(".trainer-top button", { hasText: "End" }).click();
+  await p.locator("button", { hasText: "Choose another practice" }).click();
   // train: the current rule (3.1, learned on an earlier day): a reminder first, then three exercises
   await p.locator(nav, { hasText: "Exercitium" }).first().click();
   await p.waitForTimeout(200);

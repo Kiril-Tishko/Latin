@@ -7,7 +7,7 @@ import { mastery, newProgress } from "../src/trainer/progress";
 
 const k = buildKnowledge([1, 2, 3, 4]);
 const lex = fullLexicon();
-const kinds: Exclude<ExerciseKind, "vocab" | "derive">[] = ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen", "tiles", "meaning"];
+const kinds: Exclude<ExerciseKind, "vocab" | "derive" | "answer">[] = ["en2la", "la2en", "ending", "choose", "form", "transform", "identify", "listen", "tiles", "meaning"];
 
 /** The answer a perfect student would type. */
 function modelAnswer(ex: ReturnType<typeof makeExercise>, res: ReturnType<NonNullable<typeof ex>["check"]>): string {

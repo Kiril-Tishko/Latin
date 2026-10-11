@@ -53,6 +53,10 @@ describe("checking Claude's answers with the grammar engine", () => {
     expect(checkAnswer("«Ad silvā ambulō.»", lex)[0].message).toContain("«ad silvam»");
     // calling someone is not a subject
     expect(checkAnswer("«Puella, legis?»", lex)).toEqual([]);
+    // with I am / you are, the noun is what one is: "I am a student"
+    expect(checkAnswer("«Discipulus sum.» «Poēta es.» «Ego discipula sum.»", lex)).toEqual([]);
+    // but a noun with "is" is its subject: one student is, several are
+    expect(checkAnswer("«Discipulus est.»", lex)).toEqual([]);
   });
 
   it("notes long marks missing from an ending, not from a stem", () => {

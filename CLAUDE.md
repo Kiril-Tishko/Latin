@@ -91,7 +91,8 @@ Runtime capabilities used:
   form can be, gender, group, known forms, how an adjective goes with it), and
   every answer is read back by `checkAnswer` (adjective agreement, subject and
   verb, in / ad with the right case, long marks in endings; Latin quoted as a
-  wrong example or as the learner's own words is left alone). A finding shows
+  wrong example or as the learner's own words is left alone; with sum / es a
+  noun is the complement: «Discipulus sum»). A finding shows
   as a "Grammar check" note under the answer, with "Fix this answer", which
   sends the findings back (a turn of `kind: "fix"`). The learner cannot judge
   answers themselves, so there is no "this is wrong" button. Answers and the
@@ -171,6 +172,24 @@ rule. The generator makes an "of" phrase whenever s.gen or one of the genitive
 endings is the focus (`GEN_SKILLS`, the owner of the ending practised), and a
 describing word can be the gap or the choice (`tokenRules`; `wrongForms` offers
 its other cases and its other gender: magna for agricola's magnus).
+
+Answer in Latin (`src/trainer/answers.ts`, questions in `src/content/questions.ts`):
+open questions in Latin that the learner answers with their own words, as they
+asked ("questions I can answer with my known vocab"). Three kinds, all of which
+they chose: about themselves ("Quid legis?": `YOU_QUESTIONS`, each with the rules
+it needs and an example), about the stories they have read (made from story
+lines: quis / quid / ubi / quō in place of the subject, the object, the place or
+where to; the answer must say what the story says), and small scenes (two
+sentences about a person). The question words are not in the videos, so each
+shows its meaning ("quid = what"); until rule 2.2 the questions say tū and the
+examples ego. `judgeAnswer` checks with the engine: unknown words, grammar
+(`checkAnswer`; long marks never needed), the person (-ō about yourself), the
+question's own verb, what the question asks for (a thing with -m, in + -ā / -ō,
+ad / in + -m, who, to …, quod …), and a correct but odd pair ("I read the water")
+is "almost" (`sensibleObject`). "I think mine is right" asks Claude, told that any
+correct, sensible answer counts. A right answer adds one to the rules it used;
+open answers are not logged as mistakes. Mode `answers`: a card on the practice
+page, and "Answer questions in Latin" on a story.
 
 Exercise builders work on any sentence: `writeOn`, `endingOn`, `chooseOn`,
 `tilesOn`, `meaningOn` in `src/trainer/exercises.ts` take tokens and an English

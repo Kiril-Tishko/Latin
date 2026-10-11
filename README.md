@@ -36,6 +36,9 @@ published as a private claude.ai artifact.
   of the words from the videos; each opens when you have learned its rules. Tap a line for its
   English and a word for its meaning, listen, answer two questions, then practise
   the story's lines.
+- **Answer in Latin**: questions in Latin ("Quid legis?", quid = what) about you,
+  about the stories you read, and small scenes, answered with your own words;
+  the site checks the grammar and what the question asks for.
 - **Fix my mistakes**: your mistakes come back later as new exercises on the
   same rules and words.
 - **Latin in English**: what English took from Latin, from Roman traders to

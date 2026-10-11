@@ -209,10 +209,12 @@ export function checkAnswer(text: string, lex: Lexicon): Finding[] {
       const pron = words.find((t) => t.readings?.[0]?.entry.id === "ego" || t.readings?.[0]?.entry.id === "tu");
       let need: PN | null = null;
       let who = "";
+      // "Discipulus sum", "Poēta es": with I am / you are, the noun is what one is, not the subject
+      const iOrYouAre = v.readings!.some((r) => r.entry.kind === "verb" && r.entry.irregular === "sum" && (r.key === "pres.1sg" || r.key === "pres.2sg"));
       if (pron) {
         need = pron.readings![0].entry.id === "ego" ? "1sg" : "2sg";
         who = `«${pron.text}»`;
-      } else {
+      } else if (!iOrYouAre) {
         const subjects = words.filter((t) => t !== v && t.readings?.length && t.readings.every((r) => r.entry.kind === "noun" && (caseOf(r) === "nom" || caseOf(r) === "voc")));
         // "Puella, legis?" calls the girl: a name followed by a comma is not the subject
         const calledOut = subjects.length === 1 && new RegExp(`${subjects[0].text}\\s*,`, "u").test(segment);

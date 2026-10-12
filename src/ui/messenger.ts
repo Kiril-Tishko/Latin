@@ -11,7 +11,7 @@ import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
 import { checkDraft, Deps, meetStranger, refreshLives, timingFor, writeOwn, writeReply } from "../chat/engine";
 import { deviceZone, hashRand } from "../chat/life";
-import { CoachTurn, membersOf, Meta, Msg, msgId, newMeta, newThread, Thread, unreadCount } from "../chat/model";
+import { CoachTurn, membersOf, mergeReactions, Meta, Msg, msgId, newMeta, newThread, Thread, unreadCount } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
 import { allowedWords, calendarEntry, chatEntries, chatLexicon, nameEntry } from "../chat/words";
 import { calendarBlock, calendarWords, romeDay } from "../chat/calendar";
@@ -116,6 +116,7 @@ function nextEvent(now: number): number {
       const typing = m.at - typingMs(m) - (m.src === "reply" ? 15_000 : 0);
       if (typing > now) next = Math.min(next, typing);
       if (m.readAt && m.readAt > now) next = Math.min(next, m.readAt);
+      for (const r of Object.values(m.reactions ?? {})) if (r.at > now) next = Math.min(next, r.at);
     }
   return next;
 }
@@ -145,7 +146,7 @@ function merge(a: T | undefined, b: T): T {
   for (const m of [...a.messages, ...b.messages]) {
     const had = byId.get(m.id);
     // the copy with more news wins (a read time, a check)
-    byId.set(m.id, had ? { ...had, ...m, readAt: m.readAt ?? had.readAt, check: m.check ?? had.check } : m);
+    byId.set(m.id, had ? { ...had, ...m, readAt: m.readAt ?? had.readAt, check: m.check ?? had.check, reactions: mergeReactions(had.reactions, m.reactions) } : m);
   }
   const messages = [...byId.values()].filter((m) => !dropped.includes(m.id)).sort((x, y) => x.at - y.at).slice(-MAX_MESSAGES);
   return {
@@ -322,7 +323,9 @@ export function promptCtx(now = Date.now()): PromptCtx | null {
   const p = getProgress();
   if (!p.settings.me) return null;
   const seen = derived().seenKnowledge.skills;
-  return { now, me: p.settings.me, tz: p.settings.tz ?? deviceZone(), words: allowedWords(chatWords().entries, seen), seen, calendar: calendarBlock(now), group: getThread(GROUP.id) };
+  // what each chat remembers about the learner: friends talk to each other
+  const memories = Object.fromEntries(Object.values(threads).filter((t) => t.memory.length && !t.gone).map((t) => [t.id, t.memory]));
+  return { now, me: p.settings.me, tz: p.settings.tz ?? deviceZone(), words: allowedWords(chatWords().entries, seen), seen, calendar: calendarBlock(now), group: getThread(GROUP.id), memories };
 }
 
 async function deps(): Promise<Deps | { error: string }> {
@@ -344,8 +347,11 @@ export function markRead(id: string, now = Date.now()) {
 
 const pending = new Map<string, ReturnType<typeof setTimeout>>();
 
-/** Sends the learner's message; the people answer after a short pause, so a burst of messages gets one answer. */
-export function send(id: string, text: string) {
+/**
+ * Sends the learner's message (maybe answering an earlier one, quoted above
+ * it); the people answer after a short pause, so a burst gets one answer.
+ */
+export function send(id: string, text: string, re?: string) {
   const la = text.trim();
   if (!la) return;
   const now = Date.now();
@@ -357,7 +363,7 @@ export function send(id: string, text: string) {
   errors.delete(id);
   saveThread({
     ...t,
-    messages: [...t.messages.filter((m) => !waiting.includes(m.id)), { id: msgId(), from: "me", la, at: now }],
+    messages: [...t.messages.filter((m) => !waiting.includes(m.id)), { id: msgId(), from: "me", la, at: now, ...(re ? { re } : {}) }],
     dropped: [...(t.dropped ?? []), ...waiting].slice(-200),
     readAt: now,
   });
@@ -368,6 +374,16 @@ export function send(id: string, text: string) {
     meta = { ...meta, seenAt: now };
     saveMeta();
   }
+}
+
+/** The learner reacts to a message with an emoji; the same emoji again takes it back. The people see it next time they write. */
+export function reactTo(id: string, msg: string, e: string) {
+  const t = getThread(id);
+  const now = Date.now();
+  saveThread({
+    ...t,
+    messages: t.messages.map((m) => (m.id === msg ? { ...m, reactions: { ...m.reactions, me: { e: m.reactions?.me?.e === e ? "" : e, at: now } } } : m)),
+  });
 }
 
 /** The people answer what the learner wrote. */
@@ -404,7 +420,12 @@ export async function answer(id: string) {
     const first = reply.messages[0];
     const shift = first ? Math.max(0, now + 400 - (first.at - typingMs(first))) : 0;
     const messages = reply.messages.map((m) => ({ ...m, at: m.at + shift }));
-    saveThread({ ...t, messages: [...t.messages, ...messages], memory: [...new Set([...t.memory, ...reply.remember])].slice(-24) });
+    // their reactions to the learner's last message, each a moment after they read it
+    const reacted = t.messages.map((m) => {
+      const mine = reply.reactions.filter((x) => x.msg === m.id);
+      return mine.length ? { ...m, reactions: { ...m.reactions, ...Object.fromEntries(mine.map((x) => [x.from, { e: x.e, at: Math.max(x.at, now + 600) }])) } } : m;
+    });
+    saveThread({ ...t, messages: [...reacted, ...messages], memory: [...new Set([...t.memory, ...reply.remember])].slice(-24) });
     saveMeta();
   } catch (e) {
     if ((e as { code?: string })?.code !== "cancelled") errors.set(id, errorText(e));

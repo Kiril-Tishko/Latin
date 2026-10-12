@@ -43,6 +43,8 @@ export const Icon = {
   // a paper plane: send
   send: () => P("M21 3 3 10.5l7 2.5 2.5 7L21 3Zm-11 10 5.5-5.5"),
   chevron: () => P("M9.5 6l6 6-6 6"),
+  // a curved arrow back: reply to a message
+  reply: () => P("M9.5 7 4.5 12l5 5M5 12h9.5a5 5 0 0 1 5 5v1.5"),
   more: () => (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <circle cx="12" cy="5.5" r="1.7" />

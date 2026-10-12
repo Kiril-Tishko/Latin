@@ -527,6 +527,21 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   (`ANY_WORD`; the engine's unknown-word note is no longer sent). Prompts: src/chat/prompts.ts
   (who they are, their day and mood now, the learner, the conversation, when the
   answer arrives, how to be real, and the strict language block).
+- Like a real messenger (the learner asked for it to feel even more like real
+  people): a tap on someone's message shows its English and a row of reactions
+  (❤️ 😂 👍 😮 😢 🙏) with Reply. A reply carries `re` and shows the message it
+  answers quoted above it (a tap on the quote brings that message into view).
+  The people react too (`"react"` in the reply JSON: one emoji per person, a
+  moment after they read it, `Reply.reactions`; now and then a reaction is the
+  whole answer) and quote an earlier message by its number (`"re"`: the
+  conversation block numbers its lines, `shownMessages`, and shows quotes and
+  reactions). Reactions merge per person, the newer winning, a taken-back one
+  included (`mergeReactions`). Friends talk: each chat's memory reaches the
+  others (`gossipBlock`, `PromptCtx.memories`): in a private chat what the
+  learner told the other friends and the group, in the group what each was
+  told in private (kept or let slip, as fits them), to a stranger what the
+  friend they know may have told them; and when they write on their own they
+  see what they remember, to follow up.
 - Feels real: typing dots (from reading, while Claude writes, until each
   message), read ticks, "online" / "last seen", day separators, a "New" line,
   a notice for a message arriving elsewhere in the app, an unread count (Roman

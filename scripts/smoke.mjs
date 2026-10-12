@@ -750,7 +750,7 @@ async function messenger() {
       if (prompt.includes("kind Latin coach")) return { verdict: "almost", better: "Librum legō.", note: "The object takes -m: «librum»." };
       if (prompt.includes("break the learner's limits")) return { messages: [{ la: "Nōn dormiō.", en: "I'm not sleeping." }] };
       const id = (prompt.match(/Person ids: "([a-z0-9]+)"/) || [])[1] || "iulia";
-      return { messages: [{ from: id, la: "Euge! 😄", en: "Great! 😄", gap: 1 }, { from: id, la: "Cēnam parō", en: "I'm making dinner", gap: 1 }], remember: [] };
+      return { messages: [{ from: id, la: "Euge! 😄", en: "Great! 😄", gap: 1 }, { from: id, la: "Cēnam parō", en: "I'm making dinner", gap: 1 }], react: [{ from: id, emoji: "😂" }], remember: [] };
     };
     const docRef = (path) => ({
       get: async () => { const d = await window.__dbGet(path); return { exists: !!d, data: () => d ?? undefined }; },
@@ -858,6 +858,10 @@ async function messenger() {
   if (!(await p.locator(".word-card", { hasText: "great" }).count())) errors.push("messenger: a tap on a word shows no word card");
   await p.locator(".bubble:not(.mine) .bubble-meta").first().click();
   if (!(await p.locator(".bubble-en", { hasText: "Great!" }).count())) errors.push("messenger: a tap does not show the English");
+  // she reacted to the learner's message; a tap on hers offers reactions and Reply
+  if (!(await p.locator(".bubble.mine .react", { hasText: "😂" }).count())) errors.push("messenger: Iūlia's reaction does not show on the learner's message");
+  await p.locator(".react-row .react-btn", { hasText: "❤️" }).first().click();
+  if (!(await p.locator(".bubble:not(.mine) .react.mine", { hasText: "❤️" }).count())) errors.push("messenger: the learner's reaction does not show");
   await p.screenshot({ path: `${out}/messenger-chat.png` });
   // find in this chat, find a chat, an emoji from the ＋
   await p.click("button[aria-label='Find in this chat']");
@@ -882,6 +886,16 @@ async function messenger() {
   await p.click("#phrases-tab");
   await p.press("#composer", "Escape");
   await p.fill("#composer", "");
+  // Reply: the message answered is quoted above the learner's message
+  if (!(await p.locator(".react-reply").count())) await p.locator(".bubble:not(.mine) .bubble-meta").first().click();
+  await p.locator(".react-reply").first().click();
+  if (!(await p.locator(".reply-banner", { hasText: "Answering Iūlia" }).count())) errors.push("messenger: Reply does not show what is answered");
+  await p.fill("#composer", "Ita!");
+  await p.click("#composer-send");
+  await p.waitForTimeout(300);
+  if (!(await p.locator(".bubble.mine").last().locator(".bubble-quote", { hasText: "Iūlia" }).count())) errors.push("messenger: a reply does not quote the message it answers");
+  if (await p.locator(".reply-banner").count()) errors.push("messenger: the reply banner stays after sending");
+  await p.screenshot({ path: `${out}/messenger-reply.png` });
   await p.click("button[aria-label='Your words']");
   if (!(await p.locator(".words-sheet .word-chip", { hasText: "salvē" }).count())) errors.push("messenger: the words sheet lacks the chat words");
   await p.keyboard.press("Escape");

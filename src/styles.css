@@ -1516,6 +1516,27 @@ main.page.msgr-page { padding-block: 14px; }
 .bubble.mine.tail::after { left: auto; right: -9px; clip-path: path("M0 0 L0 14 L12 14 C 6 12, 2 8, 0 0 Z"); }
 .bubble.found { outline: 2px solid color-mix(in srgb, var(--gold-soft) 55%, transparent); }
 .bubble.hit { outline: 2.5px solid var(--gold); }
+/* a quote of the message this one answers, at its top; a tap shows the message */
+.bubble-quote { display: flex; flex-direction: column; align-items: flex-start; width: max-content; min-width: min(150px, 100%); max-width: calc(100% + 16px); margin: 0 -8px 2px; padding: 4px 10px 5px; border: 0; border-left: 3px solid var(--gold); border-radius: 6px; background: color-mix(in srgb, var(--gold-soft) 14%, transparent); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.quote-name { font-family: var(--f-ui); font-size: 0.76rem; font-weight: 600; color: var(--gold); }
+.quote-text { font-family: var(--f-text); font-size: 0.92rem; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* reactions sit on the bubble's lower edge */
+.bubble-row.reacted { margin-bottom: 14px; }
+.reacts { position: absolute; bottom: -15px; right: 12px; display: flex; gap: 3px; z-index: 1; }
+.bubble.mine .reacts { right: auto; left: 12px; }
+.react { display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px; border: 1px solid var(--m-line); border-radius: 12px; background: var(--m-panel); font-size: 0.95rem; line-height: 1.35; cursor: default; box-shadow: 0 2px 4px -2px rgba(60, 40, 20, 0.35); }
+.react.mine { border-color: var(--gold-soft); cursor: pointer; }
+.react-n { font-family: var(--f-ui); font-size: 0.72rem; color: var(--ink-2); }
+/* under a tapped message: react to it, or answer it */
+.react-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-left: 72px; margin: 4px 0 6px; }
+.react-btn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--m-line-soft); background: var(--m-panel); font-size: 1.15rem; cursor: pointer; }
+.react-btn.on { border-color: var(--gold); background: color-mix(in srgb, var(--gold-soft) 30%, var(--m-panel)); }
+.react-reply { display: inline-flex; align-items: center; gap: 5px; height: 38px; padding: 0 14px; border-radius: 19px; border: 1px solid var(--m-line-soft); background: var(--m-panel); font-family: var(--f-ui); font-size: 0.88rem; color: var(--ink); cursor: pointer; }
+.react-reply svg { width: 16px; height: 16px; }
+/* the message being answered, above the message box */
+.reply-banner { display: flex; align-items: center; gap: 10px; margin: 0 0 6px 52px; padding: 6px 8px 6px 12px; border-left: 3px solid var(--gold); border-radius: 8px; background: var(--m-panel); }
+.reply-banner > svg { width: 18px; height: 18px; color: var(--gold); flex: none; }
+.reply-what { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .bubble-name { font-family: var(--f-ui); font-size: 0.8rem; font-weight: 600; color: var(--gold); }
 .bubble-text { font-size: 1.22rem; line-height: 1.4; overflow-wrap: anywhere; }
 .bubble-en { font-style: italic; color: var(--ink-2); border-top: 1px solid var(--m-line); padding-top: 4px; margin-top: 2px; }
@@ -1773,6 +1794,8 @@ main.page.msgr-page { padding-block: 14px; }
   .bubble { max-width: 82%; padding: 9px 14px 7px; }
   .bubble-text { font-size: 1.08rem; }
   .word-card-row { padding-left: 44px; }
+  .react-row { padding-left: 44px; }
+  .reply-banner { margin-left: 0; }
   .word-card { max-width: 86%; }
   .composer { padding: 10px 10px 12px; }
   .composer-row { gap: 8px; }

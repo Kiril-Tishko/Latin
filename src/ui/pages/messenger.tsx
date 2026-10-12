@@ -13,7 +13,7 @@ import { GROUP, PEOPLE } from "../../content/people";
 import { phrasebook } from "../../content/phrases";
 import { PORTRAIT_BY_ID } from "../../content/portraits";
 import { localTime, moodText, statusAt } from "../../chat/life";
-import { arrived, Check, CoachTurn, membersOf, Msg, preview, Thread, unreadCount, voiceOf, Who, whoOf } from "../../chat/model";
+import { arrived, Check, CoachTurn, membersOf, Msg, preview, REACTIONS, reactionsOf, Thread, unreadCount, voiceOf, Who, whoOf } from "../../chat/model";
 import { romanDate, romeDay, todayLine } from "../../chat/calendar";
 import { PHOTO_BY_ID, photoSrc } from "../../content/photos";
 import { speak, stopSpeaking, useSpeaking, useVoices } from "../../audio/speech";
@@ -44,6 +44,7 @@ import {
   markRead,
   opened,
   presence,
+  reactTo,
   send,
   touchLives,
   typingIn,
@@ -404,6 +405,9 @@ function ChatView({ id, now }: { id: string; now: number }) {
   const [menu, setMenu] = useState(false);
   const [search, setSearch] = useState<string | null>(null);
   const [hit, setHit] = useState(0);
+  // the message the learner is answering (quoted above their next message), and one flashing after a jump to it
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const shown = arrived(t, now);
@@ -464,6 +468,15 @@ function ChatView({ id, now }: { id: string; now: number }) {
   useEffect(() => {
     if (current) document.getElementById(`msg-${current}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [current]);
+
+  /** A tap on a quote: the message it quotes comes into view and flashes. */
+  const jumpTo = (msg: string) => {
+    const el = document.getElementById(`msg-${msg}`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setFlash(msg);
+    setTimeout(() => setFlash((f) => (f === msg ? null : f)), 1600);
+  };
 
   const status = who ? statusAt(who.day, who.tz, now) : null;
   const sub = who ? presence(who, t, now, status!) : typingWho ? `${nameOf(typingWho)} is typing…` : members.map((w) => w.name).join(", ");
@@ -586,7 +599,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
                   </div>
                 )}
                 {m.id === firstUnread.current && <div class="chat-new"><span>New</span></div>}
-                <div class={`bubble-row${mine ? " mine" : ""}${firstOfRun ? " first" : ""}`} id={`msg-${m.id}`}>
+                <div class={`bubble-row${mine ? " mine" : ""}${firstOfRun ? " first" : ""}${reactionsOf(m, now).length ? " reacted" : ""}`} id={`msg-${m.id}`}>
                   {!mine &&
                     (firstOfRun && sender ? (
                       <button class="linkish bubble-face" onClick={() => setProfile(sender)} aria-label={`${sender.name}'s profile`}>
@@ -595,8 +608,9 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     ) : (
                       <span class="bubble-face" />
                     ))}
-                  <div class={`bubble${mine ? " mine" : ""}${firstOfRun ? " tail" : ""}${onlyEmoji(m.la) ? " emoji-only" : ""}${current === m.id ? " hit" : hits.includes(m.id) ? " found" : ""}`} onClick={(e) => onBubble(m, e as unknown as MouseEvent)}>
+                  <div class={`bubble${mine ? " mine" : ""}${firstOfRun ? " tail" : ""}${onlyEmoji(m.la) && !m.re ? " emoji-only" : ""}${current === m.id || flash === m.id ? " hit" : hits.includes(m.id) ? " found" : ""}`} onClick={(e) => onBubble(m, e as unknown as MouseEvent)}>
                     {group && sender && firstOfRun && <span class="bubble-name" lang="la">{sender.name}</span>}
+                    {m.re && <Quote msg={t.messages.find((x) => x.id === m.re)} onJump={() => jumpTo(m.re!)} />}
                     {m.photo && photoSrc(m.photo) && (
                       <button class="bubble-photo" onClick={(e) => { e.stopPropagation(); setPhoto(m.photo!); }} aria-label={`Photo: ${PHOTO_BY_ID.get(m.photo)?.en ?? ""}`}>
                         <img src={photoSrc(m.photo)} alt={PHOTO_BY_ID.get(m.photo)?.en ?? ""} loading="lazy" />
@@ -616,8 +630,28 @@ function ChatView({ id, now }: { id: string; now: number }) {
                       {clock(m.at)}
                       {mine && t.kind !== "group" && <Ticks m={m} now={now} />}
                     </span>
+                    <Reactions m={m} id={id} now={now} />
                   </div>
                 </div>
+                {!mine && openEn.includes(m.id) && (
+                  <div class="react-row" role="group" aria-label="React or reply">
+                    {LEARNER_REACTIONS.map((e) => (
+                      <button key={e} class={`react-btn${m.reactions?.me?.e === e ? " on" : ""}`} aria-pressed={m.reactions?.me?.e === e} aria-label={`React with ${e}`} onClick={() => reactTo(id, m.id, e)}>
+                        {e}
+                      </button>
+                    ))}
+                    <button
+                      class="react-reply"
+                      onClick={() => {
+                        setReplyTo(m.id);
+                        setOpenEn(openEn.filter((x) => x !== m.id));
+                        document.getElementById("composer")?.focus();
+                      }}
+                    >
+                      <Icon.reply /> Reply
+                    </button>
+                  </div>
+                )}
                 {note && (
                   <div class={`word-card-row${mine ? " mine" : ""}`}>
                     <div class="word-card">
@@ -657,12 +691,54 @@ function ChatView({ id, now }: { id: string; now: number }) {
         </div>
       </div>
 
-      <Composer id={id} />
+      <Composer id={id} replyTo={replyTo ? t.messages.find((m) => m.id === replyTo) ?? null : null} onReplied={() => setReplyTo(null)} />
       {profile && <Profile who={profile} t={getThread(profile.id)} now={now} onClose={() => setProfile(null)} />}
       {words && <WordsSheet onClose={() => setWords(false)} onPick={(f) => insertIntoComposer(id, f)} />}
       {wordOpen && <WordModal e={wordOpen} onClose={() => setWordOpen(null)} />}
       {photo && <PhotoView id={photo} onClose={() => setPhoto(null)} />}
     </section>
+  );
+}
+
+/** The emoji the learner can react with (the people may also use 😡 and 🔥). */
+const LEARNER_REACTIONS = REACTIONS.slice(0, 6);
+
+/** The message a message answers, quoted above it: who wrote it and its start; a tap shows it. */
+function Quote({ msg, onJump }: { msg: Msg | undefined; onJump: () => void }) {
+  return (
+    <button class="bubble-quote" onClick={(e) => { e.stopPropagation(); onJump(); }} disabled={!msg} aria-label={msg ? `Answering ${nameOf(msg.from)}: show that message` : "Answering an earlier message"}>
+      <span class="quote-name">{msg ? nameOf(msg.from) : "An earlier message"}</span>
+      {msg && <span class="quote-text" lang="la">{showEmoji(preview(msg))}</span>}
+    </button>
+  );
+}
+
+/** The reactions on a message, at its corner; a tap on the learner's own takes it back. */
+function Reactions({ m, id, now }: { m: Msg; id: string; now: number }) {
+  const list = reactionsOf(m, now);
+  if (!list.length) return null;
+  return (
+    <span class="reacts">
+      {list.map((r) => {
+        const mineToo = r.who.includes("me");
+        const names = r.who.map(nameOf).join(", ");
+        return (
+          <button
+            key={r.e}
+            class={`react${mineToo ? " mine" : ""}`}
+            title={names}
+            aria-label={`${r.e} from ${names}${mineToo ? ": tap to take yours back" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (mineToo) reactTo(id, m.id, r.e);
+            }}
+          >
+            {r.e}
+            {r.who.length > 1 && <span class="react-n">{r.who.length}</span>}
+          </button>
+        );
+      })}
+    </span>
   );
 }
 
@@ -1064,7 +1140,7 @@ function Phrasebook({ id, onPick }: { id: string; onPick: (s: string) => void })
   );
 }
 
-function Composer({ id }: { id: string }) {
+function Composer({ id, replyTo, onReplied }: { id: string; replyTo: Msg | null; onReplied: () => void }) {
   const [text, setText] = useState(() => storage.get(DRAFT_KEY(id)) ?? "");
   const [checking, setChecking] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1105,7 +1181,8 @@ function Composer({ id }: { id: string }) {
   });
   const doSend = () => {
     if (!text.trim()) return;
-    send(id, emojiCodes(text));
+    send(id, emojiCodes(text), replyTo?.id);
+    onReplied();
     change("");
     setEmoji(false);
     box.current?.focus();
@@ -1125,6 +1202,18 @@ function Composer({ id }: { id: string }) {
       <CoachPanel id={id} draft={text} checking={checking} onUse={(s) => change(s)} />
       {err && <p class="small bad">{err}</p>}
       {!checking && notLatin(text) && <p class="composer-hint small ui">English? Tap ✓ and the coach writes it in Latin.</p>}
+      {replyTo && (
+        <div class="reply-banner" role="status">
+          <Icon.reply />
+          <span class="reply-what">
+            <span class="quote-name">Answering {nameOf(replyTo.from)}</span>
+            <span class="quote-text" lang="la">{showEmoji(preview(replyTo))}</span>
+          </span>
+          <button class="btn ghost small" onClick={onReplied} aria-label="Do not answer that message">
+            <Icon.close />
+          </button>
+        </div>
+      )}
       <div class="composer-row">
         {emoji && <EmojiPicker id={id} onPick={(e) => put(e, true)} onPhrase={(ph) => put(ph, true, true)} onClose={() => setEmoji(false)} />}
         <button class="plus-btn" aria-label="Emoji and phrases" aria-expanded={emoji} onClick={() => setEmoji(!emoji)}>

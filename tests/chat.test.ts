@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { makeBrief } from "../src/chat/brief";
 import { meetStranger, refreshLives, writeOwn, writeReply } from "../src/chat/engine";
 import { COMMON_HAPPENINGS, lifeNow, localTime, replyTiming, statusAt } from "../src/chat/life";
-import { newMeta, newThread, preview, Thread, voiceOf } from "../src/chat/model";
+import { mergeReactions, Msg, newMeta, newThread, preview, reactionsOf, Thread, voiceOf } from "../src/chat/model";
 import { adYear, birthdaysNear, calendarBlock, calendarWords, festivalsNear, romanDate, todayLine } from "../src/chat/calendar";
 import { PHOTOS, photoSrc, photosFor } from "../src/content/photos";
 import { phrasebook } from "../src/content/phrases";
 import { literalReading } from "../src/latin/facts";
-import { languageBlock, PromptCtx, replyPrompt } from "../src/chat/prompts";
+import { conversationBlock, gossipBlock, languageBlock, PromptCtx, replyPrompt } from "../src/chat/prompts";
 import { LINKS, rollStranger } from "../src/chat/strangers";
 import { vetMessage, withMacrons } from "../src/chat/vet";
 import { allowedWords, calendarEntry, CHAT_WORDS, chatEntries, chatLexicon, formsFor, nameEntry, notLatin, strangeWords, vocativeOf } from "../src/chat/words";
@@ -450,5 +450,62 @@ describe("the phrasebook beside the emoji", () => {
       const la = book.flatMap((g) => g.phrases.map((p) => p.la));
       expect(new Set(la).size).toBe(la.length);
     }
+  });
+});
+
+describe("like a real messenger: quotes, reactions, friends who talk", () => {
+  const at = Date.UTC(2026, 9, 12, 11, 0);
+  const msgs: Msg[] = [
+    { id: "q1", from: "me", la: "Quid legis?", at },
+    { id: "q2", from: "iulia", la: "Epistulam legō.", at: at + 60_000 },
+    { id: "q3", from: "me", la: "Ego quoque! Et Marcus?", at: at + 120_000, re: "q2" },
+  ];
+  const t: Thread = { ...newThread("iulia", "dm"), messages: msgs };
+
+  it("answers a message by its number, quoted, and reacts to the learner's last one", async () => {
+    const ask = async <T,>(): Promise<T> =>
+      ({ messages: [{ from: "iulia", la: "Marcus labōrat.", en: "Marcus is working.", gap: 1, re: 3 }, { from: "iulia", la: "Euge!", en: "Great!", gap: 1, re: 1 }], react: [{ from: "iulia", emoji: "❤" }, { from: "iulia", emoji: "😂" }, { from: "nobody", emoji: "🔥" }] }) as T;
+    const reply = await writeReply(t, newMeta(), ctxFor(SEEN, at + 180_000), { ask, opts: {}, lex, r: seeded(3) });
+    // a quote of the very last message says nothing: left out; an earlier one is kept
+    expect(reply.messages.map((m) => m.re)).toEqual([undefined, "q1"]);
+    // one reaction per person, made one of the reactions ("❤" is "❤️"), on the learner's last message, once read
+    expect(reply.reactions.map((x) => [x.msg, x.from, x.e])).toEqual([["q3", "iulia", "❤️"]]);
+    expect(reply.reactions[0].at).toBeGreaterThan(reply.readAt);
+  });
+
+  it("may answer with a reaction alone", async () => {
+    const ask = async <T,>(): Promise<T> => ({ messages: [], react: [{ from: "iulia", emoji: "😂" }] }) as T;
+    const reply = await writeReply(t, newMeta(), ctxFor(SEEN, at + 180_000), { ask, opts: {}, lex, r: seeded(3) });
+    expect(reply.messages).toEqual([]);
+    expect(reply.reactions.map((x) => x.e)).toEqual(["😂"]);
+  });
+
+  it("shows Claude the numbers, the quotes and the reactions", () => {
+    const withReaction: Thread = { ...t, messages: msgs.map((m) => (m.id === "q2" ? { ...m, reactions: { me: { e: "❤️", at: at + 90_000 } } } : m)) };
+    const block = conversationBlock(withReaction, newMeta(), ctxFor(SEEN, at + 180_000), "Europe/Rome");
+    expect(block).toMatch(/^#1 \[/);
+    expect(block).toContain("Epistulam legō.   (Kiril reacted ❤️)");
+    expect(block).toContain("Kiril (answering #2 «Epistulam legō.»): Ego quoque!");
+    expect(replyPrompt(withReaction, newMeta(), ctxFor(SEEN, at + 180_000), { at: at + 200_000, why: "free" })).toContain('"react"');
+  });
+
+  it("keeps the newer reaction of each person, a taken-back one too, and shows only those that have come", () => {
+    const merged = mergeReactions({ me: { e: "❤️", at: 1 }, iulia: { e: "😂", at: 5 } }, { me: { e: "", at: 2 } });
+    expect(merged).toEqual({ me: { e: "", at: 2 }, iulia: { e: "😂", at: 5 } });
+    const m: Msg = { id: "x", from: "me", la: "Salvēte!", at: 0, reactions: { iulia: { e: "😂", at: 5 }, marcus: { e: "😂", at: 6 }, gaius: { e: "👍", at: 99 }, lucius: { e: "", at: 4 } } };
+    expect(reactionsOf(m, 10)).toEqual([{ e: "😂", who: ["iulia", "marcus"] }]);
+  });
+
+  it("lets friends know what the learner told the others, and the group what each was told", () => {
+    const ctx = { ...ctxFor(SEEN), memories: { iulia: ["has a cat named Felix"], marcus: ["works at a bank"], [GROUP.id]: ["likes wine"] } };
+    const toMarcus = gossipBlock({ ...newThread("marcus", "dm") }, newMeta(), ctx);
+    expect(toMarcus).toContain("Iūlia: has a cat named Felix");
+    expect(toMarcus).toContain("likes wine");
+    expect(toMarcus).not.toContain("works at a bank");
+    const toGroup = gossipBlock(newThread(GROUP.id, "group"), newMeta(), ctx);
+    expect(toGroup).toContain("Marcus: works at a bank");
+    expect(toGroup).not.toContain("likes wine");
+    expect(replyPrompt(newThread("marcus", "dm"), newMeta(), ctx, { at: ctx.now, why: "free" })).toContain("WHAT THE OTHERS KNOW ABOUT KIRIL");
+    expect(gossipBlock(newThread("marcus", "dm"), newMeta(), ctxFor(SEEN))).toBe("");
   });
 });

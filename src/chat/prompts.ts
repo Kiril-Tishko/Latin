@@ -8,7 +8,7 @@ import { GROUP, PEOPLE } from "../content/people";
 import { SKILLS } from "../latin/skills";
 import type { Me } from "../trainer/progress";
 import { Life, localTime, moodText, partOfDay, statusAt } from "./life";
-import { CoachTurn, Meta, Msg, Thread, Who, membersOf, whoOf } from "./model";
+import { CoachTurn, Meta, Msg, REACTIONS, Thread, Who, membersOf, whoOf } from "./model";
 import type { Stranger } from "./strangers";
 import type { AllowedWord } from "./words";
 
@@ -24,6 +24,8 @@ export interface PromptCtx {
   calendar?: string;
   /** The group chat, for a private chat: what the friends said there lately. */
   group?: Thread;
+  /** What each chat remembers about the learner, by chat id: friends talk, so they may know what the learner told the others. */
+  memories?: Record<string, string[]>;
 }
 
 // ------------------------------------------------------------ language
@@ -121,14 +123,30 @@ export function learnerBlock(ctx: PromptCtx): string {
 
 const nameOf = (id: string, meta: Meta, me: Me) => (id === "me" ? me.name : whoOf(id, meta)?.name ?? id);
 
-/** The conversation so far, oldest first, in the given time zone. */
+/** The messages a prompt shows (numbered from 1 in the conversation block, so an answer can quote one). */
+export const shownMessages = (thread: Thread, now: number, max = 30): Msg[] => thread.messages.filter((m) => m.at <= now).slice(-max);
+
+/** A message in a few words, for a quote. */
+export const snippet = (la: string, words = 6) => {
+  const w = la.split(/\s+/);
+  return w.length > words ? `${w.slice(0, words).join(" ")}…` : la;
+};
+
+/** The conversation so far, oldest first, in the given time zone: numbered, with the messages answered and the reactions. */
 export function conversationBlock(thread: Thread, meta: Meta, ctx: PromptCtx, tz: string, max = 30): string {
-  const shown = thread.messages.filter((m) => m.at <= ctx.now).slice(-max);
+  const shown = shownMessages(thread, ctx.now, max);
   if (!shown.length) return "(no messages yet)";
+  const number = new Map(shown.map((m, i) => [m.id, i + 1]));
   return shown
-    .map((m: Msg) => {
+    .map((m: Msg, i) => {
       const t = localTime(m.at, tz);
-      return `[${t.weekday.slice(0, 3)} ${t.hm}] ${nameOf(m.from, meta, ctx.me)}: ${m.la}`;
+      const re = m.re ? thread.messages.find((x) => x.id === m.re) : undefined;
+      const quote = re ? ` (answering ${number.has(re.id) ? `#${number.get(re.id)} ` : ""}«${snippet(re.la || "photo")}»)` : "";
+      const reacted = Object.entries(m.reactions ?? {})
+        .filter(([, r]) => r.e && r.at <= ctx.now)
+        .map(([who, r]) => `${nameOf(who, meta, ctx.me)} reacted ${r.e}`);
+      const what = m.voice ? `[voice message] ${m.la}` : m.photo ? `[photo] ${m.la}` : m.la;
+      return `#${i + 1} [${t.weekday.slice(0, 3)} ${t.hm}] ${nameOf(m.from, meta, ctx.me)}${quote}: ${what}${reacted.length ? `   (${reacted.join(", ")})` : ""}`;
     })
     .join("\n");
 }
@@ -153,9 +171,11 @@ const EXTRAS = `- "voice": true (optional) makes it a short voice message: they 
 - "photo": "<photo id>" (optional) sends one of the photos listed with the message, "la" being its caption (a few words, or only an emoji): rarely, when it fits the moment or the talk.`;
 
 const OUTPUT = `Reply with only JSON:
-{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "voice": true, "photo": "<photo id>"}], "remember": ["<new fact about the learner>"]}
+{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "re": <number>, "voice": true, "photo": "<photo id>"}], "react": [{"from": "<person id>", "emoji": "<emoji>"}], "remember": ["<new fact about the learner>"]}
 - 1 to 4 messages; one is often right. "gap": 1-40 (typing time is added by the page; a long gap is a pause to think).
+- "re" (optional): the number (#) of the message this one answers, shown quoted above it as in any messenger. Only when it answers something that is not simply the last message: one of several things the learner said, an earlier question, a message from someone else in the group. Usually leave it out.
 ${EXTRAS}
+- "react" (optional): a reaction to the learner's last message, as people do in messengers: one emoji per person, from ${REACTIONS.join(" ")}. When it fits (a joke 😂, sweet words ❤️, news 😮, sad news 😢, thanks 🙏); often none. Rarely a reaction is the whole answer, when the message needs no words: then "messages" may be [].
 - "remember": 0-2 short facts about the learner worth remembering later (English), or [].`;
 
 /** The photos the people of a chat could send now (none sent lately in this chat). */
@@ -192,6 +212,36 @@ export function groupLately(thread: Thread, meta: Meta, ctx: PromptCtx): string 
   return `LATELY IN THE GROUP «${GROUP.name}» (the friends and the learner together):\n${last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${m.la}`).join("\n")}`;
 }
 
+/**
+ * What the others know about the learner (each chat's memory): friends talk,
+ * so in a private chat a friend may have heard what the learner told the
+ * others; in the group each knows their own private chat. A stranger may have
+ * heard of the learner from the friend they know.
+ */
+export function gossipBlock(thread: Thread, meta: Meta, ctx: PromptCtx): string {
+  const mem = ctx.memories ?? {};
+  const lines = (ids: string[]) =>
+    ids.flatMap((id) => {
+      const facts = mem[id] ?? [];
+      const who = id === GROUP.id ? `in the group «${GROUP.name}»` : PEOPLE.find((p) => p.id === id)?.name;
+      return facts.length && who ? [`- ${who}: ${facts.slice(-6).join("; ")}`] : [];
+    });
+  const name = ctx.me.name;
+  if (thread.kind === "group") {
+    const l = lines(PEOPLE.map((p) => p.id));
+    return l.length ? `WHAT EACH OF THEM KNOWS FROM THEIR PRIVATE CHAT WITH ${name.toUpperCase()} (they may keep it to themselves or let it slip, as fits their character and how private it is):\n${l.join("\n")}` : "";
+  }
+  const who = membersOf(thread.id, meta)[0];
+  if (!who) return "";
+  if (who.stranger) {
+    const friend = who.link && PEOPLE.find((p) => p.id === who.link!.to);
+    const l = friend ? lines([friend.id]) : [];
+    return l.length ? `WHAT ${friend!.name.toUpperCase()} MAY HAVE TOLD ${who.name.toUpperCase()} ABOUT ${name.toUpperCase()} (if they talked; never all at once):\n${l.join("\n")}` : "";
+  }
+  const l = lines([...PEOPLE.map((p) => p.id).filter((id) => id !== who.id), GROUP.id]);
+  return l.length ? `WHAT THE OTHERS KNOW ABOUT ${name.toUpperCase()} (friends talk: ${who.name} may have heard some of it, and may ask about it, tease or let on, as friends do; something told in private ${who.name} may not know):\n${l.join("\n")}` : "";
+}
+
 /** The learner's last message as the grammar engine reads it, and how to take a mistake: literally, as a Roman would. */
 export function literalBlock(literal: string): string {
   if (!literal) return "";
@@ -216,6 +266,7 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
     friendsNews(thread, meta, ctx.now),
     ctx.calendar ?? "",
     thread.memory.length ? `What ${group ? "they remember" : `${members[0]?.name} remembers`} about ${ctx.me.name}: ${thread.memory.join("; ")}.` : "",
+    gossipBlock(thread, meta, ctx),
     groupLately(thread, meta, ctx),
     `THE CONVERSATION (oldest first; times where ${group ? "they are" : `${members[0]?.name} is`}). The learner's Latin may have mistakes.\n${conversationBlock(thread, meta, ctx, tz)}`,
     literalBlock(literal),
@@ -243,7 +294,8 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
       const title = t.kind === "group" ? `«${GROUP.name}» (group)` : whoOf(t.id, meta)?.name ?? t.id;
       const lastMine = [...t.messages].reverse().find((m) => m.from === "me" && m.at <= ctx.now);
       const waiting = t.messages.some((m) => m.from !== "me" && m.at > ctx.now);
-      return `${title} [chat id "${t.id}"]${waiting ? " (has messages still on their way)" : ""}${lastMine ? `, learner last wrote ${ago(ctx.now - lastMine.at)} ago` : ""}:\n${last.length ? last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${m.la}`).join("\n") : "  (nothing yet)"}`;
+      const remembers = t.memory.length ? `\n  (remembers about ${ctx.me.name}: ${t.memory.slice(-6).join("; ")})` : "";
+      return `${title} [chat id "${t.id}"]${waiting ? " (has messages still on their way)" : ""}${lastMine ? `, learner last wrote ${ago(ctx.now - lastMine.at)} ago` : ""}:${remembers}\n${last.length ? last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${m.la}`).join("\n") : "  (nothing yet)"}`;
     })
     .join("\n");
   return [

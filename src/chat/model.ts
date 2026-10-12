@@ -29,6 +29,36 @@ export interface Msg {
   voice?: boolean;
   /** A photo sent with the message (content/photos.ts); `la` is its caption. */
   photo?: string;
+  /** The message this one answers, shown quoted above it (its id). */
+  re?: string;
+  /** Reactions, by who reacted ("me" or a person's id): the emoji and when it shows; an empty emoji is one taken back. */
+  reactions?: Record<string, { e: string; at: number }>;
+}
+
+/** The emoji anyone may react with: the learner's bar, and what the people may choose. */
+export const REACTIONS = ["❤️", "😂", "👍", "😮", "😢", "🙏", "😡", "🔥"];
+
+/** The reactions on a message to show now: emoji with who gave them, in the order they came. */
+export function reactionsOf(m: Msg, now: number): { e: string; who: string[] }[] {
+  const out: { e: string; who: string[] }[] = [];
+  const given = Object.entries(m.reactions ?? {})
+    .filter(([, r]) => r.e && r.at <= now)
+    .sort((a, b) => a[1].at - b[1].at);
+  for (const [who, r] of given) {
+    const same = out.find((x) => x.e === r.e);
+    if (same) same.who.push(who);
+    else out.push({ e: r.e, who: [who] });
+  }
+  return out;
+}
+
+/** Two copies of a message's reactions together: for each person, the newer one (taking one back included). */
+export function mergeReactions(a: Msg["reactions"], b: Msg["reactions"]): Msg["reactions"] {
+  if (!a) return b;
+  if (!b) return a;
+  const out = { ...a };
+  for (const [who, r] of Object.entries(b)) if (!out[who] || r.at >= out[who].at) out[who] = r;
+  return out;
 }
 
 /** The coach's check of a message the learner wrote. */

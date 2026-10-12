@@ -10,8 +10,8 @@ import { Lexicon } from "../latin/analyze";
 import { checkAnswer, literalReading } from "../latin/facts";
 import { PHOTO_BY_ID, photoSrc } from "../content/photos";
 import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from "./life";
-import { Meta, Msg, msgId, Thread, membersOf, Who } from "./model";
-import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, strangerPrompt } from "./prompts";
+import { Meta, Msg, msgId, REACTIONS, Thread, membersOf, Who } from "./model";
+import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, strangerPrompt } from "./prompts";
 import { rollStranger, Stranger } from "./strangers";
 import { vetMessage, withMacrons } from "./vet";
 
@@ -60,6 +60,7 @@ interface Draft {
   en: string;
   voice?: boolean;
   photo?: string;
+  re?: string;
 }
 
 /** A voice message and a photo, as Claude marked them (a photo only if it exists; a caption may be empty). */
@@ -69,7 +70,14 @@ function extras(m: { voice?: unknown; photo?: unknown }): { voice?: true; photo?
 }
 
 /** The message fields of a vetted draft: its Latin and English, a voice message or photo, the words that slipped. */
-const fields = (d: Draft & { newWords?: string[] }) => ({ la: d.la, en: d.en, ...(d.voice ? { voice: true } : {}), ...(d.photo ? { photo: d.photo } : {}), ...(d.newWords ? { newWords: d.newWords } : {}) });
+const fields = (d: Draft & { newWords?: string[] }) => ({ la: d.la, en: d.en, ...(d.voice ? { voice: true } : {}), ...(d.photo ? { photo: d.photo } : {}), ...(d.re ? { re: d.re } : {}), ...(d.newWords ? { newWords: d.newWords } : {}) });
+
+/** A reaction as Claude wrote it, made one of REACTIONS ("❤" is "❤️"), or null. */
+export function reactionEmoji(x: unknown): string | null {
+  const bare = (e: string) => e.replace(/\uFE0F/g, "");
+  const e = bare(String(x ?? "").trim());
+  return REACTIONS.find((r) => bare(r) === e) ?? null;
+}
 
 // (a Roman emoji code Claude made up is dropped)
 const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+/g, " ").trim());
@@ -113,6 +121,8 @@ export interface Reply {
   remember: string[];
   /** When the learner's messages were read (one-to-one chats). */
   readAt: number;
+  /** Reactions to the learner's last message, each shown a moment after its person reads it. */
+  reactions: { msg: string; from: string; e: string; at: number }[];
 }
 
 export type Timing = ReturnType<typeof timingFor>;
@@ -128,7 +138,7 @@ export function timingFor(members: Who[], now: number, r: Rand = Math.random) {
 export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps, timing?: Timing): Promise<Reply> {
   const r = deps.r ?? Math.random;
   const members = membersOf(thread.id, meta);
-  if (!members.length) return { messages: [], remember: [], readAt: ctx.now };
+  if (!members.length) return { messages: [], remember: [], readAt: ctx.now, reactions: [] };
   refreshLives(meta, members.map((w) => w.id), ctx.now, r);
   const { first, byId } = timing ?? timingFor(members, ctx.now, r);
   // the learner's last messages, read word by word: a mistake is taken literally
@@ -139,10 +149,17 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   }
   const literal = burst.length ? literalReading(withoutEmoji(burst.join(" ")), deps.lex) : "";
   const prompt = replyPrompt(thread, meta, ctx, { at: first.t.startAt, why: first.t.why }, literal);
-  const raw = await deps.ask<{ messages?: { from?: string; la?: string; en?: string; gap?: number; voice?: unknown; photo?: unknown }[]; remember?: string[] }>(prompt, { ...deps.opts, cache: false });
+  const raw = await deps.ask<{ messages?: { from?: string; la?: string; en?: string; gap?: number; re?: unknown; voice?: unknown; photo?: unknown }[]; react?: { from?: string; emoji?: string }[]; remember?: string[] }>(prompt, { ...deps.opts, cache: false });
   const ids = new Set(members.map((w) => w.id));
+  const fromOf = (x: unknown) => (ids.has(String(x)) ? String(x) : members.length === 1 ? members[0].id : "");
+  // "re": the number of a message in the conversation the prompt showed (a quote of the very last one says nothing)
+  const shown = shownMessages(thread, ctx.now);
+  const reOf = (n: unknown) => {
+    const i = Number(n);
+    return Number.isInteger(i) && i >= 1 && i < shown.length ? shown[i - 1].id : undefined;
+  };
   const drafts = (raw?.messages ?? [])
-    .map((m) => ({ from: ids.has(String(m.from)) ? String(m.from) : members.length === 1 ? members[0].id : "", la: clean(m.la), en: clean(m.en), gap: Number(m.gap) || 2, ...extras(m) }))
+    .map((m) => ({ from: fromOf(m.from), la: clean(m.la), en: clean(m.en), gap: Number(m.gap) || 2, re: reOf(m.re), ...extras(m) }))
     .filter((m) => m.from && (m.la || m.photo))
     .slice(0, 5);
   const vetted = await vetAll(drafts, ctx, deps);
@@ -154,7 +171,16 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     return { id: msgId(), from: d.from!, at: Math.round(t), src: "reply", ...fields(d) };
   });
   const remember = (raw?.remember ?? []).map(clean).filter(Boolean).slice(0, 2);
-  return { messages, remember, readAt: first.t.readAt };
+  // reactions to the learner's last message: one per person, a moment after they read it
+  const target = [...thread.messages].reverse().find((m) => m.from === "me");
+  const reactions: Reply["reactions"] = [];
+  for (const x of Array.isArray(raw?.react) ? raw.react : []) {
+    const from = fromOf(x?.from);
+    const e = reactionEmoji(x?.emoji);
+    if (!target || !from || !e || reactions.some((y) => y.from === from)) continue;
+    reactions.push({ msg: target.id, from, e, at: Math.round((byId.get(from)?.readAt ?? first.t.readAt) + 1500 + r() * 4000) });
+  }
+  return { messages, remember, readAt: first.t.readAt, reactions };
 }
 
 // -------------------------------------------------------- on their own

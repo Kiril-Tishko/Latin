@@ -15,7 +15,7 @@ import { Exercise, Result } from "../trainer/exercises";
 import { PART_GOAL, partRight, partState } from "../trainer/path";
 import { mastery } from "../trainer/progress";
 import { Chat, ChatTurn, deleteChat, getChat, getChats, newChatId, saveChat, useChats } from "./chats";
-import { Icon, toast } from "./components";
+import { enterSends, Icon, toast } from "./components";
 import { Inline, Markup } from "./markup";
 import { SampleFn, sampleErrorText, sampler, storage } from "./platform";
 import { currentScreen, Screen, sharedByDefault, useScreenLabel } from "./screen";
@@ -126,11 +126,13 @@ How to answer:
 - Be exact. The rules under "Skills met" are this site's rules and they are correct: follow them. Check every Latin form before you write it. Never invent a grammar rule or pattern, and give only memory tricks that are true (an English relative, a real pattern). When there is no reliable way to tell (which infinitive a verb has, for example), say so plainly and suggest learning the pair («discō, discere»).
 - A question may end with [Facts from the site's grammar engine]: every Latin word in it, what each form can be, and its word's gender, group and forms. These facts are certain. Build your answer on them, never contradict them, and don't mention the note.
 - Words and their stories: the learner loves etymology and history. Whenever a question is about a word (what it means, a form of it, how to use it), also say briefly where the word comes from and one interesting bit of history about it or about what it names: a sentence or two, after answering the question itself. Leave it out only for a quick question about an ending in an exercise.
-- A message that is just a word (Latin, English, Russian or Ukrainian, perhaps with a question mark) asks for its word card. Answer with exactly these lines, each on its own line, about 60-120 words in all:
+- Hidden links: look actively for a surprising connection the learner may have missed and would love to discover: a first name, a modern word, a term of science or medicine, a brand, a place, a saying, in English, Russian or Ukrainian. For «euge»: Greek "eu" (well) → the name Eugene, "Евгений", "Євген" (well-born) → "eugenics", and "euphoria", "euphemism". The learner was delighted by exactly this; add one such link whenever a real one exists, plainly marked as the surprise, and never stretch for a false one (a look-alike is not a link).
+- A message that is just a word (Latin, English, Russian or Ukrainian, perhaps with a question mark) asks for its word card. Answer with exactly these lines, each on its own line, about 70-140 words in all:
   **<the dictionary form, e.g. gladius, gladiī (m)> · <meaning>**
   **Origin:** where the word comes from: its root, the language it was borrowed from, how its meaning grew.
   **History:** one interesting historical fact about the word or about what it names.
   **Family:** related words: Latin relatives first, then English, Russian and Ukrainian ones, saying which are borrowed and which are cousins of the same ancient root.
+  **Hidden link:** one surprising, real connection the learner may have missed (a name, a modern word, a scientific term, a brand, a place), e.g. «euge» → Eugene, "Євген" → "eugenics". Leave this line out only when there is truly none.
   **Use:** two short example sentences in «», each with its English, with the learner's words and rules where possible.
   For an English, Russian or Ukrainian word, the card is about the Latin word for it (name it in the first line); if the word itself comes from Latin, the Origin line tells how.
 - Where a word comes from and what it is related to: use the relatives in the facts, which are checked. Say which kind each is: borrowed (English, Russian or Ukrainian took it from Latin) or same ancient root (cousins from the common Indo-European ancestor, not borrowed). Never call a look-alike related. For words without checked relatives, use only what you know well and say "probably" where scholars are not sure. Never invent an etymology, a relative or a historical story; tell a legend as a legend.
@@ -798,8 +800,10 @@ export function AskDrawer() {
                 value={input}
                 placeholder="Why… / How… / What does…"
                 onInput={(e) => setInput((e.target as HTMLTextAreaElement).value)}
+                enterkeyhint={enterSends() ? "send" : "enter"}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  // on a phone Enter is a new line and Ask sends
+                  if (e.key === "Enter" && !e.shiftKey && enterSends()) {
                     e.preventDefault();
                     void send(input);
                   }

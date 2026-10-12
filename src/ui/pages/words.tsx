@@ -206,6 +206,7 @@ function OwnStory({ e }: { e: Entry }) {
     <div class="small stack" style={{ gap: "4px" }}>
       {st.origin && <p class="labelled"><span class="label">Origin</span> {st.origin}</p>}
       {st.history && <p class="labelled"><span class="label">History</span> {st.history}</p>}
+      {st.link && <p class="labelled"><span class="label">Hidden link</span> {st.link}</p>}
       {(from || kin) && (
         <p class="labelled">
           <span class="label">Family</span> {from}

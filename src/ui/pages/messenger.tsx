@@ -12,13 +12,17 @@ import { emojiCodes, onlyEmoji, showEmoji } from "../../chat/emoji";
 import { GROUP, PEOPLE } from "../../content/people";
 import { PORTRAIT_BY_ID } from "../../content/portraits";
 import { localTime, moodText, statusAt } from "../../chat/life";
-import { arrived, Check, CoachTurn, membersOf, Msg, Thread, unreadCount, Who, whoOf } from "../../chat/model";
+import { arrived, Check, CoachTurn, membersOf, Msg, preview, Thread, unreadCount, voiceOf, Who, whoOf } from "../../chat/model";
+import { romanDate, romeDay, todayLine } from "../../chat/calendar";
+import { PHOTO_BY_ID, photoSrc } from "../../content/photos";
+import { speak, stopSpeaking, useSpeaking, useVoices } from "../../audio/speech";
 import { allowedWords, CHAT_WORD_LIST, headword } from "../../chat/words";
 import { Analysis, annotate } from "../../latin/analyze";
 import { plain, roman } from "../../latin/text";
 import { CASE_NAMES, Entry, PN, PN_NAMES } from "../../latin/types";
-import { Icon, Modal } from "../components";
+import { enterSends, Icon, Modal, useSwipeAway } from "../components";
 import { LatinText } from "../latin";
+import { audioReady, Speak } from "../speak";
 import { Inline, Markup } from "../markup";
 import { fixRequest, GrammarCheck } from "../ask";
 import { go } from "../nav";
@@ -129,14 +133,16 @@ function when(t: number, now: number): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-/** The day line in a chat, in Latin for today and yesterday: Hodiē, Heri. */
-function dayLabel(t: number, now: number): { la: string; en: string } {
+/** The day line in a chat, in Latin for today and yesterday (Hodiē, Heri), with the Roman date. */
+function dayLabel(t: number, now: number): { la: string; en: string; roman: string } {
   const days = daysAgo(t, now);
-  if (days === 0) return { la: "Hodiē", en: "Today" };
-  if (days === 1) return { la: "Heri", en: "Yesterday" };
   const d = new Date(t);
-  const en = days < 7 ? d.toLocaleDateString("en-GB", { weekday: "long" }) : d.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
-  return { la: en, en };
+  const roman = romanDate(romeDay(t));
+  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+  if (days === 0) return { la: "Hodiē", en: `Today, ${date}`, roman };
+  if (days === 1) return { la: "Heri", en: `Yesterday, ${date}`, roman };
+  const en = days < 7 ? d.toLocaleDateString("en-GB", { weekday: "long" }) : date;
+  return { la: en, en: `${en}${days < 7 ? `, ${date}` : ""}`, roman };
 }
 
 const nameOf = (id: string) => (id === "me" ? "You" : whoOf(id, getMeta())?.name ?? id);
@@ -273,6 +279,8 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
           <Icon.plus /> Someone new
         </button>
       </div>
+      {/* the day in Rome, where the friends live: the Roman date and a festival */}
+      <p class="msgr-date" lang="la" title={todayLine(now).en}>{todayLine(now).la}</p>
       <label class="list-search">
         <Icon.search />
         <input id="chat-search" type="search" value={query} placeholder="Quaere nūntiōs…" aria-label="Search chats and messages" autocomplete="off" spellcheck={false} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
@@ -298,7 +306,7 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
                     ) : last ? (
                       <>
                         {(t.kind === "group" || last.from === "me") && <span>{nameOf(last.from)}: </span>}
-                        <span lang="la">{showEmoji(last.la)}</span>
+                        <span lang="la">{showEmoji(preview(last))}</span>
                       </>
                     ) : (
                       <span>{who ? `${who.job}, ${who.city}` : PEOPLE.map((x) => x.name).join(", ")}</span>
@@ -386,6 +394,9 @@ function ChatView({ id, now }: { id: string; now: number }) {
   const [openEn, setOpenEn] = useState<string[]>([]);
   const [allEn, setAllEn] = useState(false);
   const [card, setCard] = useState<{ msg: string; index: number } | null>(null);
+  // voice messages whose words are shown, and the photo opened large
+  const [voiceText, setVoiceText] = useState<string[]>([]);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [wordOpen, setWordOpen] = useState<Entry | null>(null);
   const [words, setWords] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -470,13 +481,13 @@ function ChatView({ id, now }: { id: string; now: number }) {
     setOpenEn(openEn.includes(m.id) ? openEn.filter((x) => x !== m.id) : [...openEn, m.id]);
   };
 
-  /** The word card for a message, if one of its words was tapped. */
+  /** The word card for a message, if one of its words was tapped (with the word itself, to hear it). */
   const cardOf = (m: Msg) => {
     if (card?.msg !== m.id) return null;
     const tok = annotate(showEmoji(m.la), lex).filter((x) => x.isWord)[card.index];
     const a = tok?.analysis ?? tok?.readings?.[0];
     if (!tok) return null;
-    return a ? wordNote(a, tok.text) : { text: `${tok.text} — a word you have not learned yet`, add: tok.text };
+    return { word: tok.text, ...(a ? wordNote(a, tok.text) : { text: `${tok.text} — a word you have not learned yet`, add: tok.text }) };
   };
 
   let lastDay = "";
@@ -563,7 +574,10 @@ function ChatView({ id, now }: { id: string; now: number }) {
                 {newDay && (
                   <div class="chat-day" title={day.en}>
                     <Sprig cls="day-sprig" />
-                    <span lang={day.la === day.en ? "en" : "la"}>{day.la}</span>
+                    <span class="day-pill">
+                      <span lang={/^(Hodiē|Heri)$/.test(day.la) ? "la" : "en"}>{day.la}</span>
+                      <span class="day-roman" lang="la">{day.roman}</span>
+                    </span>
                     <Sprig cls="day-sprig" flip />
                   </div>
                 )}
@@ -579,9 +593,19 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     ))}
                   <div class={`bubble${mine ? " mine" : ""}${firstOfRun ? " tail" : ""}${onlyEmoji(m.la) ? " emoji-only" : ""}${current === m.id ? " hit" : hits.includes(m.id) ? " found" : ""}`} onClick={(e) => onBubble(m, e as unknown as MouseEvent)}>
                     {group && sender && firstOfRun && <span class="bubble-name" lang="la">{sender.name}</span>}
-                    <span class="bubble-text">
-                      <LatinText text={showEmoji(m.la)} lex={lex} />
-                    </span>
+                    {m.photo && photoSrc(m.photo) && (
+                      <button class="bubble-photo" onClick={(e) => { e.stopPropagation(); setPhoto(m.photo!); }} aria-label={`Photo: ${PHOTO_BY_ID.get(m.photo)?.en ?? ""}`}>
+                        <img src={photoSrc(m.photo)} alt={PHOTO_BY_ID.get(m.photo)?.en ?? ""} loading="lazy" />
+                      </button>
+                    )}
+                    {m.voice && (
+                      <VoiceNote m={m} who={sender} open={voiceText.includes(m.id)} onText={() => setVoiceText(voiceText.includes(m.id) ? voiceText.filter((x) => x !== m.id) : [...voiceText, m.id])} />
+                    )}
+                    {m.la && (!m.voice || voiceText.includes(m.id) || !audioReady()) && (
+                      <span class="bubble-text">
+                        <LatinText text={showEmoji(m.la)} lex={lex} />
+                      </span>
+                    )}
                     {(allEn || openEn.includes(m.id)) && m.en && <span class="bubble-en">{showEmoji(m.en)}</span>}
                     {m.newWords && (allEn || openEn.includes(m.id)) && <span class="bubble-en small">New to you: {m.newWords.join(", ")}</span>}
                     <span class="bubble-meta">
@@ -592,17 +616,20 @@ function ChatView({ id, now }: { id: string; now: number }) {
                 </div>
                 {note && (
                   <div class={`word-card-row${mine ? " mine" : ""}`}>
-                    <button
-                      class="word-card"
-                      onClick={() => (note.entry ? setWordOpen(note.entry) : note.add && openAddWord(note.add, "messenger"))}
-                      disabled={!note.entry && !note.add}
-                      aria-label={note.entry ? `${note.text}: open the word` : note.add ? `${note.text}: add it to my words` : note.text}
-                    >
-                      <Icon.book />
-                      <span class="word-card-text">{note.text}</span>
-                      {note.entry && <span class="word-card-go"><Icon.chevron /></span>}
-                      {note.add && <span class="word-card-add"><Icon.plus /> Add</span>}
-                    </button>
+                    <div class="word-card">
+                      {/* hear the word, known or not */}
+                      <Speak text={note.word} id={`word-${m.id}-${card!.index}`} label={`Hear «${note.word}»`} />
+                      <button
+                        class="word-card-main"
+                        onClick={() => (note.entry ? setWordOpen(note.entry) : note.add && openAddWord(note.add, "messenger"))}
+                        disabled={!note.entry && !note.add}
+                        aria-label={note.entry ? `${note.text}: open the word` : note.add ? `${note.text}: add it to my words` : note.text}
+                      >
+                        <span class="word-card-text">{note.text}</span>
+                        {note.entry && <span class="word-card-go"><Icon.chevron /></span>}
+                        {note.add && <span class="word-card-add"><Icon.plus /> Add</span>}
+                      </button>
+                    </div>
                   </div>
                 )}
                 {mine && !onlyEmoji(m.la) && (m.check || m.id === lastMine || openEn.includes(m.id)) && <Checked m={m} id={id} />}
@@ -629,7 +656,88 @@ function ChatView({ id, now }: { id: string; now: number }) {
       {profile && <Profile who={profile} t={getThread(profile.id)} now={now} onClose={() => setProfile(null)} />}
       {words && <WordsSheet onClose={() => setWords(false)} onPick={(f) => insertIntoComposer(id, f)} />}
       {wordOpen && <WordModal e={wordOpen} onClose={() => setWordOpen(null)} />}
+      {photo && <PhotoView id={photo} onClose={() => setPhoto(null)} />}
     </section>
+  );
+}
+
+/** A made-up but steady waveform for a voice message (the same every time). */
+function waveform(id: string, n: number): number[] {
+  let h = [...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  return Array.from({ length: n }, (_, i) => {
+    h = (h * 1103515245 + 12345) >>> 0;
+    const edge = Math.min(1, (i + 1) / 4, (n - i) / 4);
+    return Math.round(22 + edge * ((h >>> 16) % 78));
+  });
+}
+
+/** How long a voice message lasts, about (seconds). */
+const voiceSeconds = (la: string, rate: number) => Math.max(1, Math.round((la.split(/\s+/).length * 0.55 + 0.6) / rate));
+
+/**
+ * A voice message: ▶ plays it with the device's Latin voice in the sender's own
+ * pitch and pace; Aa shows its words (tap them as in any message). Without a
+ * Latin voice on the device, the words show at once.
+ */
+function VoiceNote({ m, who, open, onText }: { m: Msg; who: Who | null; open: boolean; onText: () => void }) {
+  useVoices();
+  const speaking = useSpeaking();
+  const id = `voice-${m.id}`;
+  const on = speaking === id;
+  const ready = audioReady();
+  const v = who ? voiceOf(who) : { g: "m" as const, pitch: 1, rate: 0.9 };
+  const bars = useMemo(() => waveform(m.id, 26), [m.id]);
+  const secs = voiceSeconds(m.la, v.rate);
+  return (
+    <span class={`voice-note${on ? " playing" : ""}`}>
+      {ready ? (
+        <button
+          class="voice-play"
+          aria-label={on ? "Stop" : "Play the voice message"}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (on) stopSpeaking();
+            else void speak(m.la, { id, g: v.g, pitch: v.pitch, rate: v.rate });
+          }}
+        >
+          {on ? <Icon.stop /> : <Icon.play />}
+        </button>
+      ) : (
+        <span class="voice-play off" title="This device has no Spanish or Italian voice to play it: here are its words"><Icon.speaker /></span>
+      )}
+      <span class="voice-wave" aria-hidden="true">
+        {bars.map((h, i) => <i key={i} style={{ height: `${h}%`, animationDelay: `${(i % 7) * 0.09}s` }} />)}
+      </span>
+      <span class="voice-time">0:{String(secs).padStart(2, "0")}</span>
+      {ready && (
+        <button class="voice-text" aria-pressed={open} title={open ? "Hide the words" : "Show the words"} onClick={(e) => { e.stopPropagation(); onText(); }}>
+          Aa
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** A photo, large, with what it shows and where the picture comes from. */
+function PhotoView({ id, onClose }: { id: string; onClose: () => void }) {
+  const p = PHOTO_BY_ID.get(id);
+  return (
+    <Modal wide onClose={onClose} label="Photo" screen={`A photo in the chat: ${p?.en ?? id}. ${p?.what ?? ""}`}>
+      <div class="stack photo-view">
+        <div class="spread">
+          <span class="eyebrow">Photo</span>
+          <button class="btn ghost small" onClick={onClose} aria-label="Close"><Icon.close /></button>
+        </div>
+        <img src={photoSrc(id)} alt={p?.en ?? ""} />
+        {p && (
+          <div class="stack" style={{ gap: "4px" }}>
+            <p style={{ margin: 0 }}>{p.en}</p>
+            <p class="small muted" style={{ margin: 0 }}>{p.what}</p>
+            <p class="small muted" style={{ margin: 0 }}>{p.credit}</p>
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -917,6 +1025,12 @@ function Composer({ id }: { id: string }) {
       });
     } else change(`${cur.trimEnd()}${cur.trim() ? " " : ""}${s}`);
   };
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || CSS.supports?.("field-sizing", "content")) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight + 3, 160)}px`;
+  }, [text]);
   useEffect(() => {
     inserts.set(id, (s) => put(s, false));
     return () => void inserts.delete(id);
@@ -956,8 +1070,10 @@ function Composer({ id }: { id: string }) {
           placeholder="Write in Latin…"
           value={text}
           onInput={(e) => change((e.target as HTMLTextAreaElement).value)}
+          enterkeyhint={enterSends() ? "send" : "enter"}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            // a keyboard sends with Enter; on a phone Enter is a new line and the arrow sends
+            if (e.key === "Enter" && !e.shiftKey && enterSends()) {
               e.preventDefault();
               doSend();
             }
@@ -1114,14 +1230,22 @@ export function ArrivalNotice({ current }: { current: string | null }) {
     const timer = setTimeout(() => setShown(null), 6000);
     return () => clearTimeout(timer);
   }, [shown]);
+  // swipe it away like a phone notification; a tap opens the chat
+  const swipe = useSwipeAway(
+    () => setShown(null),
+    () => {
+      if (shown) go({ page: "messenger", thread: shown.t.id });
+      setShown(null);
+    },
+  );
   if (!shown) return null;
   const who = whoOf(shown.m.from, getMeta());
   return (
-    <button class="arrival ansata" onClick={() => { go({ page: "messenger", thread: shown.t.id }); setShown(null); }} role="status">
+    <button key={shown.m.id} class="arrival ansata" role="status" aria-label={`New message from ${who?.name ?? ""}: tap to open, swipe to dismiss`} {...swipe}>
       {who && <Avatar who={who} size={34} />}
       <span class="stack" style={{ gap: 0, minWidth: 0 }}>
         <b class="ui small" lang="la">{who?.name ?? nameOf(shown.m.from)}{shown.t.kind === "group" ? ` · ${GROUP.name}` : ""}</b>
-        <span class="arrival-text" lang="la">{showEmoji(shown.m.la)}</span>
+        <span class="arrival-text" lang="la">{showEmoji(preview(shown.m))}</span>
       </span>
     </button>
   );

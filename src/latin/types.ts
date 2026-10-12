@@ -102,6 +102,8 @@ interface EntryBase {
 export interface WordStory {
   origin?: string;
   history?: string;
+  /** A surprising connection the learner may have missed (a name, a modern word): euge → Eugene → eugenics. */
+  link?: string;
   /** Words borrowed from it, in English, Russian and Ukrainian. */
   from?: { en?: string[]; ru?: string[]; uk?: string[] };
   /** Words of the same ancient root, not borrowed. */

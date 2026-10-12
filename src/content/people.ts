@@ -44,6 +44,8 @@ export interface Person {
   happenings: Happening[];
   /** How they stand with the others. */
   ties: Record<string, string>;
+  /** Their voice in voice messages: pitch (1 = the voice's own) and pace. */
+  voice: { pitch: number; rate: number };
 }
 
 export const PEOPLE: Person[] = [
@@ -76,6 +78,7 @@ export const PEOPLE: Person[] = [
       { en: "a mysterious letter with no name came for her", mood: "curious", hours: [12, 48] },
       { en: "she bet Marcus a fig cake on a chariot race and lost", mood: "mischievous", hours: [6, 24] },
     ],
+    voice: { pitch: 1.2, rate: 1.0 },
     ties: {
       marcus: "childhood friend; they tease each other all the time",
       lucius: "he writes her poems; she finds them far too dramatic but secretly a little sweet",
@@ -112,6 +115,7 @@ export const PEOPLE: Person[] = [
       { en: "his neighbour plays the flute all night", mood: "sleepy", hours: [12, 48] },
       { en: "he has a cold and feels sorry for himself", mood: "dramatic", hours: [24, 60] },
     ],
+    voice: { pitch: 1.0, rate: 1.05 },
     ties: {
       iulia: "childhood friend; teases her about her poems and her suitors",
       gaius: "his uncle, who thinks he is lazy (he is)",
@@ -148,6 +152,7 @@ export const PEOPLE: Person[] = [
       { en: "the tax collector came by", mood: "furious", hours: [4, 12] },
       { en: "he is carrying wine to Rome tomorrow", mood: "busy", hours: [12, 30] },
     ],
+    voice: { pitch: 0.75, rate: 0.78 },
     ties: {
       marcus: "his nephew, a lazy city boy (he loves him)",
       lucius: "a poet, so useless; they bicker",
@@ -181,6 +186,7 @@ export const PEOPLE: Person[] = [
       { en: "Titus came home with gifts from Egypt", mood: "happy", hours: [24, 72] },
       { en: "her daughter Lucilla learned to read", mood: "proud", hours: [12, 36] },
     ],
+    voice: { pitch: 1.05, rate: 0.88 },
     ties: {
       iulia: "her favourite former pupil",
       marcus: "a former pupil, clever but lazy",
@@ -214,6 +220,7 @@ export const PEOPLE: Person[] = [
       { en: "a rival poet mocked him in public", mood: "furious", hours: [6, 24] },
       { en: "he has decided to become a farmer (for one day)", mood: "determined", hours: [8, 30] },
     ],
+    voice: { pitch: 0.88, rate: 0.75 },
     ties: {
       iulia: "in love with her; writes her poems",
       gaius: "thinks farmers have no soul; they bicker",

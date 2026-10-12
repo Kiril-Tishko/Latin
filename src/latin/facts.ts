@@ -259,3 +259,45 @@ export function checkAnswer(text: string, lex: Lexicon): Finding[] {
   if (spelling.size) out.push({ kind: "spelling", message: `Long marks: ${[...spelling].map((w) => `«${w}»`).join(", ")}.` });
   return out;
 }
+
+/** Every ending counts as taught: a literal reading names each form plainly. */
+const EVERY_RULE = { has: () => true } as unknown as Set<string>;
+
+/**
+ * How a message reads word by word, as a Roman reads it: what each word can be
+ * (its case and use, or who does it), a word the engine does not know, and the
+ * slips it finds (an adjective that does not match, a verb that does not match
+ * its subject). The people of the messenger take a mistake literally.
+ */
+export function literalReading(text: string, lex: Lexicon): string {
+  const words = annotate(text, lex).filter((t) => t.isWord);
+  if (!words.length) return "";
+  const lines = words.map((t) => {
+    // only the present and the infinitive (all the people write); calling someone only for a name
+    const all = t.readings ?? [];
+    const rs = all.filter((r) => {
+      if (r.entry.kind === "verb") return r.key === "inf" || r.key.startsWith("pres.");
+      if (caseOf(r) === "voc") return r.entry.tags.includes("name") || !all.some((o) => o.entry === r.entry && caseOf(o) === "nom");
+      return true;
+    });
+    if (!all.length) return `- «${t.text}»: not a Latin word the engine knows (a typo, or a word it has not met)`;
+    if (!rs.length) rs.push(...all);
+    const what = [
+      ...new Set(
+        rs.map((r) => {
+          const e = r.entry;
+          const head = e.kind === "verb" ? e.pp[0] : (e as { lemma: string }).lemma;
+          return e.kind === "fixed" ? `${head} (${e.en})` : `${reading(r, EVERY_RULE)} of ${head} (${e.en})`;
+        }),
+      ),
+    ];
+    return `- «${t.text}»: ${what.length > 1 ? `can be ${what.join("; or ")}` : what[0]}`;
+  });
+  // sentence by sentence: "Salvē Iūlia! Quid agis?" calls Iūlia, it does not make her the subject
+  const slips = text
+    .split(/(?<=[.!?])\s+/)
+    .flatMap((sentence) => checkAnswer(`«${sentence}»`, lex))
+    .filter((f) => f.kind !== "spelling")
+    .map((f) => `- ${f.message.replace(/«|»/g, "")}`);
+  return [...lines, ...(slips.length ? ["The engine also finds:", ...slips] : [])].join("\n");
+}

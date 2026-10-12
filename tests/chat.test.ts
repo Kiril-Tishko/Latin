@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { makeBrief } from "../src/chat/brief";
 import { meetStranger, refreshLives, writeOwn, writeReply } from "../src/chat/engine";
 import { COMMON_HAPPENINGS, lifeNow, localTime, replyTiming, statusAt } from "../src/chat/life";
-import { newMeta, newThread, Thread } from "../src/chat/model";
+import { newMeta, newThread, preview, Thread, voiceOf } from "../src/chat/model";
+import { adYear, birthdaysNear, calendarBlock, calendarWords, festivalsNear, romanDate, todayLine } from "../src/chat/calendar";
+import { PHOTOS, photoSrc, photosFor } from "../src/content/photos";
+import { literalReading } from "../src/latin/facts";
 import { languageBlock, PromptCtx, replyPrompt } from "../src/chat/prompts";
-import { rollStranger } from "../src/chat/strangers";
+import { LINKS, rollStranger } from "../src/chat/strangers";
 import { vetMessage, withMacrons } from "../src/chat/vet";
-import { allowedWords, CHAT_WORDS, chatEntries, chatLexicon, formsFor, nameEntry, vocativeOf } from "../src/chat/words";
+import { allowedWords, calendarEntry, CHAT_WORDS, chatEntries, chatLexicon, formsFor, nameEntry, vocativeOf } from "../src/chat/words";
 import { LESSONS } from "../src/content/lessons";
 import { PARTS } from "../src/content/parts";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../src/content/people";
@@ -262,5 +265,135 @@ describe("the brief for the phone routine", () => {
       for (let i = 1; i < lives.length; i++) expect(lives[i].from).toBeGreaterThan(lives[i - 1].from);
     }
     expect(brief.language).toContain("Words (only these forms)");
+  });
+});
+
+describe("the Roman year they live through", () => {
+  it("names the days the Roman way", () => {
+    expect(romanDate({ y: 2026, m: 10, d: 1 })).toBe("Kal. Oct.");
+    expect(romanDate({ y: 2026, m: 10, d: 7 })).toBe("Nōn. Oct.");
+    expect(romanDate({ y: 2026, m: 10, d: 12 })).toBe("a.d. IV Īd. Oct.");
+    expect(romanDate({ y: 2026, m: 10, d: 15 })).toBe("Īd. Oct.");
+    expect(romanDate({ y: 2026, m: 10, d: 31 })).toBe("prīdiē Kal. Nov.");
+    expect(romanDate({ y: 2026, m: 12, d: 31 })).toBe("prīdiē Kal. Iān.");
+    expect(romanDate({ y: 2026, m: 1, d: 5 })).toBe("Nōn. Iān.");
+    expect(romanDate({ y: 2028, m: 2, d: 24 })).toBe("a.d. bis VI Kal. Mart.");
+    expect(romanDate({ y: 2028, m: 2, d: 25 })).toBe("a.d. VI Kal. Mart.");
+  });
+
+  it("lives in AD 100 in 2026, with the festivals, birthdays and news of the day", () => {
+    const oct12 = Date.UTC(2026, 9, 12, 10, 0);
+    expect(adYear(2026)).toBe(100);
+    expect(todayLine(oct12).la).toBe("a.d. IV Īd. Oct. · Augustālia");
+    const block = calendarBlock(oct12);
+    expect(block).toContain("AD 100, the 853rd year since Rome was founded");
+    expect(block).toMatch(/tomorrow, the Fontinalia/);
+    // next spring Trajan leaves for the Dacian war, and everyone talks of it the day before
+    expect(calendarBlock(Date.UTC(2027, 2, 24, 10, 0))).toMatch(/Trajan leaves Rome for the war.*\(tomorrow\)/);
+    expect(birthdaysNear({ y: 2026, m: 5, d: 1 }).map((x) => [x.item, x.days])).toEqual([["iulia", 1]]);
+    expect(festivalsNear({ y: 2026, m: 12, d: 20 }).map((x) => x.item.la)).toContain("Sāturnālia");
+  });
+
+  it("lets the day's names be written while they are near", () => {
+    const words = calendarWords(Date.UTC(2027, 2, 24, 10, 0)).map((w) => w.word);
+    expect(words).toEqual(expect.arrayContaining(["Trāiānus", "Decebalus", "Dācia"]));
+    const trajan = calendarEntry({ word: "Trāiānus", g: "m", en: "Trajan", decline: true });
+    expect(formsFor(trajan, ALL)).toEqual(expect.arrayContaining(["Trāiānus", "Trāiānum"]));
+    const saturnalia = calendarEntry({ word: "Sāturnālia", en: "the Saturnalia", decline: false });
+    expect(formsFor(saturnalia, ALL)).toEqual(["Sāturnālia"]);
+  });
+});
+
+describe("people who know each other", () => {
+  it("links most strangers to one of the friends, living where the link needs them", () => {
+    const rolled = Array.from({ length: 200 }, (_, i) => rollStranger(seeded(i + 1), { names: [], portraits: [] }, 1));
+    const linked = rolled.filter((s) => s.link);
+    expect(linked.length / rolled.length).toBeGreaterThan(0.55);
+    expect(linked.length / rolled.length).toBeLessThan(0.85);
+    for (const s of linked) {
+      expect(PERSON_BY_ID.has(s.link!.to)).toBe(true);
+      const spec = LINKS.find(([to, how]) => to === s.link!.to && how === s.link!.how)!;
+      if (spec[2] === true) expect(s.city).toMatch(/^(Rome|Ostia)/);
+      if (typeof spec[2] === "string") expect(s.city).toBe(spec[2]);
+    }
+  });
+
+  it("tells each friend about the others' lives, the group and the strangers they know", () => {
+    const meta = newMeta();
+    const s = { ...rollStranger(seeded(3), { names: [], portraits: [] }, 1), link: { to: "marcus", how: "Marcus owes them money" } };
+    meta.strangers[s.id] = s;
+    const group = { ...newThread(GROUP.id, "group"), messages: [{ id: "g1", from: "lucius", la: "Heu...", at: Date.UTC(2026, 9, 12, 11, 0) }] };
+    const t = { ...newThread("marcus", "dm"), messages: [{ id: "a", from: "me", la: "Salvē Marce!", at: Date.UTC(2026, 9, 12, 11, 59) }] };
+    const p = replyPrompt(t, meta, { ...ctxFor(SEEN), group, calendar: calendarBlock(Date.UTC(2026, 9, 12, 12, 0)) }, { at: Date.UTC(2026, 9, 12, 12, 5), why: "free" });
+    expect(p).toContain("THE OTHER FRIENDS, RIGHT NOW");
+    expect(p).toMatch(/- Iūlia: .*mood/);
+    expect(p).toContain("LATELY IN THE GROUP «Amīcī»");
+    expect(p).toContain(`${s.name} (${s.job}, ${s.city}): Marcus owes them money`);
+    expect(p).toContain("THE DAY IN ROME");
+    const sp = replyPrompt({ ...newThread(s.id, "stranger"), messages: t.messages }, meta, ctxFor(SEEN), { at: Date.UTC(2026, 9, 12, 12, 5), why: "free" });
+    expect(sp).toContain("Knows Marcus: Marcus owes them money");
+    expect(sp).toContain("FRIEND AMONG THE LEARNER'S FRIENDS");
+    expect(sp).toMatch(/- Marcus: .*mood/);
+  });
+});
+
+describe("mistakes taken literally, voice messages and photos", () => {
+  it("reads the learner's words literally and names the slips", () => {
+    const r = literalReading("Ego aquam bibit", lex);
+    expect(r).toContain("«bibit»: the form for he / she / it of bibō (drink)");
+    expect(r).toContain("With Ego the verb is bibō");
+    expect(literalReading("Salvē Iūlia! Quid agis?", lex)).not.toContain("The engine also finds");
+    expect(literalReading("Aqua puellam bibit", lex)).toContain("«Aqua»: nominative singular (subject) of aqua (water)");
+  });
+
+  it("sends the literal reading with the answer, and keeps voice messages and real photos", async () => {
+    const prompts: string[] = [];
+    const ask = async <T,>(prompt: string): Promise<T> => {
+      prompts.push(prompt);
+      return {
+        messages: [
+          { from: "iulia", la: "Aqua tē bibit?! 😂", en: "The water drinks you?! 😂", gap: 1, voice: true },
+          { from: "iulia", la: "", en: "", gap: 2, photo: "earring" },
+          { from: "iulia", la: "Ecce!", en: "Look!", gap: 2, photo: "no-such-photo" },
+        ],
+        remember: [],
+      } as T;
+    };
+    const t = { ...newThread("iulia", "dm"), messages: [{ id: "a", from: "me", la: "Ego aqua bibō", at: Date.UTC(2026, 9, 12, 11, 59) }] };
+    const reply = await writeReply(t, newMeta(), ctxFor(ALL), { ask, opts: {}, lex, r: seeded(5) });
+    expect(prompts[0]).toContain("HOW THE LEARNER'S LAST MESSAGE READS");
+    expect(prompts[0]).toContain("«aqua»: nominative singular (subject)");
+    expect(prompts[0]).toContain('"earring"');
+    expect(reply.messages[0].voice).toBe(true);
+    expect(reply.messages[1].photo).toBe("earring");
+    expect(reply.messages[2].photo).toBeUndefined();
+    expect(reply.messages[2].la).toBe("Ecce!");
+    expect(preview(reply.messages[0])).toBe("🎤 Voice message");
+    expect(preview(reply.messages[1])).toBe("📷 Photo");
+  });
+
+  it("has every photo in the build, credited, sent by people who exist", () => {
+    expect(PHOTOS.length).toBeGreaterThan(20);
+    for (const p of PHOTOS) {
+      expect(photoSrc(p.id), p.id).toMatch(/^data:image\/webp;base64,/);
+      expect(p.credit).toContain("CC0");
+      if (p.who !== "any") for (const w of p.who) expect(PERSON_BY_ID.has(w), `${p.id}: ${w}`).toBe(true);
+    }
+    for (const person of PEOPLE) expect(photosFor(person.id, false).length, person.id).toBeGreaterThan(3);
+    expect(photosFor("s123", true).every((p) => p.who === "any")).toBe(true);
+  });
+
+  it("gives each friend a voice of their own, and strangers one by age and sex", () => {
+    expect(voiceOf(PERSON_BY_ID.get("gaius")!).pitch).toBeLessThan(voiceOf(PERSON_BY_ID.get("iulia")!).pitch);
+    expect(voiceOf({ g: "f", age: 70 }).rate).toBeLessThan(voiceOf({ g: "f", age: 20 }).rate);
+  });
+
+  it("puts the day in Rome and the photos into the brief for the phone routine", () => {
+    const now = Date.UTC(2027, 2, 24, 10, 0);
+    const brief = makeBrief(newMeta(), ctxFor(SEEN, now), [], seeded(8));
+    expect(brief.calendar.map((c) => c.day)).toEqual(["2027-03-24", "2027-03-25", "2027-03-26"]);
+    expect(brief.calendar[0].text).toContain("THE DAY IN ROME");
+    expect(brief.forms).toContain("traianus");
+    expect(brief.photos.length).toBe(PHOTOS.length);
   });
 });

@@ -133,6 +133,7 @@ Otherwise reply with only JSON:
  "note": "<one short note when something is surprising (a masculine noun in -a), else empty>",
  "origin": "<where the word comes from, one or two short sentences>",
  "history": "<one interesting historical fact about the word or about what it names, one or two short sentences>",
+ "link": "<one surprising, real connection the learner may have missed: a first name, a modern word, a scientific term, a brand or a place, in English, Russian or Ukrainian (for euge: Greek eu 'well' → Eugene, Євген, eugenics); empty when there is none>",
  "from": {"en": [], "ru": [], "uk": []},
  "kin": {"en": [], "ru": [], "uk": []},
  "examples": [{"la": "<a short, simple Latin sentence with it, long marks>", "en": "<its English>"}, {"la": "…", "en": "…"}]}
@@ -184,6 +185,7 @@ export function fromClaude(raw: unknown, taken: Set<string>, now = Date.now()): 
     story: {
       origin: str(r.origin) || undefined,
       history: str(r.history) || undefined,
+      link: str(r.link) || undefined,
       from: rel(r.from),
       kin: rel(r.kin),
       examples: (Array.isArray(r.examples) ? r.examples : [])

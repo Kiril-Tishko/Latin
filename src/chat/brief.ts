@@ -5,8 +5,11 @@
 import { PEOPLE } from "../content/people";
 import { Life, LifeSpec, lifeNow, Rand } from "./life";
 import { Meta, Who, whoOf } from "./model";
-import { languageBlock, learnerBlock, PromptCtx } from "./prompts";
-import { allowedSpellings } from "./words";
+import { knownPeople, languageBlock, learnerBlock, PromptCtx } from "./prompts";
+import { allowedSpellings, calendarEntry, formsFor } from "./words";
+import { calendarBlock, calendarWords, romeDay } from "./calendar";
+import { PHOTOS } from "../content/photos";
+import { stripMarks } from "../latin/text";
 import { specOf } from "./engine";
 
 export interface Brief {
@@ -23,6 +26,10 @@ export interface Brief {
   people: { id: string; name: string; tz: string; wake: number; sleep: number; busy: [number, number, string][]; sheet: string }[];
   /** Moods and happenings rolled ahead: each from its time on. */
   lives: Record<string, (Life & { from: number })[]>;
+  /** The day in Rome for today and the next two days (date in Rome, YYYY-MM-DD): festivals, birthdays, news. */
+  calendar: { day: string; text: string }[];
+  /** The photos the people may send: id, what it shows, who would send it ("any": anyone). */
+  photos: { id: string; en: string; who: string[] | "any" }[];
 }
 
 /** Their lives for the next hours, rolled ahead at random. */
@@ -40,7 +47,7 @@ export function rollAhead(spec: LifeSpec, life: Life | undefined, now: number, h
   return out;
 }
 
-function sheet(w: Who): string {
+function sheet(w: Who, meta: Meta): string {
   return [
     `${w.name} (${w.age}, ${w.g === "m" ? "man" : "woman"}; called «${w.voc}»), ${w.city}. ${w.job}.`,
     `Character: ${w.about}`,
@@ -49,6 +56,7 @@ function sheet(w: Who): string {
     w.secret ? `Keeps to themselves at first: ${w.secret}.` : "",
     `How they text: ${w.style}`,
     w.ties ? `With the others: ${Object.entries(w.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
+    knownPeople(w, meta),
   ]
     .filter(Boolean)
     .join("\n");
@@ -59,20 +67,30 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
   const people = ids
     .map((id) => whoOf(id, meta))
     .filter((w): w is Who => !!w)
-    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w) }));
+    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta) }));
   const lives: Brief["lives"] = {};
   for (const id of ids) {
     const spec = specOf(id, meta);
     if (spec) lives[id] = rollAhead(spec, meta.life[id], ctx.now, 48, r);
   }
+  // the next days in Rome, and the names they bring (allowed while they are near)
+  const days = [0, 1, 2].map((n) => ctx.now + n * 86400000);
+  const calendar = days.map((t) => {
+    const d = romeDay(t);
+    return { day: `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`, text: calendarBlock(t) };
+  });
+  const forms = allowedSpellings(ctx.words);
+  for (const t of days) for (const w of calendarWords(t)) for (const f of formsFor(calendarEntry(w), ctx.seen)) forms.add(stripMarks(f).toLowerCase());
   return {
     v: 1,
     updatedAt: ctx.now,
     me: { name: ctx.me.name, g: ctx.me.g, tz: ctx.tz },
     learner: learnerBlock(ctx).replace(/ For .* it is .*$/, ""),
     language: languageBlock(ctx),
-    forms: [...allowedSpellings(ctx.words)].sort(),
+    forms: [...forms].sort(),
     people,
     lives,
+    calendar,
+    photos: PHOTOS.map((p) => ({ id: p.id, en: p.en, who: p.who })),
   };
 }

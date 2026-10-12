@@ -82,8 +82,13 @@ Runtime capabilities used:
   (`bareWord`: Latin, English, Russian or Ukrainian, or a dictionary line) is
   read as Latin even when it is also English ("aqua"), carries the note
   "[Just a word: answer with its word card.]", and the answer is a word card:
-  a bold headline, then **Origin:**, **History:**, **Family:**, **Use:** lines,
-  which `Markup` shows one per line with small gold labels (`p.labelled`). Under
+  a bold headline, then **Origin:**, **History:**, **Family:**, **Hidden link:**,
+  **Use:** lines, which `Markup` shows one per line with small gold labels (`p.labelled`).
+  The learner loves surprising connections (they asked about «euge» and were
+  delighted to find Greek eu → Eugene, "Євген" → "eugenics"), so every word
+  answer, the card's Hidden link, the messenger's coach and an added word's card
+  (`WordStory.link`) look for one real link: a name, a modern word, a term of
+  science, a brand, a place; never a look-alike. Under
   such a card, a word the learner does not have yet gets "Add «gladius» to my
   words" (`AddFromAnswer`, the headline's word: `cardWord`). A failed answer shows plain advice, Try again,
   and the error code under "Details" (ask the learner for it when debugging).
@@ -342,7 +347,7 @@ shown as it is; a mystery card not added yet is added as the card; anything
 else Claude fills in (`lookupPrompt` in src/trainer/own.ts, the coach's model:
 dictionary line with long marks, meaning, English verb forms, tags from
 `NOUN_TAGS`, for a verb the tags of nouns that make sense as its object,
-relatives borrowed / same root, origin, history, two examples). The grammar
+relatives borrowed / same root, origin, history, a hidden link, two examples). The grammar
 engine builds the word from the dictionary line (`fromClaude` → `ownEntry`:
 noun / verb / adj / adj3 / fixed) and refuses what it cannot read yet
 (deponent and irregular verbs). The learner sees the card (forms of the rules
@@ -423,6 +428,38 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   whether they write first) and Claude makes a person of it (`meetStranger`:
   about, secret, their own happenings, first messages). A stranger leaves the
   list with "Say goodbye".
+- Connected, as the learner asked ("most of them are interconnected"): seven in
+  ten strangers know one of the friends (`LINKS`: Marcus's landlord, a sailor on
+  Titus's ship, Gāius's neighbour…, living where the link needs them), and that
+  friend knows them too (`knownPeople` in their sheet). In a private chat the
+  prompt carries the other friends' lives now (`friendsNews`: friends hear each
+  other's news) and what was said lately in the group (`groupLately`).
+- They live through the Roman year in real time (src/chat/calendar.ts, content
+  in src/content/calendar.ts): 2026 is AD 100 (`YEAR_OFFSET`), so the friends
+  live under Trajan and next spring he leaves for the Dacian war. Every prompt
+  carries the day (`calendarBlock`: the Roman date, a.d. IV Īd. Oct.; festivals
+  going on, coming within a week or just past, from the Kalends of January to
+  the Saturnalia; the friends' birthdays (`BIRTHDAYS`); the news of `HISTORY`,
+  each on the day Rome hears it, planned ones talked of two weeks ahead). The
+  names the day brings (Sāturnālia, Trāiānus, Dācia…) may be written while they
+  are near (`calendarWords` → `calendarEntry`). The list shows today's Roman
+  date and festival (`todayLine`), each day line its Roman date.
+- They take the learner's mistakes literally (the learner asked): the reply
+  prompt carries the learner's last messages read word by word by the engine
+  (`literalReading` in src/latin/facts.ts: what each form is, sentence by
+  sentence slips), and Claude reacts in character to what it literally says
+  («Aqua tē bibit?! 😂») without explaining grammar.
+- Voice messages: Claude marks about one message in eight `"voice": true`; it
+  shows as a player (▶, a waveform, its length, Aa for its words) and plays with
+  the device's Latin voice in the sender's own pitch and pace (`Person.voice`,
+  `voiceOf`; a man's or a woman's voice by name when the device has one,
+  `voiceFor`). No free online voice reads classical Latin, so the device's
+  respelled voice it is; without one the words show at once.
+- Photos: now and then a message carries `"photo": "<id>"` from the people's
+  own world (src/content/photos.ts: 25 Roman paintings and things from The Met,
+  CC0, embedded as small WebP by scripts/content/photos.py into photo-data.ts;
+  each with what it shows as the sender sees it, what it really is, and who
+  would send it). Not one sent lately; a tap opens it with its credit.
 - Claude is asked only on the learner's actions: Send (one answer per burst:
   2.5 s pause; answers still on their way are taken back and written again),
   opening the messenger (at most every 3 hours, `writeOwn`: what they write on
@@ -442,15 +479,21 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   message), read ticks, "online" / "last seen", day separators, a "New" line,
   a notice for a message arriving elsewhere in the app, an unread count (Roman
   numerals) on the tab. Tap a message for its English, a word for what it is
-  (a word not among the learner's words, or unknown, gets "+ Add").
+  (with a speaker to hear it; a word not among the learner's words, or unknown,
+  gets "+ Add"). The notice of a message arriving elsewhere (and any toast) can
+  be swiped away like a phone notification (`useSwipeAway`); a tap opens the
+  chat. On a phone Enter makes a new line in the message box and in Ask Claude,
+  and the arrow sends (`enterSends`); the box grows with its lines.
 - Phone notifications: a Claude Code routine (trigger "Nūntiī: Roman friends
   write", trig_01QU7TocqJanmp7LVdamvvdJ, a fresh session per run, push
   notifications, CRON_TZ=Europe/Kyiv at 8:51, 11:51, 14:51, 17:51 and 20:51) follows scripts/messenger-routine.md (with
   its helper scripts/nuntii-routine.py embedded, as a routine's session may not
   have this repo: who is awake, moods, the chats; the word check; the
   notification line): it reads the brief (src/chat/brief.ts: the learner, the language block, every
-  allowed spelling, everyone's sheet and their lives rolled 48 h ahead), writes
-  0-3 messages into the inbox, and ends with one line about the unseen messages,
+  allowed spelling, everyone's sheet and their lives rolled 48 h ahead, the day
+  in Rome for today and the next two days, the photos), writes 0-3 messages into
+  the inbox (a voice message or a photo now and then), and ends with one line
+  about the unseen messages,
   which becomes the notification. Change its schedule or prompt with
   update_trigger (keep the prompt in sync with that file).
 

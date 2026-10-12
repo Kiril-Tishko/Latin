@@ -24,6 +24,10 @@ export interface Msg {
   newWords?: string[];
   /** How it came: an answer, written on their own, by the phone routine, the first words of a stranger. */
   src?: "reply" | "own" | "routine" | "first";
+  /** A voice message: `la` is what they say (played with the device's voice). */
+  voice?: boolean;
+  /** A photo sent with the message (content/photos.ts); `la` is its caption. */
+  photo?: string;
 }
 
 /** The coach's check of a message the learner wrote. */
@@ -82,6 +86,10 @@ export interface Who {
   quirk?: string;
   why?: string;
   secret?: string;
+  /** A stranger: how they know one of the friends. */
+  link?: { to: string; how: string };
+  /** A friend's voice in voice messages. */
+  voice?: { pitch: number; rate: number };
   stranger: boolean;
 }
 
@@ -108,6 +116,7 @@ export function whoOf(id: string, meta: Meta): Who | null {
     quirk: s.quirk,
     why: s.why,
     secret: s.secret,
+    link: s.link,
     stranger: true,
   };
 }
@@ -128,3 +137,17 @@ export const arrived = (t: Thread, now: number) => t.messages.filter((m) => m.at
 
 /** Messages from the others the learner has not seen yet. */
 export const unreadCount = (t: Thread, now: number) => t.messages.filter((m) => m.from !== "me" && m.at <= now && m.at > t.readAt).length;
+
+/** A message in one line, for lists and notices: a voice message and a photo say what they are. */
+export function preview(m: Msg): string {
+  if (m.voice) return "🎤 Voice message";
+  if (m.photo) return `📷 ${m.la || "Photo"}`;
+  return m.la;
+}
+
+/** How someone sounds in a voice message: their pitch and pace (the device's voice, made theirs). */
+export function voiceOf(who: Pick<Who, "g" | "age"> & { voice?: { pitch: number; rate: number } }): { g: "m" | "f"; pitch: number; rate: number } {
+  if (who.voice) return { g: who.g, ...who.voice };
+  const old = who.age >= 55;
+  return { g: who.g, pitch: who.g === "m" ? (old ? 0.75 : 0.9) : old ? 1.0 : 1.15, rate: old ? 0.8 : 0.9 };
+}

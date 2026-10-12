@@ -48,7 +48,13 @@ published as a private claude.ai artifact.
   type, read and answer when awake; a scheduled routine lets them write while
   the page is closed and notifies your phone. Tap a message for its English, a
   word for what it is; Check asks the coach about your Latin, and you can ask
-  the coach anything about it right there. Hand-drawn Roman emoji (SPQR, the
+  the coach anything about it right there. They live through the Roman year in
+  real time (2026 is AD 100, under Trajan): festivals, birthdays and the news of
+  the day come up in their talk. Now and then they send a voice message (played
+  in their own voice, classical Latin) or a photo from their world (Roman
+  paintings and things from The Met). They know each other and most strangers
+  know one of them, and they take your mistakes literally («Aqua tē bibit?!»).
+  Hand-drawn Roman emoji (SPQR, the
   she-wolf, the legion's eagle, a laurel wreath…) sit beside the usual ones. It looks like an
   old Roman letter desk: parchment panels among real engravings (Piranesi's
   Forum, Corinthian columns, Livy's bust), laurels and big faces.
@@ -58,7 +64,8 @@ published as a private claude.ai artifact.
   examples), the grammar engine checks every form, and the word joins your
   exercises once its endings are learned.
 - **Word stories**: ask Claude about a word and you also hear where it comes
-  from and a bit of its history; send just a word for its word card.
+  from, a bit of its history and a hidden link you might have missed (euge →
+  Eugene → eugenics); send just a word for its word card.
 - **Claude settings**: the model (Haiku, Sonnet, Opus) and how hard it thinks,
   chosen separately for the coach and for the people in the messenger.
 - **Mistakes come back**: your mistakes return later as new exercises on the

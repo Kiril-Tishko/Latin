@@ -7,7 +7,8 @@
 import { knownEmojiOnly, withoutEmoji } from "./emoji";
 import { GROUP, PERSON_BY_ID } from "../content/people";
 import { Lexicon } from "../latin/analyze";
-import { checkAnswer } from "../latin/facts";
+import { checkAnswer, literalReading } from "../latin/facts";
+import { PHOTO_BY_ID, photoSrc } from "../content/photos";
 import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from "./life";
 import { Meta, Msg, msgId, Thread, membersOf, Who } from "./model";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, strangerPrompt } from "./prompts";
@@ -57,7 +58,18 @@ interface Draft {
   from?: string;
   la: string;
   en: string;
+  voice?: boolean;
+  photo?: string;
 }
+
+/** A voice message and a photo, as Claude marked them (a photo only if it exists; a caption may be empty). */
+function extras(m: { voice?: unknown; photo?: unknown }): { voice?: true; photo?: string } {
+  const photo = typeof m.photo === "string" && PHOTO_BY_ID.has(m.photo) && photoSrc(m.photo) ? m.photo : undefined;
+  return { ...(m.voice === true && !photo ? { voice: true as const } : {}), ...(photo ? { photo } : {}) };
+}
+
+/** The message fields of a vetted draft: its Latin and English, a voice message or photo, the words that slipped. */
+const fields = (d: Draft & { newWords?: string[] }) => ({ la: d.la, en: d.en, ...(d.voice ? { voice: true } : {}), ...(d.photo ? { photo: d.photo } : {}), ...(d.newWords ? { newWords: d.newWords } : {}) });
 
 // (a Roman emoji code Claude made up is dropped)
 const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+/g, " ").trim());
@@ -69,7 +81,7 @@ const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+/g, " "
  */
 export async function vetAll<T extends Draft>(drafts: T[], ctx: PromptCtx, deps: Deps): Promise<(T & { newWords?: string[] })[]> {
   const out: (T & { newWords?: string[] })[] = drafts.map((d) => ({ ...d, la: withMacrons(clean(d.la), deps.lex), en: clean(d.en) }));
-  const bad = out.map((d, i) => ({ i, v: vetMessage(d.la, deps.lex, ctx.seen) })).filter((x) => !x.v.ok);
+  const bad = out.map((d, i) => ({ i, v: vetMessage(d.la, deps.lex, ctx.seen) })).filter((x) => !x.v.ok && out[x.i].la);
   if (!bad.length) return out;
   try {
     const fixed = await deps.ask<{ messages?: { la?: string; en?: string }[] }>(
@@ -119,12 +131,19 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   if (!members.length) return { messages: [], remember: [], readAt: ctx.now };
   refreshLives(meta, members.map((w) => w.id), ctx.now, r);
   const { first, byId } = timing ?? timingFor(members, ctx.now, r);
-  const prompt = replyPrompt(thread, meta, ctx, { at: first.t.startAt, why: first.t.why });
-  const raw = await deps.ask<{ messages?: { from?: string; la?: string; en?: string; gap?: number }[]; remember?: string[] }>(prompt, { ...deps.opts, cache: false });
+  // the learner's last messages, read word by word: a mistake is taken literally
+  const burst: string[] = [];
+  for (const m of [...thread.messages].reverse()) {
+    if (m.from !== "me") break;
+    burst.unshift(m.la);
+  }
+  const literal = burst.length ? literalReading(withoutEmoji(burst.join(" ")), deps.lex) : "";
+  const prompt = replyPrompt(thread, meta, ctx, { at: first.t.startAt, why: first.t.why }, literal);
+  const raw = await deps.ask<{ messages?: { from?: string; la?: string; en?: string; gap?: number; voice?: unknown; photo?: unknown }[]; remember?: string[] }>(prompt, { ...deps.opts, cache: false });
   const ids = new Set(members.map((w) => w.id));
   const drafts = (raw?.messages ?? [])
-    .map((m) => ({ from: ids.has(String(m.from)) ? String(m.from) : members.length === 1 ? members[0].id : "", la: clean(m.la), en: clean(m.en), gap: Number(m.gap) || 2 }))
-    .filter((m) => m.from && m.la)
+    .map((m) => ({ from: ids.has(String(m.from)) ? String(m.from) : members.length === 1 ? members[0].id : "", la: clean(m.la), en: clean(m.en), gap: Number(m.gap) || 2, ...extras(m) }))
+    .filter((m) => m.from && (m.la || m.photo))
     .slice(0, 5);
   const vetted = await vetAll(drafts, ctx, deps);
   // each message arrives after the one before it: a pause, then the typing; a sleeper answers when awake
@@ -132,7 +151,7 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   const messages: Msg[] = vetted.map((d) => {
     const own = byId.get(d.from!);
     t = Math.max(t, own?.startAt ?? t) + Math.min(40, Math.max(0, d.gap)) * 1000 + typingTime(d.la);
-    return { id: msgId(), from: d.from!, la: d.la, en: d.en, at: Math.round(t), src: "reply", ...(d.newWords ? { newWords: d.newWords } : {}) };
+    return { id: msgId(), from: d.from!, at: Math.round(t), src: "reply", ...fields(d) };
   });
   const remember = (raw?.remember ?? []).map(clean).filter(Boolean).slice(0, 2);
   return { messages, remember, readAt: first.t.readAt };
@@ -150,13 +169,13 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
   const r = deps.r ?? Math.random;
   const live = threads.filter((t) => !t.gone);
   refreshLives(meta, [...new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)))], ctx.now, r);
-  const raw = await deps.ask<{ messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number }[] }>(ownPrompt(live, meta, ctx, hours), { ...deps.opts, cache: false });
+  const raw = await deps.ask<{ messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown }[] }>(ownPrompt(live, meta, ctx, hours), { ...deps.opts, cache: false });
   const byChat = new Map(live.map((t) => [t.id, t]));
   const drafts = (raw?.messages ?? [])
-    .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)) }))
+    .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)), ...extras(m) }))
     .filter((m) => {
       const t = byChat.get(m.chat);
-      if (!t || !m.la) return false;
+      if (!t || !(m.la || m.photo)) return false;
       // never into a chat with messages still on their way; only its own people; only someone awake then
       if (t.messages.some((x) => x.from !== "me" && x.at > ctx.now)) return false;
       const member = membersOf(t.id, meta).find((w) => w.id === m.from);
@@ -171,7 +190,7 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
     let at = ctx.now + d.in * 60000 + Math.round(r() * 20000);
     at = Math.max(at, (last.get(d.chat) ?? 0) + typingTime(d.la));
     last.set(d.chat, at);
-    return { chat: d.chat, msg: { id: msgId(), from: d.from, la: d.la, en: d.en, at, src: "own" as const, ...(d.newWords ? { newWords: d.newWords } : {}) } };
+    return { chat: d.chat, msg: { id: msgId(), from: d.from, at, src: "own" as const, ...fields(d) } };
   });
 }
 

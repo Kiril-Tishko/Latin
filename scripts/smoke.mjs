@@ -793,7 +793,8 @@ async function messenger() {
     window.claude = { use: async (n) => (n === "sample" ? sample : n === "db" ? db : n === "user" ? { id: async () => "u1" } : null) };
   };
   const device = async (name, viewport, time = "2026-10-12T10:30:00Z") => {
-    const ctx = await browser.newContext({ viewport });
+    // a phone is a touch screen (Enter makes a new line there)
+    const ctx = await browser.newContext({ viewport, ...(viewport.width < 500 ? { isMobile: true, hasTouch: true } : {}) });
     await ctx.clock.install({ time: new Date(time) });
     await seed(ctx);
     await ctx.addInitScript(runtime);
@@ -843,6 +844,12 @@ async function messenger() {
   if (!(await p.locator(".bubble.mine .ticks.read").count())) errors.push("messenger: the learner's message never shows as read");
   const prompts = await p.evaluate(() => window.__prompts.join("\n---\n"));
   if (!prompts.includes("You write as Iūlia") || !prompts.includes("THE LEARNER: Kiril")) errors.push("messenger: the reply prompt lacks the person or the learner");
+  // they live in Rome's calendar, hear each other's news, and read the learner's Latin literally
+  if (!prompts.includes("THE DAY IN ROME") || !prompts.includes("a.d. IV Īd. Oct.")) errors.push("messenger: the reply prompt lacks the day in Rome");
+  if (!prompts.includes("THE OTHER FRIENDS, RIGHT NOW")) errors.push("messenger: the reply prompt lacks the other friends' news");
+  if (!prompts.includes("HOW THE LEARNER'S LAST MESSAGE READS") || !prompts.includes("«Librum»: accusative singular")) errors.push("messenger: the reply prompt does not read the learner's message literally");
+  if (!prompts.includes("PHOTOS THEY COULD SEND") || !prompts.includes('"voice": true')) errors.push("messenger: the reply prompt offers no photos or voice messages");
+  if (!((await p.locator(".msgr-date").textContent()) ?? "").includes("Īd. Oct.")) errors.push("messenger: no Roman date over the chats");
   // a tap on a word shows a card under the message (what the word is); a tap elsewhere on the message, its English
   await p.locator(".bubble:not(.mine) .w").first().click();
   if (!(await p.locator(".word-card", { hasText: "great" }).count())) errors.push("messenger: a tap on a word shows no word card");
@@ -869,11 +876,25 @@ async function messenger() {
   if (!(await p.locator(".profile", { hasText: "Today" }).count())) errors.push("messenger: the profile has no 'Today'");
   await p.screenshot({ path: `${out}/messenger-profile.png` });
   await p.keyboard.press("Escape");
-  // the phone routine left a message in the inbox: it lands in Marcus's chat, unread
+  // the phone routine left messages in the inbox: they land in Marcus's chat, unread (one a voice message, one a photo)
   shared.set("data/users/u1/messenger/inbox/r1", { chat: "marcus", from: "marcus", la: "Salvē! Labōrō 😩", en: "Hi! I'm working 😩", at: Date.parse("2026-10-12T10:40:00Z") });
+  shared.set("data/users/u1/messenger/inbox/r2", { chat: "marcus", from: "marcus", la: "Hahae! Labōrō", en: "Haha! I'm working", voice: true, at: Date.parse("2026-10-12T10:41:00Z") });
+  shared.set("data/users/u1/messenger/inbox/r3", { chat: "marcus", from: "marcus", la: "Ecce!", en: "Look!", photo: "coin", at: Date.parse("2026-10-12T10:42:00Z") });
   await p.waitForTimeout(900);
   if (shared.has("data/users/u1/messenger/inbox/r1")) errors.push("messenger: the inbox message was not taken");
   if (!(await p.locator("#chat-marcus .unread-badge").count())) errors.push("messenger: the routine's message is not shown as unread");
+  if (!((await p.locator("#chat-marcus .chat-row-preview").textContent()) ?? "").includes("📷")) errors.push("messenger: the chat list does not say a photo came");
+  await p.click("#chat-marcus");
+  await p.waitForTimeout(400);
+  if (!(await p.locator(".voice-note").count())) errors.push("messenger: a voice message shows no player");
+  // no Latin voice in this browser: its words show at once
+  if (!(await p.locator(".bubble-text", { hasText: "Hahae" }).count())) errors.push("messenger: without a voice, a voice message's words do not show");
+  if (!(await p.locator(".bubble-photo img").count())) errors.push("messenger: a photo does not show in its message");
+  await p.locator(".bubble-photo").click();
+  if (!(await p.locator(".photo-view", { hasText: "Trajan" }).count())) errors.push("messenger: a tapped photo does not open with what it is");
+  await p.screenshot({ path: `${out}/messenger-photo.png` });
+  await p.keyboard.press("Escape");
+  await p.click(".chat-back").catch(() => {});
   await p.click("#find-someone");
   await p.waitForTimeout(2500);
   if (!(await p.locator(".chat-head-name").textContent())?.trim() || (await p.locator(".chat-row").count()) !== 7) errors.push("messenger: someone new did not open a chat");
@@ -885,6 +906,13 @@ async function messenger() {
   await other.p.waitForTimeout(300);
   const there = await other.p.locator(".bubble .bubble-text").allTextContents();
   if (!there.some((t) => t.includes("Librum"))) errors.push(`messenger: the other device does not show the chat (${JSON.stringify(there)})`);
+  // on a phone Enter makes a new line; the arrow sends
+  const mine = await other.p.locator(".bubble.mine").count();
+  await other.p.fill("#composer", "Salvē");
+  await other.p.press("#composer", "Enter");
+  await other.p.keyboard.type("Iūlia");
+  if ((await other.p.inputValue("#composer")) !== "Salvē\nIūlia" || (await other.p.locator(".bubble.mine").count()) !== mine) errors.push(`messenger: on a phone Enter did not make a new line (${JSON.stringify(await other.p.inputValue("#composer"))})`);
+  await other.p.fill("#composer", "");
   await other.p.screenshot({ path: `${out}/messenger-phone-chat.png` });
   await other.p.click(".chat-back");
   await other.p.screenshot({ path: `${out}/messenger-phone-list.png` });

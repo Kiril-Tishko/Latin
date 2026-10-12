@@ -833,8 +833,11 @@ p.labelled .label { font-family: var(--f-display); font-size: 0.78em; letter-spa
 
 .toast {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  max-width: calc(100vw - 32px);
   bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   z-index: 70;
   background: var(--ink);
@@ -1435,7 +1438,7 @@ main.page.msgr-page { padding-block: 14px; }
 .chat-intro { align-items: center; text-align: center; margin: auto; max-width: 440px; padding: 20px 0; --av: 96px; }
 .chat-day { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 14px 0 10px; }
 .chat-day::before, .chat-day::after { content: ""; flex: 1; max-width: 240px; height: 1px; background: var(--m-line); }
-.chat-day span {
+.chat-day > .day-pill {
   font-family: var(--f-display);
   font-size: 0.82rem;
   letter-spacing: 0.14em;
@@ -1446,6 +1449,29 @@ main.page.msgr-page { padding-block: 14px; }
   border: 1px solid var(--m-line);
 }
 .day-sprig { width: 28px; height: 28px; color: var(--gold-soft); }
+/* the Roman date beside Hodiē: a.d. IV Īd. Oct. */
+.day-roman { margin-left: 8px; padding-left: 9px; border-left: 1px solid var(--m-line); font-size: 0.86em; letter-spacing: 0.06em; text-transform: none; color: var(--ink-2); }
+.msgr-date { margin: -8px 20px 10px 24px; font-family: var(--f-display); font-size: 0.82rem; letter-spacing: 0.06em; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 760px) { .msgr-date { margin: -4px 14px 8px 16px; } }
+
+/* a voice message: play, a waveform, its length, and its words a tap away */
+.voice-note { display: flex; align-items: center; gap: 10px; min-width: min(250px, 60vw); padding: 2px 0; }
+.voice-play { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; border: 0; background: var(--gold); color: var(--m-panel); cursor: pointer; }
+.voice-play svg { width: 18px; height: 18px; }
+.voice-play.off { background: var(--m-line); color: var(--ink-2); cursor: default; }
+.voice-wave { flex: 1; display: flex; align-items: center; gap: 2px; height: 28px; min-width: 80px; }
+.voice-wave i { flex: 1; min-width: 2px; max-width: 4px; border-radius: 2px; background: color-mix(in srgb, var(--ink-2) 55%, transparent); }
+.voice-note.playing .voice-wave i { background: var(--gold); animation: voice-bar 0.9s ease-in-out infinite alternate; }
+@keyframes voice-bar { from { transform: scaleY(0.45); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .voice-note.playing .voice-wave i { animation: none; } }
+.voice-time { font-family: var(--f-ui); font-size: 0.8rem; color: var(--ink-2); }
+.voice-text { flex: none; padding: 3px 8px; border-radius: 8px; border: 1px solid var(--m-line); background: none; color: var(--ink-2); font-family: var(--f-ui); font-size: 0.8rem; font-weight: 700; cursor: pointer; }
+.voice-text[aria-pressed="true"] { background: var(--gold-soft); color: var(--ink); }
+
+/* a photo in a message, and opened large */
+.bubble-photo { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; margin: -4px -10px 2px; }
+.bubble-photo img { display: block; width: min(300px, 62vw); max-height: 320px; object-fit: cover; border-radius: 8px; border: 1px solid var(--m-line); }
+.photo-view img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; background: var(--panel-2); }
 .chat-new { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; color: var(--gold); }
 .chat-new::before, .chat-new::after { content: ""; flex: 1; height: 1px; background: var(--gold-soft); }
 .chat-new span { font-family: var(--f-ui); font-size: 0.75rem; letter-spacing: 0.06em; }
@@ -1516,8 +1542,10 @@ main.page.msgr-page { padding-block: 14px; }
   cursor: pointer;
   box-shadow: 0 2px 6px -4px rgba(60, 40, 20, 0.4);
 }
-.word-card:disabled { cursor: default; }
-.word-card > svg { width: 26px; height: 26px; flex: none; color: var(--ink-2); }
+.word-card { cursor: default; gap: 10px; padding: 6px 10px 6px 8px; }
+.word-card .speak { flex: none; width: 36px; height: 36px; }
+.word-card-main { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 4px 2px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.word-card-main:disabled { cursor: default; }
 .word-card-go { margin-left: 8px; display: grid; opacity: 0.6; }
 .word-card-go svg { width: 18px; height: 18px; }
 

@@ -87,6 +87,15 @@ def state(d):
     print("\nPEOPLE (local time, now, life):")
     for p in brief["people"]:
         print(f"- {p['id']} ({p['name']}): {hours(now, p['tz'])[1]} {p['tz']}; {status(p, now)}; {life_now(brief, p['id'], now)}")
+    today = datetime.fromtimestamp(now / 1000, ZoneInfo("Europe/Rome")).strftime("%Y-%m-%d")
+    day = next((c for c in brief.get("calendar", []) if c.get("day") == today), None)
+    if day:
+        print("\n" + day["text"])
+    if brief.get("photos"):
+        print("\nPHOTOS (id: what it shows; who may send it):")
+        for ph in brief["photos"]:
+            who = "anyone" if ph.get("who") == "any" else ", ".join(ph.get("who", []))
+            print(f"- {ph['id']}: {ph['en']} ({who})")
     n = names(brief)
     print("\nCHATS (oldest first; times in Rome):")
     for cid, t in sorted(threads.items()):
@@ -134,7 +143,11 @@ def notify(d, new_path=None):
     n = names(brief)
     last = msgs[-1]
     shown = lambda t: CODE.sub(lambda m: ROMAN_EMOJI.get(m.group(1), m.group(0)), t or "")
-    line = f"{n.get(last.get('from'), last.get('from'))}: {shown(last.get('la'))}" + (f" ({shown(last['en'])})" if last.get("en") else "")
+    if last.get("voice"):
+        line = f"{n.get(last.get('from'), last.get('from'))}: 🎤 Voice message"
+    else:
+        text = shown(last.get("la")) or "Photo"
+        line = f"{n.get(last.get('from'), last.get('from'))}: {'📷 ' if last.get('photo') else ''}{text}" + (f" ({shown(last['en'])})" if last.get("en") else "")
     others = [n.get(m.get("from"), m.get("from")) for m in msgs[:-1]]
     if others:
         who = ", ".join(dict.fromkeys(others))

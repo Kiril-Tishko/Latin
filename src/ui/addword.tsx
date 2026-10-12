@@ -230,6 +230,7 @@ function WordPreview({ e, card, byHand }: { e: Entry; card?: Card; byHand?: bool
       {byHand && <p class="small muted">Typed in by hand: for reading and word reviews (made-up sentences need to know what it goes with).</p>}
       {st?.origin && <p class="labelled"><span class="label">Origin</span> {st.origin}</p>}
       {st?.history && <p class="labelled"><span class="label">History</span> {st.history}</p>}
+      {st?.link && <p class="labelled"><span class="label">Hidden link</span> {st?.link}</p>}
       {card?.hook && <p class="labelled"><span class="label">Remember</span> {card.hook}</p>}
       {(from || kin) && (
         <p class="labelled">

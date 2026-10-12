@@ -3,6 +3,7 @@
 // limits of the learner's Latin. Plain functions of plain data, so the same
 // text serves the page and the brief the phone routine reads.
 import { emojiList } from "./emoji";
+import { photosFor } from "../content/photos";
 import { GROUP, PEOPLE } from "../content/people";
 import { SKILLS } from "../latin/skills";
 import type { Me } from "../trainer/progress";
@@ -19,6 +20,10 @@ export interface PromptCtx {
   words: AllowedWord[];
   /** Ids of the rules the learner has seen. */
   seen: Set<string>;
+  /** The day in Rome: date, festivals, birthdays, news (calendar.ts). */
+  calendar?: string;
+  /** The group chat, for a private chat: what the friends said there lately. */
+  group?: Thread;
 }
 
 // ------------------------------------------------------------ language
@@ -79,8 +84,18 @@ export function lifeLine(life: Life | undefined): string {
   return `mood: ${moodText(life)}; ${life.event ? `going on: ${life.event}` : "nothing special going on"}`;
 }
 
+/** Whom someone knows among the people the learner has met (the learner asked for people who are connected). */
+export function knownPeople(who: Who, meta?: Meta): string {
+  if (who.stranger) {
+    const friend = who.link && PEOPLE.find((p) => p.id === who.link!.to);
+    return friend ? `Knows ${friend.name}: ${who.link!.how}; may have the learner's name from ${friend.name}, and mentions ${friend.g === "m" ? "him" : "her"} when it fits.` : "";
+  }
+  const met = Object.values(meta?.strangers ?? {}).filter((s) => s.link?.to === who.id);
+  return met.length ? `People the learner has met whom ${who.name} knows: ${met.map((s) => `${s.name} (${s.job}, ${s.city}): ${s.link!.how}`).join("; ")}.` : "";
+}
+
 /** Who someone is, for Claude to write as them. */
-export function personBlock(who: Who, life: Life | undefined, now: number): string {
+export function personBlock(who: Who, life: Life | undefined, now: number, meta?: Meta): string {
   const lines = [
     `${who.name} (${who.age}, ${gender(who.g)}; called «${who.voc}»), ${who.city}. ${who.job[0].toUpperCase()}${who.job.slice(1)}.`,
     `Character: ${who.about}`,
@@ -90,6 +105,7 @@ export function personBlock(who: Who, life: Life | undefined, now: number): stri
     who.secret ? `Keeps to themselves at first: ${who.secret}.` : "",
     `How they text: ${who.style}`,
     who.ties ? `With the others: ${Object.entries(who.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
+    knownPeople(who, meta),
     `Right now: ${dayNow(who, now)}; ${lifeLine(life)}.`,
   ];
   return lines.filter(Boolean).join("\n");
@@ -128,17 +144,64 @@ const HOW_TO_BE_REAL = `HOW TO BE REAL:
 /** For a reply: everyone in the thread, with their state now. */
 function peopleOf(thread: Thread, meta: Meta, now: number): string {
   return membersOf(thread.id, meta)
-    .map((w) => personBlock(w, meta.life[w.id], now))
+    .map((w) => personBlock(w, meta.life[w.id], now, meta))
     .join("\n\n");
 }
 
+/** Voice messages and photos: what a message may carry besides its text. */
+const EXTRAS = `- "voice": true (optional) makes it a short voice message: they say it aloud and "la" is what they say (3 to 14 words, spoken style). Now and then, about one message in eight, when it fits the moment (walking, cooking, in a hurry, lazy to type, excited, sleepy, singing); never two in a row.
+- "photo": "<photo id>" (optional) sends one of the photos listed with the message, "la" being its caption (a few words, or only an emoji): rarely, when it fits the moment or the talk.`;
+
 const OUTPUT = `Reply with only JSON:
-{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>}], "remember": ["<new fact about the learner>"]}
+{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "voice": true, "photo": "<photo id>"}], "remember": ["<new fact about the learner>"]}
 - 1 to 4 messages; one is often right. "gap": 1-40 (typing time is added by the page; a long gap is a pause to think).
+${EXTRAS}
 - "remember": 0-2 short facts about the learner worth remembering later (English), or [].`;
 
+/** The photos the people of a chat could send now (none sent lately in this chat). */
+export function photosBlock(people: Who[], recent: string[]): string {
+  const lines = people
+    .map((w) => ({ w, ps: photosFor(w.id, w.stranger, recent) }))
+    .filter((x) => x.ps.length)
+    .map((x) => `${x.w.name}: ${x.ps.map((p) => `"${p.id}" (${p.en})`).join("; ")}`);
+  return lines.length ? `PHOTOS THEY COULD SEND (their own world, as they see it):\n${lines.join("\n")}` : "";
+}
+
+/** Photos sent lately in a chat, not to be sent again soon. */
+const recentPhotos = (t: Thread) => t.messages.slice(-60).flatMap((m) => (m.photo ? [m.photo] : []));
+
+/** What is going on with the friends now: for a private chat (friends hear each other's news). */
+export function friendsNews(thread: Thread, meta: Meta, now: number): string {
+  if (thread.kind === "group") return "";
+  const who = membersOf(thread.id, meta)[0];
+  if (!who) return "";
+  const ids = who.stranger ? (who.link ? [who.link.to] : []) : PEOPLE.map((p) => p.id).filter((id) => id !== who.id);
+  const lines = ids.flatMap((id) => {
+    const p = PEOPLE.find((x) => x.id === id);
+    return p ? [`- ${p.name}: ${dayNow({ ...p, stranger: false }, now)}; ${lifeLine(meta.life[id])}`] : [];
+  });
+  if (!lines.length) return "";
+  return `${who.stranger ? `${who.name.toUpperCase()}'S FRIEND AMONG THE LEARNER'S FRIENDS` : "THE OTHER FRIENDS"}, RIGHT NOW (friends hear each other's news; it may come up when it fits, as gossip, worry or a laugh):\n${lines.join("\n")}`;
+}
+
+/** What was said lately in the group chat, for a private chat with one of the friends. */
+export function groupLately(thread: Thread, meta: Meta, ctx: PromptCtx): string {
+  if (thread.kind !== "dm" || !ctx.group) return "";
+  const last = ctx.group.messages.filter((m) => m.at <= ctx.now && ctx.now - m.at < 3 * 86400000).slice(-6);
+  if (!last.length) return "";
+  return `LATELY IN THE GROUP «${GROUP.name}» (the friends and the learner together):\n${last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${m.la}`).join("\n")}`;
+}
+
+/** The learner's last message as the grammar engine reads it, and how to take a mistake: literally, as a Roman would. */
+export function literalBlock(literal: string): string {
+  if (!literal) return "";
+  return `HOW THE LEARNER'S LAST MESSAGE READS, word by word (the site's grammar engine; it is certain):
+${literal}
+Read it LITERALLY, as a Roman would. If a mistake makes it say something other than they meant (a wrong ending makes the water drink them, a wrong person makes someone else do it, a wrong word means something else), react to what it literally says, in character: amused, puzzled, alarmed or teasing («Aqua tē bibit?! 😂»), and then maybe go on with what they meant. Never explain the grammar or correct them like a teacher. When a slip changes nothing (a missing long mark, a small spelling slip), simply answer.`;
+}
+
 /** The prompt for an answer to what the learner wrote. */
-export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: { at: number; why: string }): string {
+export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: { at: number; why: string }, literal = ""): string {
   const group = thread.kind === "group";
   const members = membersOf(thread.id, meta);
   const tz = members[0]?.tz ?? "Europe/Rome";
@@ -150,11 +213,16 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
       : `You write as ${members[0]?.name} in a Latin messenger, texting with the learner.`,
     learnerBlock(ctx),
     `WHO ${group ? "THEY ARE" : "YOU ARE"}:\n${peopleOf(thread, meta, ctx.now)}`,
+    friendsNews(thread, meta, ctx.now),
+    ctx.calendar ?? "",
     thread.memory.length ? `What ${group ? "they remember" : `${members[0]?.name} remembers`} about ${ctx.me.name}: ${thread.memory.join("; ")}.` : "",
-    `THE CONVERSATION (oldest first; times where ${group ? "they are" : `${members[0]?.name} is`}). The learner's Latin may have mistakes: understand what they mean.\n${conversationBlock(thread, meta, ctx, tz)}`,
+    groupLately(thread, meta, ctx),
+    `THE CONVERSATION (oldest first; times where ${group ? "they are" : `${members[0]?.name} is`}). The learner's Latin may have mistakes.\n${conversationBlock(thread, meta, ctx, tz)}`,
+    literalBlock(literal),
     `The answer arrives at ${deliver.weekday} ${deliver.hm} their time (${timing.why}); write for that moment.`,
     HOW_TO_BE_REAL,
     languageBlock(ctx),
+    photosBlock(members, recentPhotos(thread)),
     `${OUTPUT}\nPerson ids: ${ids}.`,
   ]
     .filter(Boolean)
@@ -163,11 +231,11 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
 
 /** The prompt for messages the people write on their own (on opening the messenger, or from the phone routine). */
 export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: number): string {
-  const friends = PEOPLE.map((p) => personBlock({ ...p, stranger: false }, meta.life[p.id], ctx.now)).join("\n\n");
-  const strangers = Object.values(meta.strangers)
-    .filter((s) => threads.some((t) => t.id === s.id && !t.gone && t.messages.length))
-    .map((s) => personBlock(whoOf(s.id, meta)!, meta.life[s.id], ctx.now))
-    .join("\n\n");
+  const friends = PEOPLE.map((p) => personBlock({ ...p, stranger: false }, meta.life[p.id], ctx.now, meta)).join("\n\n");
+  const met = Object.values(meta.strangers).filter((s) => threads.some((t) => t.id === s.id && !t.gone && t.messages.length));
+  const strangers = met.map((s) => personBlock(whoOf(s.id, meta)!, meta.life[s.id], ctx.now, meta)).join("\n\n");
+  const everyone = [...PEOPLE.map((p) => ({ ...p, stranger: false })), ...met.map((s) => whoOf(s.id, meta)!)] as Who[];
+  const sent = threads.flatMap(recentPhotos);
   const recent = threads
     .filter((t) => !t.gone)
     .map((t) => {
@@ -183,13 +251,16 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
     learnerBlock(ctx),
     `THE FRIENDS:\n${friends}`,
     strangers ? `STRANGERS THE LEARNER HAS MET:\n${strangers}` : "",
+    ctx.calendar ?? "",
     `THE CHATS NOW (last messages):\n${recent}`,
     `DECIDE like life: sometimes nobody writes; often one person writes one to three messages; now and then a short exchange happens in the group (friends talking to each other and to the learner). Someone writes only when awake and when there is a reason: news, their mood or what is going on, a question, a follow-up to an earlier talk, a greeting at a fitting hour, missing the learner. Do not write into a chat that has messages still on their way. In all, at most two private chats plus one group exchange of up to six messages.`,
     HOW_TO_BE_REAL,
     languageBlock(ctx),
+    photosBlock(everyone, sent),
     `Reply with only JSON:
-{"messages": [{"chat": "<chat id>", "from": "<person id>", "la": "<Latin>", "en": "<English>", "in": <minutes from now, 0-${hours * 60}>}]}
+{"messages": [{"chat": "<chat id>", "from": "<person id>", "la": "<Latin>", "en": "<English>", "in": <minutes from now, 0-${hours * 60}>, "voice": true, "photo": "<photo id>"}]}
 Messages of one chat in time order; a burst of messages is a minute or less apart. {"messages": []} when nobody writes.
+${EXTRAS}
 Person ids: ${PEOPLE.map((p) => `"${p.id}"`).join(", ")}${Object.keys(meta.strangers).length ? `, strangers by their chat id` : ""}.`,
   ]
     .filter(Boolean)
@@ -215,10 +286,11 @@ export function strangerPrompt(s: Stranger, life: Life | undefined, ctx: PromptC
 - Temper: ${s.traits.join(", ")} (${s.intensity === "extreme" ? "to an extreme" : s.intensity === "strong" ? "strongly" : "mildly"}).
 - Quirk: ${s.quirk ?? "none in particular: a fairly normal person"}.
 - Writes because: ${s.why}.
-- Texts with: ${s.style}.
+- Texts with: ${s.style}.${s.link ? `\n- Knows ${PEOPLE.find((p) => p.id === s.link!.to)?.name}, one of the learner's friends: ${s.link.how}. Make this part of who they are.` : ""}
 - Right now: ${lifeLine(life)}.`,
     `Keep these facts. Add what makes them real and specific (family, a past, a wish, a fear, a voice of their own): surprising, never generic, never a cliché of their job. They need not be nice: they can be strange, rude, sad, funny or wonderful, as the facts say.`,
     learnerBlock(ctx),
+    ctx.calendar ?? "",
     s.writesFirst ? `They write first: their first one to three messages to the learner, as they would really open (or not even greet).` : `They wait for the learner to write first: no first messages.`,
     HOW_TO_BE_REAL,
     languageBlock(ctx),
@@ -287,7 +359,7 @@ export function coachPrompt(question: string, turns: CoachTurn[], draft: string,
     `You are a kind Latin coach in a small window beside a beginner's chat in a Latin messenger, where they text with ${thread.kind === "group" ? "friends in a group chat" : members[0]?.name}. They ask you about their messages and about Latin. The learner speaks English, Russian and Ukrainian; explain in English.`,
     `How to answer:
 - Short: one to four sentences, or a few short lines. Longer only when they ask for more.
-- Answer exactly what they ask. If they ask about a word, also give where it comes from and one interesting bit of history about it (briefly; say "probably" where scholars are not sure, and never invent a relative or a story).
+- Answer exactly what they ask. If they ask about a word, also give where it comes from and one interesting bit of history about it, and a surprising connection they may have missed when a real one exists (a first name, a modern word, a term of science, in English, Russian or Ukrainian: «euge» → Eugene, "Євген", "eugenics"). Briefly; say "probably" where scholars are not sure, and never invent a relative, a link or a story.
 - Write every Latin word or sentence inside «guillemets» («puellam»); quote English, Russian and Ukrainian with "double quotes". Use **bold** only for the key point. No headings, no tables, no greeting.
 - Be exact: check every Latin form you write. Never invent a grammar rule.
 - ${ANY_WORD}`,

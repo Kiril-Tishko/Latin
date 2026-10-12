@@ -4,7 +4,7 @@
 // the few other things worth a tap: Answer in Latin, the next story, the friends'
 // messages.
 import { GROUP } from "../../content/people";
-import { arrived, unreadCount, whoOf } from "../../chat/model";
+import { arrived, preview, unreadCount, whoOf } from "../../chat/model";
 import { showEmoji } from "../../chat/emoji";
 import { roman } from "../../latin/text";
 import { nextStep, PART_GOAL, partRight } from "../../trainer/path";
@@ -155,7 +155,7 @@ function MessagesCard() {
           {total > 0 && <span class="tab-badge">{roman(total)}</span>}
         </strong>
         {top ? (
-          <span class="small also-quote" lang="la">{showEmoji(top.last!.la)}</span>
+          <span class="small also-quote" lang="la">{showEmoji(preview(top.last!))}</span>
         ) : (
           <span class="small muted">{p.settings.me ? "Write to your Roman friends." : "Five Roman friends who text you in Latin."}</span>
         )}

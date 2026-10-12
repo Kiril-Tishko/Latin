@@ -55,6 +55,14 @@ export function nameEntry(name: string, en: string, g: "m" | "f"): Entry {
   return fixed(name, "interj", { id, en, tags: ["person", "name"] }, CHAT);
 }
 
+/** A word the day brings (calendar.ts): a person's or a land's name, declined; a festival's name or a cheer, as it is. */
+export function calendarEntry(w: { word: string; g?: "m" | "f"; en: string; decline: boolean }): Entry {
+  if (w.decline) return nameEntry(w.word, w.en, w.g ?? "m");
+  const id = `day-${idOf(w.word)}`;
+  // a cheer (iō) is a chat word; a festival's name is a name
+  return /^[a-zāēīōū]/.test(w.word) ? fixed(w.word, "interj", { id, en: `${w.word} (a cheer at ${w.en})` }, CHAT) : fixed(w.word, "interj", { id, en: w.en, tags: ["name"] }, CHAT);
+}
+
 /** The names everyone in the messenger may use: the five friends, their families and pets, Rome. */
 export const FIXED_NAMES: Entry[] = [
   ...PEOPLE.map((p) => nameEntry(p.name, p.name, p.g)),

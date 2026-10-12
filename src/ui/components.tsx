@@ -1,6 +1,6 @@
 // Small shared pieces: icons, mosaic progress, case chips, dialogs, toast.
 import { ComponentChildren } from "preact";
-import { useEffect, useLayoutEffect, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Case, CASE_NAMES } from "../latin/types";
 import { roman } from "../latin/text";
 import { useScreen } from "./screen";
@@ -159,6 +159,62 @@ export function CardBack({ n }: { n?: number }) {
   );
 }
 
+/**
+ * A notice that can be swiped away like a phone notification: sideways or
+ * down, it follows the finger and goes; a plain tap stays a tap.
+ */
+export function useSwipeAway(onGone: () => void, onTap?: () => void) {
+  const start = useRef<{ x: number; y: number; id: number } | null>(null);
+  const moved = useRef(false);
+  const [drag, setDrag] = useState<{ dx: number; dy: number; leaving?: boolean }>({ dx: 0, dy: 0 });
+  const end = (dx: number, dy: number) => {
+    start.current = null;
+    if (Math.abs(dx) > 70 || dy > 50) {
+      // off it goes, the way it was swiped
+      setDrag({ dx: Math.abs(dx) > 70 ? Math.sign(dx) * 480 : dx, dy: dy > 50 ? 240 : 0, leaving: true });
+      setTimeout(() => {
+        onGone();
+        setDrag({ dx: 0, dy: 0 });
+      }, 180);
+    } else setDrag({ dx: 0, dy: 0 });
+  };
+  return {
+    style: {
+      transform: drag.dx || drag.dy ? `translate(${drag.dx}px, ${drag.dy}px)` : undefined,
+      opacity: drag.leaving ? 0 : 1 - Math.min(0.6, Math.max(Math.abs(drag.dx) / 300, drag.dy / 200)),
+      transition: start.current ? "none" : "transform 0.18s ease-out, opacity 0.18s ease-out",
+      touchAction: "none",
+    },
+    onPointerDown: (e: PointerEvent) => {
+      start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      moved.current = false;
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    },
+    onPointerMove: (e: PointerEvent) => {
+      if (!start.current || e.pointerId !== start.current.id) return;
+      const dx = e.clientX - start.current.x;
+      const dy = Math.max(0, e.clientY - start.current.y);
+      if (Math.abs(dx) > 6 || dy > 6) moved.current = true;
+      setDrag({ dx, dy });
+    },
+    onPointerUp: (e: PointerEvent) => {
+      if (!start.current) return;
+      const dx = e.clientX - start.current.x;
+      const dy = Math.max(0, e.clientY - start.current.y);
+      end(dx, dy);
+    },
+    onPointerCancel: () => end(0, 0),
+    onClick: () => {
+      // a swipe is not a tap
+      if (!moved.current) onTap?.();
+      moved.current = false;
+    },
+  };
+}
+
+/** On a phone (a touch screen, no hover) Enter makes a new line and the button sends; with a keyboard, Enter sends. */
+export const enterSends = () => typeof matchMedia === "undefined" || !matchMedia("(hover: none) and (pointer: coarse)").matches;
+
 let showToastFn: ((t: string) => void) | null = null;
 export const toast = (t: string) => showToastFn?.(t);
 
@@ -175,7 +231,8 @@ export function Toaster() {
       showToastFn = null;
     };
   }, []);
-  return text ? <div class="toast ansata" role="status">{text}</div> : null;
+  const swipe = useSwipeAway(() => setText(null), () => setText(null));
+  return text ? <div key={text} class="toast ansata" role="status" {...swipe}>{text}</div> : null;
 }
 
 export function Section({ eyebrow, title, children, actions }: { eyebrow?: string; title?: string; children: ComponentChildren; actions?: ComponentChildren }) {

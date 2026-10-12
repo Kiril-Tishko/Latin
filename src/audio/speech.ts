@@ -48,6 +48,19 @@ export function pickVoice(preferred?: string): SpeechSynthesisVoice | null {
   return (preferred && ok.find((x) => x.voiceURI === preferred)) || ok[0] || null;
 }
 
+/** Voices whose names say they are a man's or a woman's (Apple, Microsoft and Google name theirs). */
+const MALE = /\b(jorge|juan|diego|carlos|enrique|pablo|álvaro|alvaro|raúl|raul|luca|cosimo|paolo|giorgio|andrés|andres|gonzalo|tomás|tomas|alonso|darío|dario|jordi|pau|emilio|lorenzo|alessandro|antonio|miguel|manuel|francisco|javier|sergio|roberto|marco|riccardo|giuseppe|male)\b/i;
+const FEMALE = /\b(mónica|monica|paulina|marisol|laura|helena|elsa|alice|federica|paola|isabela|isabel|lucía|lucia|sabina|angélica|angelica|elvira|esperanza|dalia|carla|elena|ximena|valeria|camila|sofía|sofia|maría|maria|carmen|lola|nuria|silvia|chiara|giulia|francesca|bianca|female)\b/i;
+
+/** A Latin voice that sounds like a man or a woman, if the device has one; else the usual voice. */
+export function voiceFor(g: "m" | "f"): SpeechSynthesisVoice | null {
+  const match = latinVoices().find((v) => (g === "m" ? MALE : FEMALE).test(v.name));
+  return match ?? pickVoice(prefs.voice);
+}
+
+/** Whether a voice is known to be a man's or a woman's. */
+const genderOf = (v: SpeechSynthesisVoice | null): "m" | "f" | undefined => (v && MALE.test(v.name) ? "m" : v && FEMALE.test(v.name) ? "f" : undefined);
+
 /** True when a voice that can read Latin reasonably is installed. */
 export function hasLatinVoice(): boolean {
   return latinVoices().length > 0;
@@ -119,9 +132,10 @@ export function spokenText(latin: string, voice: SpeechSynthesisVoice | null): s
 let generation = 0;
 
 /** Reads Latin aloud. Resolves when it ends (or is stopped); `false` when it could not play. */
-export function speak(latin: string, opts: { id?: string; rate?: number } = {}): Promise<boolean> {
+export function speak(latin: string, opts: { id?: string; rate?: number; pitch?: number; g?: "m" | "f" } = {}): Promise<boolean> {
   if (!audioSupported()) return Promise.resolve(false);
-  const voice = pickVoice(prefs.voice);
+  // a voice message: a man's or a woman's voice if there is one, else the pitch moved towards it
+  const voice = opts.g ? voiceFor(opts.g) : pickVoice(prefs.voice);
   const mine = ++generation;
   speechSynthesis.cancel();
   return new Promise((resolve) => {
@@ -131,6 +145,11 @@ export function speak(latin: string, opts: { id?: string; rate?: number } = {}):
       u.lang = voice.lang;
     } else u.lang = "es-ES";
     u.rate = opts.rate ?? prefs.rate;
+    if (opts.pitch !== undefined || opts.g) {
+      const own = genderOf(voice);
+      const shift = !opts.g || own === opts.g ? 1 : opts.g === "m" ? 0.75 : own === "m" ? 1.3 : 1.1;
+      u.pitch = Math.max(0.1, Math.min(2, (opts.pitch ?? 1) * shift));
+    }
     // an utterance cut short by another one counts as stopped, so a sequence
     // (Listen & repeat, a story) never carries on reading after a tap elsewhere
     const done = (ok: boolean) => {

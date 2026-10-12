@@ -13,7 +13,9 @@ import { checkDraft, Deps, meetStranger, refreshLives, timingFor, writeOwn, writ
 import { deviceZone, hashRand } from "../chat/life";
 import { CoachTurn, membersOf, Meta, Msg, msgId, newMeta, newThread, Thread, unreadCount } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
-import { allowedWords, chatEntries, chatLexicon, nameEntry } from "../chat/words";
+import { allowedWords, calendarEntry, chatEntries, chatLexicon, nameEntry } from "../chat/words";
+import { calendarBlock, calendarWords, romeDay } from "../chat/calendar";
+import { PHOTO_BY_ID } from "../content/photos";
 import { relativesFact } from "../content/english";
 import { withoutEmoji } from "../chat/emoji";
 import { Lexicon } from "../latin/analyze";
@@ -272,15 +274,26 @@ function follow(s: NonNullable<typeof store>) {
 }
 
 function takeFromInbox(d: DocSnap) {
-  const x = d.data() as { chat?: string; from?: string; la?: string; en?: string; at?: number } | undefined;
+  const x = d.data() as { chat?: string; from?: string; la?: string; en?: string; at?: number; voice?: unknown; photo?: unknown } | undefined;
   const chat = String(x?.chat ?? "");
-  if (!x?.la || !chat || !(chat === GROUP.id || PEOPLE.some((p) => p.id === chat) || meta.strangers[chat])) {
+  // a photo needs no caption; a photo the page does not have is dropped
+  const photo = typeof x?.photo === "string" && PHOTO_BY_ID.has(x.photo) ? x.photo : undefined;
+  if (!x || !(x.la || photo) || !chat || !(chat === GROUP.id || PEOPLE.some((p) => p.id === chat) || meta.strangers[chat])) {
     void store?.inbox.doc(d.id).delete().catch(() => undefined);
     return;
   }
   const t = getThread(chat);
   if (!t.messages.some((m) => m.id === d.id)) {
-    const msg: Msg = { id: d.id, from: String(x.from ?? chat), la: String(x.la), en: x.en ? String(x.en) : undefined, at: Number(x.at) || Date.now(), src: "routine" };
+    const msg: Msg = {
+      id: d.id,
+      from: String(x.from ?? chat),
+      la: String(x.la ?? ""),
+      en: x.en ? String(x.en) : undefined,
+      at: Number(x.at) || Date.now(),
+      src: "routine",
+      ...(x.voice === true && !photo ? { voice: true } : {}),
+      ...(photo ? { photo } : {}),
+    };
     saveThread(merge(t, { ...t, messages: [...t.messages, msg] }));
   }
   void store?.inbox.doc(d.id).delete().catch(() => undefined);
@@ -293,10 +306,14 @@ let lexCache: { key: string; lex: Lexicon; entries: Entry[] } | null = null;
 /** The messenger's words: the learner's, the chat words, and every name in play. */
 export function chatWords(): { lex: Lexicon; entries: Entry[] } {
   const p = getProgress();
-  const key = `${p.updatedAt}|${Object.keys(meta.strangers).join(",")}|${p.settings.me?.name ?? ""}`;
+  const now = Date.now();
+  const day = romeDay(now);
+  const key = `${p.updatedAt}|${Object.keys(meta.strangers).join(",")}|${p.settings.me?.name ?? ""}|${day.y}-${day.m}-${day.d}`;
   if (lexCache?.key === key) return lexCache;
   const names: Entry[] = Object.values(meta.strangers).map((s) => nameEntry(s.name, `${s.name} (a name)`, s.g));
   if (p.settings.me?.name) names.push(nameEntry(p.settings.me.name, `${p.settings.me.name} (your name)`, p.settings.me.g));
+  // the festivals near today and the news bring their names
+  for (const w of calendarWords(now)) names.push(calendarEntry(w));
   const entries = chatEntries(derived().words, names);
   lexCache = { key, lex: chatLexicon(entries), entries };
   return lexCache;
@@ -306,7 +323,7 @@ export function promptCtx(now = Date.now()): PromptCtx | null {
   const p = getProgress();
   if (!p.settings.me) return null;
   const seen = derived().seenKnowledge.skills;
-  return { now, me: p.settings.me, tz: p.settings.tz ?? deviceZone(), words: allowedWords(chatWords().entries, seen), seen };
+  return { now, me: p.settings.me, tz: p.settings.tz ?? deviceZone(), words: allowedWords(chatWords().entries, seen), seen, calendar: calendarBlock(now), group: getThread(GROUP.id) };
 }
 
 async function deps(): Promise<Deps | { error: string }> {

@@ -34,6 +34,8 @@ export interface Stranger {
   happenings: Happening[];
   /** Whether they write first. */
   writesFirst: boolean;
+  /** How they know one of the five friends (most strangers do: the learner asked for people who are connected). */
+  link?: { to: string; how: string };
   /** From Claude: who they are (English, two or three sentences) and what they keep to themselves. */
   about?: string;
   secret?: string;
@@ -110,6 +112,34 @@ const STYLE = {
   marks: ["calm punctuation", "lots of «!!!»", "trailing «...»", "hardly any punctuation", "ALL CAPITALS now and then"],
 };
 
+/**
+ * How a stranger can know one of the friends: [friend, how, where they must live
+ * for it (true: Rome or Ostia; a place; false: anywhere)].
+ */
+export const LINKS: [string, string, boolean | string][] = [
+  ["marcus", "Marcus's landlord in the Subura", "Rome, in the Subura"],
+  ["marcus", "a fellow Greens fan Marcus shouts with at the races", true],
+  ["marcus", "works at the next desk in Marcus's moneylender's office", "Rome"],
+  ["marcus", "Marcus owes them money", false],
+  ["marcus", "the brother or sister of Flāvia, the baker's daughter Marcus loves", "Rome"],
+  ["iulia", "a friend Iūlia gossips with at the baths", true],
+  ["iulia", "family of Iūlia's Greek tutor", false],
+  ["iulia", "buys wine from Iūlia's father", false],
+  ["iulia", "an actor Iūlia admires from the theatre", true],
+  ["gaius", "a wine merchant who buys Gāius's wine", false],
+  ["gaius", "the farmer on the next farm to Gāius", "a farm in the hills near Tibur"],
+  ["gaius", "family of Pompōnia, Gāius's wife", false],
+  ["gaius", "the soothsayer Gāius asks about his omens", true],
+  ["claudia", "the parent of one of Claudia's pupils", "Ostia, the port of Rome"],
+  ["claudia", "a sailor on the ship of Titus, Claudia's husband", false],
+  ["claudia", "Claudia's cousin", false],
+  ["claudia", "a bookseller Claudia buys from", false],
+  ["lucius", "a rival poet who mocks Lūcius", false],
+  ["lucius", "Lūcius's landlady (or landlord), who wants the rent", "Rome"],
+  ["lucius", "a rich man or woman Lūcius hopes will be his patron", false],
+  ["lucius", "keeps the tavern where Lūcius writes at night", "Rome"],
+];
+
 const MOODS = ["cheerful", "bored", "grumpy", "excited", "sad", "anxious", "curious", "tired", "silly", "dreamy", "proud", "lonely", "restless", "suspicious", "content"];
 
 const NAMES = {
@@ -160,7 +190,10 @@ export function rollStranger(r: Rand, used: { names: string[]; portraits: string
   const unused = candidates.filter((p) => !used.portraits.includes(p.id));
   const portrait = pick(r, unused.length ? unused : candidates);
 
-  const place = pick(r, CITIES);
+  // most strangers know one of the friends; some links need them in Rome or Ostia
+  const link = r() < 0.7 ? pick(r, LINKS) : undefined;
+  const near = CITIES.filter((c) => /^(Rome|Ostia)/.test(c.city));
+  const place = !link || link[2] === false ? pick(r, CITIES) : link[2] === true ? pick(r, near) : { city: link[2], tz: "Europe/Rome" };
   const job = pick(r, JOBS);
   const x = r();
   const intensity: Stranger["intensity"] = x < 0.4 ? "mild" : x < 0.8 ? "strong" : "extreme";
@@ -190,6 +223,7 @@ export function rollStranger(r: Rand, used: { names: string[]; portraits: string
     swing: intensity === "mild" ? 0.3 : intensity === "strong" ? 0.6 : 0.95,
     happenings: [],
     writesFirst: r() < 0.6,
+    ...(link ? { link: { to: link[0], how: link[1] } } : {}),
     createdAt: now,
   };
 }

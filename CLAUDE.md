@@ -40,7 +40,7 @@ published as a private claude.ai artifact.
 npm install
 npm test            # engine, content and exercise self-tests (vitest)
 npm run typecheck
-npm run build       # -> dist/tabula-latina.html (the artifact page) and dist/preview.html
+npm run build       # -> dist/tabula-latina.html (the artifact page), its files, dist/publish.json, dist/preview.html
 npm run smoke       # clicks through the built page in Chromium, saves screenshots to dist/screens
 SMOKE_ONLY=messenger npm run smoke   # one part only (messenger, ownWords, learn, stories, conversations, chatScroll, askClaude, audio, pages)
 node scripts/build.mjs --dev   # unminified build for debugging
@@ -49,13 +49,24 @@ node scripts/build.mjs --dev   # unminified build for debugging
 ## Publishing
 
 The page is `dist/tabula-latina.html`: no doctype/head/body of its own (the
-artifact publisher adds the skeleton), `<title>` and `<style>` first, all JS
-inlined. Publish with the Artifact tool:
+artifact publisher adds the skeleton), `<title>` and `<style>` first, then
+`<script src="tabula-<hash>.js">`. The code and the messenger's photos are
+files beside the page: `dist/publish.json` is the `files` map for them (the
+script is named by its content, so a browser never runs an old copy). Publish
+with the Artifact tool:
 
-- first publish: `file_path: dist/tabula-latina.html`, `icon: "scroll"`,
-  `capabilities: {sample: {}, db: {}, user: {}}`
-- updates: same `file_path` plus `url: <artifact url>`, and omit
-  `capabilities` so the stored ones are kept.
+- first publish: `file_path: dist/tabula-latina.html`, `files`: the map in
+  dist/publish.json, `icon: "scroll"`, `capabilities: {sample: {}, db: {}, user: {}}`
+- updates: the same plus `url: <artifact url>`, with the script the artifact
+  holds now set to `null` in `files` (list them: `action: "list"`,
+  `scope: "files"`), and omit `capabilities` so the stored ones are kept.
+
+Why the code is not inlined: with the minified code in the page, the publisher
+took the page for a code-review page ("carries the artifact-pr-review
+machinery", then "too large for a review page" or "supporting files are not
+allowed alongside a review page") and refused it, set off by nothing more than
+the minifier's names in Preact's code. It also reads `id="data…` anywhere in a
+page as that mark; the build refuses such a page.
 
 Artifact URL: https://claude.ai/artifact/3cvi4ofuaPLg6LfXXf7efX (also in README.md).
 
@@ -457,7 +468,8 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   respelled voice it is; without one the words show at once.
 - Photos: now and then a message carries `"photo": "<id>"` from the people's
   own world (src/content/photos.ts: 25 Roman paintings and things from The Met,
-  CC0, embedded as small WebP by scripts/content/photos.py into photo-data.ts;
+  CC0, made small WebP files in src/content/photos by scripts/content/photos.py
+  and published beside the page;
   each with what it shows as the sender sees it, what it really is, and who
   would send it). Not one sent lately; a tap opens it with its credit.
 - Claude is asked only on the learner's actions: Send (one answer per burst:

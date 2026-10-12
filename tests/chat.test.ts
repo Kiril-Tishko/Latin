@@ -374,8 +374,11 @@ describe("mistakes taken literally, voice messages and photos", () => {
 
   it("has every photo in the build, credited, sent by people who exist", () => {
     expect(PHOTOS.length).toBeGreaterThan(20);
+    // every photo's image is a file beside the page (built from src/content/photos)
+    const files = Object.keys(import.meta.glob("../src/content/photos/*.webp")).map((f) => f.split("/").pop());
     for (const p of PHOTOS) {
-      expect(photoSrc(p.id), p.id).toMatch(/^data:image\/webp;base64,/);
+      expect(photoSrc(p.id), p.id).toBe(`photos/${p.id}.webp`);
+      expect(files, p.id).toContain(`${p.id}.webp`);
       expect(p.credit).toContain("CC0");
       if (p.who !== "any") for (const w of p.who) expect(PERSON_BY_ID.has(w), `${p.id}: ${w}`).toBe(true);
     }

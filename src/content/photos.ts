@@ -1,10 +1,11 @@
 // Photos the people of the messenger send now and then. They live around
 // AD 100, so their "photos" are what their world looked like in its own art:
 // wall paintings, mosaics and the things they used, from museums that share
-// them freely (The Met's Open Access, CC0, and public-domain photographs of
-// public-domain art). Claude picks one when it fits; the page shows it in the
-// chat with its caption, and a tap opens it with what it is and where it is from.
-import { PHOTO_DATA } from "./photo-data";
+// them freely (The Met's Open Access, CC0). Claude picks one when it fits; the
+// page shows it in the chat with its caption, and a tap opens it with what it is
+// and where it is from. The images are files published beside the page
+// (src/content/photos/*.webp, made by scripts/content/photos.py; the build
+// copies them to dist/photos), so the page stays small.
 
 export interface Photo {
   id: string;
@@ -50,8 +51,8 @@ export const PHOTOS: Photo[] = [
 
 export const PHOTO_BY_ID = new Map(PHOTOS.map((p) => [p.id, p]));
 
-/** The image of a photo (a data URI), if it is in the build. */
-export const photoSrc = (id: string): string | undefined => PHOTO_DATA[id];
+/** Where a photo's image is: a small WebP published next to the page (photos/<id>.webp). */
+export const photoSrc = (id: string): string | undefined => (PHOTO_BY_ID.has(id) ? `photos/${id}.webp` : undefined);
 
 /** The photos someone could send: their own, then those anyone could, never one sent lately. */
 export function photosFor(who: string, stranger: boolean, recent: string[] = []): Photo[] {

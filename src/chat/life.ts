@@ -149,6 +149,20 @@ export const ODD_HAPPENINGS: Happening[] = [
   { en: "a fortune teller told them they will be famous", mood: "grandiose", hours: [12, 48] },
 ];
 
+/** What real lives also bring, rarely: grief, illness, debt, heartbreak, trouble, a wedding. Long, and moods follow for days. */
+export const HEAVY_HAPPENINGS: Happening[] = [
+  { en: "a relative died; the funeral is in a few days", mood: "grieving", hours: [72, 240] },
+  { en: "fell seriously ill with a fever", mood: "miserable", hours: [48, 168] },
+  { en: "lost their job", mood: "desperate", hours: [72, 240] },
+  { en: "is deep in debt to a moneylender who has started to threaten them", mood: "anxious", hours: [72, 336] },
+  { en: "a long love affair ended badly", mood: "heartbroken", hours: [48, 240] },
+  { en: "is to be married soon, not entirely by choice", mood: "nervous", hours: [168, 504] },
+  { en: "their home was robbed", mood: "furious", hours: [24, 96] },
+  { en: "a fire destroyed part of their street", mood: "shaken", hours: [48, 168] },
+  { en: "has been accused in court of something they did not do", mood: "scared", hours: [96, 336] },
+  { en: "fell head over heels for someone utterly unsuitable", mood: "infatuated", hours: [48, 240] },
+];
+
 /** Moods anyone can fall into now and then, whatever their nature. */
 const ANY_MOODS = ["cheerful", "bored", "tired", "curious", "nostalgic", "silly", "sad", "excited", "grumpy", "dreamy", "restless"];
 
@@ -185,7 +199,7 @@ export function lifeNow(spec: LifeSpec, prev: Life | undefined, now: number, r: 
   if (!eventGoes && r() < 0.55) {
     // their own kind of happening most of the time; sometimes an everyday one; now and then an odd one
     const x = r();
-    const pool = x < 0.72 && spec.happenings.length ? spec.happenings : x < 0.9 ? COMMON_HAPPENINGS : ODD_HAPPENINGS;
+    const pool = x < 0.66 && spec.happenings.length ? spec.happenings : x < 0.84 ? COMMON_HAPPENINGS : x < 0.94 ? ODD_HAPPENINGS : HEAVY_HAPPENINGS;
     const fresh = pool.filter((h) => !recent.includes(h.en));
     const h = pick(r, fresh.length ? fresh : pool);
     event = h.en;

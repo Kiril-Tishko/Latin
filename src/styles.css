@@ -1955,3 +1955,10 @@ main.page.msgr-page { padding-block: 14px; }
 }
 .acta-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .acta-top .speak { margin: -4px -8px 0 0; }
+
+/* Lines of the messenger itself ("Lūcius left the group"), deleted messages, a status line */
+.chat-sys { display: flex; justify-content: center; margin: 10px 0; }
+.chat-sys > span { font-family: var(--f-ui); font-size: 0.82rem; color: var(--ink-2); background: color-mix(in srgb, var(--m-line) 45%, transparent); border-radius: 999px; padding: 3px 12px; text-align: center; }
+.bubble.deleted { cursor: default; opacity: 0.75; }
+.bubble.deleted .bubble-text { color: var(--ink-2); font-size: 0.95rem; }
+.profile-status { font-family: var(--f-text); font-style: italic; color: var(--ink-2); }

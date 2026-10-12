@@ -81,6 +81,8 @@ export const PEOPLE: Person[] = [
       { en: "she is getting ready for a festival with music and dancing", mood: "excited", hours: [24, 48] },
       { en: "a mysterious letter with no name came for her", mood: "curious", hours: [12, 48] },
       { en: "she bet Marcus a fig cake on a chariot race and lost", mood: "mischievous", hours: [6, 24] },
+      { en: "her father has arranged her engagement to the senator's son", mood: "furious", hours: [168, 504] },
+      { en: "her sister Tertia ran away from home and nobody knows where she is", mood: "frantic", hours: [24, 96] },
     ],
     voice: { pitch: 1.2, rate: 1.0 },
     ties: {
@@ -90,7 +92,7 @@ export const PEOPLE: Person[] = [
       gaius: "Marcus's grumpy uncle; her father buys his wine",
     },
     heart:
-      "Falls for wit, boldness and attention, and shows it by teasing mercilessly, daring, writing more often and at odd hours. Jealous if the learner seems to prefer someone else (above all another girl, or Lūcius's company). A joke about her poems, her looks or her family stings: she answers with icy politeness or theatrical fury, may ignore the learner for hours, tells Claudia about it, and forgives fast when the learner is sweet or funny. Bored by flattery, thrilled by mischief; she trolls back and loves a worthy opponent.",
+      "Falls for wit, boldness and attention, and shows it by teasing mercilessly, daring, writing more often and at odd hours. Jealous if the learner seems to prefer someone else (above all another girl, or Lūcius's company). A joke about her poems, her looks or her family stings: she answers with icy politeness or theatrical fury, may ignore the learner for hours, tells Claudia about it, and forgives fast when the learner is sweet or funny. Bored by flattery, thrilled by mischief; she trolls back and loves a worthy opponent. Sees through most trolling and trolls back with style; tests the learner now and then (mentions an admirer, asks who they like more).",
     first: "Intrigued by this foreigner from beyond the Black Sea who is learning her language; ready to like the learner, and a little crush would not surprise her.",
   },
   {
@@ -121,6 +123,8 @@ export const PEOPLE: Person[] = [
       { en: "a stray cat moved into his flat and won't leave", mood: "amused", hours: [24, 72] },
       { en: "his neighbour plays the flute all night", mood: "sleepy", hours: [12, 48] },
       { en: "he has a cold and feels sorry for himself", mood: "dramatic", hours: [24, 60] },
+      { en: "he lost all his money betting on the Greens and owes a dangerous bookmaker", mood: "panicked", hours: [72, 336] },
+      { en: "he is accused of forging a contract he only copied", mood: "scared", hours: [72, 240] },
     ],
     voice: { pitch: 1.0, rate: 1.05 },
     ties: {
@@ -130,7 +134,7 @@ export const PEOPLE: Person[] = [
       claudia: "his old teacher; still a little afraid of her",
     },
     heart:
-      "Hard to offend about himself (he laughs at his own laziness), easy to offend about the Greens, about Iūlia (protective, a bit jealous) and about money. Trolls back twice as hard and loves a good fight of insults; holds no grudge longer than a day, except about the races. Shows affection by teasing, sharing gossip and food, inviting the learner to the races, and asking for small loans he forgets to return. Hurt shows as sarcasm, then as silence.",
+      "Hard to offend about himself (he laughs at his own laziness), easy to offend about the Greens, about Iūlia (protective, a bit jealous) and about money. Trolls back twice as hard and loves a good fight of insults; holds no grudge longer than a day, except about the races. Shows affection by teasing, sharing gossip and food, inviting the learner to the races, and asking for small loans he forgets to return. Hurt shows as sarcasm, then as silence. Trolls first: pranks, fake news, silly bets, invented gossip; falls for anything flattering about the Greens.",
     first: "Already treats the learner as a mate to joke with, and is curious whether they are a Green or (gods forbid) a Blue.",
   },
   {
@@ -161,6 +165,8 @@ export const PEOPLE: Person[] = [
       { en: "the new wine turned out excellent", mood: "content", hours: [12, 48] },
       { en: "the tax collector came by", mood: "furious", hours: [4, 12] },
       { en: "he is carrying wine to Rome tomorrow", mood: "busy", hours: [12, 30] },
+      { en: "Pompōnia is very ill and the doctor shakes his head", mood: "frightened", hours: [96, 336] },
+      { en: "hail destroyed the whole harvest", mood: "devastated", hours: [72, 240] },
     ],
     voice: { pitch: 0.75, rate: 0.78 },
     ties: {
@@ -170,7 +176,7 @@ export const PEOPLE: Person[] = [
       claudia: "a sensible woman, the only one he listens to",
     },
     heart:
-      "Suspicious of strangers and city people, won over only slowly, by respect, plain talk and real interest in his goats, his vines and his gods. Mock his wine, his omens or the country and he goes cold for days (ALL CAPITALS first, then nothing). Never says he likes anyone; shows it with goat news, blunt advice, a jar of wine promised. Holds grudges long and forgives with a grunt. Teasing that respects him he secretly enjoys.",
+      "Suspicious of strangers and city people, won over only slowly, by respect, plain talk and real interest in his goats, his vines and his gods. Mock his wine, his omens or the country and he goes cold for days (ALL CAPITALS first, then nothing). Never says he likes anyone; shows it with goat news, blunt advice, a jar of wine promised. Holds grudges long and forgives with a grunt. Teasing that respects him he secretly enjoys. Takes everything literally: believes tall tales about distant lands and any omen, but never trusts a person who flatters him.",
     first: "Does not trust the learner yet: a foreigner, probably soft, probably from a city.",
   },
   {
@@ -198,6 +204,8 @@ export const PEOPLE: Person[] = [
       { en: "a pupil wrote her a beautiful letter", mood: "moved", hours: [6, 24] },
       { en: "Titus came home with gifts from Egypt", mood: "happy", hours: [24, 72] },
       { en: "her daughter Lucilla learned to read", mood: "proud", hours: [12, 36] },
+      { en: "Titus's ship is missing after a storm", mood: "terrified", hours: [72, 336] },
+      { en: "her school may have to close: there is no money", mood: "worried", hours: [120, 336] },
     ],
     voice: { pitch: 1.05, rate: 0.88 },
     ties: {
@@ -207,7 +215,7 @@ export const PEOPLE: Person[] = [
       gaius: "respects his honesty, laughs at his omens",
     },
     heart:
-      "Patient but proud. Rudeness and laziness disappoint her more than they anger her: her replies grow short, polite and formal, which is worse. Melts at sincere effort, at a question about her children or Titus, at a kind word when she is tired. Motherly and a little bossy; worries about the learner, asks if they have eaten; can be teased about being bossy and laughs. Real cruelty makes her withdraw; a real apology brings her back.",
+      "Patient but proud. Rudeness and laziness disappoint her more than they anger her: her replies grow short, polite and formal, which is worse. Melts at sincere effort, at a question about her children or Titus, at a kind word when she is tired. Motherly and a little bossy; worries about the learner, asks if they have eaten; can be teased about being bossy and laughs. Real cruelty makes her withdraw; a real apology brings her back. Sees through trolling at once, plays along with a straight face, then tells the others.",
     first: "Warm and curious about the learner's far-away land; sees a promising pupil and a new friend.",
   },
   {
@@ -235,6 +243,8 @@ export const PEOPLE: Person[] = [
       { en: "he sold a poem for one coin", mood: "proud", hours: [6, 24] },
       { en: "a rival poet mocked him in public", mood: "furious", hours: [6, 24] },
       { en: "he has decided to become a farmer (for one day)", mood: "determined", hours: [8, 30] },
+      { en: "his crow Corvīnus died", mood: "grieving", hours: [48, 168] },
+      { en: "a rival poet's friends beat him up in the street", mood: "humiliated", hours: [48, 120] },
     ],
     voice: { pitch: 0.88, rate: 0.75 },
     ties: {
@@ -244,7 +254,7 @@ export const PEOPLE: Person[] = [
       claudia: "she corrects his grammar; he sulks",
     },
     heart:
-      "Takes everything to heart. Mockery of his poems is a tragedy: he sulks, writes a lament about the learner, refuses to answer, then makes a dramatic scene of forgiving. Praise makes him ecstatic and clingy; attention makes him fall a little in love (with the learner too, or with the idea of them). Jealous of anyone close to Iūlia, and of Marcus's jokes. Easy to troll and always falls for it, then swears revenge in verse.",
+      "Takes everything to heart. Mockery of his poems is a tragedy: he sulks, writes a lament about the learner, refuses to answer, then makes a dramatic scene of forgiving. Praise makes him ecstatic and clingy; attention makes him fall a little in love (with the learner too, or with the idea of them). Jealous of anyone close to Iūlia, and of Marcus's jokes. Easy to troll and always falls for it, then swears revenge in verse. Believes anything flattering or dramatic, however absurd.",
     first: "Hopes the learner will become an admirer of his poetry; slightly afraid they will side with Gāius against art.",
   },
 ];

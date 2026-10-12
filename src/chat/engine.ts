@@ -10,10 +10,13 @@ import { Lexicon } from "../latin/analyze";
 import { checkAnswer, literalReading } from "../latin/facts";
 import { PHOTO_BY_ID, photoSrc } from "../content/photos";
 import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from "./life";
-import { Meta, MOMENTS, Msg, msgId, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
+import { awayNow, isBlocked, Meta, MOMENTS, Msg, msgId, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
+import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, strangerPrompt } from "./prompts";
 import { rollStranger, Stranger } from "./strangers";
 import { vetMessage, withMacrons } from "./vet";
+
+const plainWord = (w: string) => w.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 /** Asks Claude for JSON (the page's sample.json, or a test's stand-in). */
 export type AskJson = <T>(prompt: string, opts: Record<string, unknown>) => Promise<T>;
@@ -61,7 +64,29 @@ interface Draft {
   voice?: boolean;
   photo?: string;
   re?: string;
+  /** New words in a strong moment, with their meanings. */
+  gloss?: Record<string, string>;
+  /** Taken back this many seconds after sending. */
+  unsend?: number;
 }
+
+/** A message's new words and their meanings, as Claude gave them (a few, short). */
+export function glossOf(x: unknown): Record<string, string> | undefined {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return undefined;
+  const out = Object.fromEntries(
+    Object.entries(x as Record<string, unknown>)
+      .map(([w, m]) => [clean(w).slice(0, 30), clean(m).slice(0, 80)])
+      .filter(([w, m]) => /^\p{L}+$/u.test(w) && m)
+      .slice(0, 3),
+  );
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** A message taken back after this many seconds (a slip, regret), within reason. */
+const unsendOf = (x: unknown) => {
+  const n = Number(x);
+  return Number.isFinite(n) && n > 0 ? Math.max(2, Math.min(600, n)) : undefined;
+};
 
 /** A voice message and a photo, as Claude marked them (a photo only if it exists; a caption may be empty). */
 function extras(m: { voice?: unknown; photo?: unknown }): { voice?: true; photo?: string } {
@@ -70,7 +95,10 @@ function extras(m: { voice?: unknown; photo?: unknown }): { voice?: true; photo?
 }
 
 /** The message fields of a vetted draft: its Latin and English, a voice message or photo, the words that slipped. */
-const fields = (d: Draft & { newWords?: string[] }) => ({ la: d.la, en: d.en, ...(d.voice ? { voice: true } : {}), ...(d.photo ? { photo: d.photo } : {}), ...(d.re ? { re: d.re } : {}), ...(d.newWords ? { newWords: d.newWords } : {}) });
+const fields = (d: Draft & { newWords?: string[] }) => ({ la: d.la, en: d.en, ...(d.voice ? { voice: true } : {}), ...(d.photo ? { photo: d.photo } : {}), ...(d.re ? { re: d.re } : {}), ...(d.newWords ? { newWords: d.newWords } : {}), ...(d.gloss ? { gloss: d.gloss } : {}) });
+
+/** When a message sent at `at` is taken back, if it is. */
+const deletedAtOf = (d: Draft, at: number) => (d.unsend ? { deletedAt: at + d.unsend * 1000 } : {});
 
 /** A reaction as Claude wrote it, made one of REACTIONS ("❤" is "❤️"), or null. */
 export function reactionEmoji(x: unknown): string | null {
@@ -89,23 +117,27 @@ export const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+
  */
 export async function vetAll<T extends Draft>(drafts: T[], ctx: PromptCtx, deps: Deps): Promise<(T & { newWords?: string[] })[]> {
   const out: (T & { newWords?: string[] })[] = drafts.map((d) => ({ ...d, la: withMacrons(clean(d.la), deps.lex), en: clean(d.en) }));
-  const bad = out.map((d, i) => ({ i, v: vetMessage(d.la, deps.lex, ctx.seen) })).filter((x) => !x.v.ok && out[x.i].la);
-  if (!bad.length) return out;
-  try {
-    const fixed = await deps.ask<{ messages?: { la?: string; en?: string }[] }>(
-      repairPrompt(bad.map((b) => ({ la: out[b.i].la, en: out[b.i].en, issues: b.v.issues })), ctx),
-      { ...deps.opts, effort: "low", cache: false },
-    );
-    bad.forEach((b, k) => {
-      const f = fixed?.messages?.[k];
-      if (!f?.la) return;
-      const la = withMacrons(clean(f.la), deps.lex);
-      const v = vetMessage(la, deps.lex, ctx.seen);
-      // take the rewrite when it is better than the first try
-      if (v.ok || v.issues.length < b.v.issues.length) out[b.i] = { ...out[b.i], la, en: clean(f.en) || out[b.i].en };
-    });
-  } catch {
-    /* no rewrite: keep what there is */
+  // one or two new words a person used in a strong moment, each with its meaning, are theirs to use
+  const glossed = (d: T, v: ReturnType<typeof vetMessage>) =>
+    !!d.gloss && v.unknown.length <= 2 && v.issues.length === 1 && v.unknown.every((w) => Object.keys(d.gloss!).some((g) => plainWord(g) === plainWord(w)));
+  const bad = out.map((d, i) => ({ i, v: vetMessage(d.la, deps.lex, ctx.seen) })).filter((x) => !x.v.ok && out[x.i].la && !glossed(out[x.i], x.v));
+  if (bad.length) {
+    try {
+      const fixed = await deps.ask<{ messages?: { la?: string; en?: string }[] }>(
+        repairPrompt(bad.map((b) => ({ la: out[b.i].la, en: out[b.i].en, issues: b.v.issues })), ctx),
+        { ...deps.opts, effort: "low", cache: false },
+      );
+      bad.forEach((b, k) => {
+        const f = fixed?.messages?.[k];
+        if (!f?.la) return;
+        const la = withMacrons(clean(f.la), deps.lex);
+        const v = vetMessage(la, deps.lex, ctx.seen);
+        // take the rewrite when it is better than the first try
+        if (v.ok || v.issues.length < b.v.issues.length) out[b.i] = { ...out[b.i], la, en: clean(f.en) || out[b.i].en };
+      });
+    } catch {
+      /* no rewrite: keep what there is */
+    }
   }
   for (const d of out) {
     const v = vetMessage(d.la, deps.lex, ctx.seen);
@@ -129,6 +161,8 @@ export interface Reply {
   /** How the conversation moved each person: feelings about the learner, and moods. */
   feelings: Record<string, Feeling>;
   moods: Record<string, string>;
+  /** What they did besides writing (see world.ts). */
+  deeds: Deeds;
   /** When the learner's messages were read (one-to-one chats). */
   readAt: number;
   /** Reactions to the learner's last message, each shown a moment after its person reads it. */
@@ -138,8 +172,15 @@ export interface Reply {
 export type Timing = ReturnType<typeof timingFor>;
 
 /** When the people of a thread read what the learner wrote now: the first reader of the group, or the one person. */
-export function timingFor(members: Who[], now: number, r: Rand = Math.random) {
-  const all = members.map((w) => ({ w, t: replyTiming(w.day, w.tz, now, r) }));
+export function timingFor(members: Who[], now: number, r: Rand = Math.random, meta?: Meta) {
+  const all = members.map((w) => {
+    const t = replyTiming(w.day, w.tz, now, r);
+    // away (travelling, vanished): they read it much later, at the latest when they are back
+    const away = meta ? awayNow(meta, w.id, now) : undefined;
+    if (!away) return { w, t };
+    const readAt = Math.max(t.readAt, Math.min(away.until + 30 * 60_000, now + (2 + r() * 10) * 3600_000));
+    return { w, t: { readAt, startAt: readAt + 20_000 + r() * 120_000, why: `they are away (${away.where}) and read it much later` } };
+  });
   all.sort((a, b) => a.t.readAt - b.t.readAt);
   return { first: all[0], byId: new Map(all.map((x) => [x.w.id, x.t])) };
 }
@@ -148,9 +189,9 @@ export function timingFor(members: Who[], now: number, r: Rand = Math.random) {
 export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps, timing?: Timing): Promise<Reply> {
   const r = deps.r ?? Math.random;
   const members = membersOf(thread.id, meta);
-  if (!members.length) return { messages: [], remember: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {} };
+  if (!members.length) return { messages: [], remember: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {}, deeds: noDeeds() };
   refreshLives(meta, members.map((w) => w.id), ctx.now, r);
-  const { first, byId } = timing ?? timingFor(members, ctx.now, r);
+  const { first, byId } = timing ?? timingFor(members, ctx.now, r, meta);
   // the learner's last messages, read word by word: a mistake is taken literally
   const burst: string[] = [];
   for (const m of [...thread.messages].reverse()) {
@@ -160,13 +201,16 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   const literal = burst.length ? literalReading(withoutEmoji(burst.join(" ")), deps.lex) : "";
   const prompt = replyPrompt(thread, meta, ctx, { at: first.t.startAt, why: first.t.why }, literal);
   const raw = await deps.ask<{
-    messages?: { from?: string; la?: string; en?: string; gap?: number; re?: unknown; voice?: unknown; photo?: unknown }[];
+    messages?: { from?: string; la?: string; en?: string; gap?: number; re?: unknown; voice?: unknown; photo?: unknown; gloss?: unknown; unsend?: unknown }[];
     react?: { from?: string; emoji?: string }[];
     remember?: string[];
     feel?: Record<string, unknown>;
     moment?: Record<string, unknown>;
     mood?: Record<string, unknown>;
     silent?: Record<string, unknown>;
+    acts?: unknown;
+    drama?: unknown;
+    newPerson?: unknown;
   }>(prompt, { ...deps.opts, cache: false });
   const ids = new Set(members.map((w) => w.id));
   const fromOf = (x: unknown) => (ids.has(String(x)) ? String(x) : members.length === 1 ? members[0].id : "");
@@ -177,7 +221,7 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     return Number.isInteger(i) && i >= 1 && i < shown.length ? shown[i - 1].id : undefined;
   };
   const drafts = (raw?.messages ?? [])
-    .map((m) => ({ from: fromOf(m.from), la: clean(m.la), en: clean(m.en), gap: Number(m.gap) || 2, re: reOf(m.re), ...extras(m) }))
+    .map((m) => ({ from: fromOf(m.from), la: clean(m.la), en: clean(m.en), gap: Number(m.gap) || 2, re: reOf(m.re), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), ...extras(m) }))
     .filter((m) => m.from && (m.la || m.photo))
     .slice(0, 5);
   const vetted = await vetAll(drafts, ctx, deps);
@@ -186,7 +230,7 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   const messages: Msg[] = vetted.map((d) => {
     const own = byId.get(d.from!);
     t = Math.max(t, own?.startAt ?? t) + Math.min(40, Math.max(0, d.gap)) * 1000 + typingTime(d.la);
-    return { id: msgId(), from: d.from!, at: Math.round(t), src: "reply", ...fields(d) };
+    return { id: msgId(), from: d.from!, at: Math.round(t), src: "reply", ...fields(d), ...deletedAtOf(d, Math.round(t)) };
   });
   const remember = (raw?.remember ?? []).map(clean).filter(Boolean).slice(0, 2);
   // reactions to the learner's last message: one per person, a moment after they read it
@@ -198,7 +242,9 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     if (!target || !from || !e || reactions.some((y) => y.from === from)) continue;
     reactions.push({ msg: target.id, from, e, at: Math.round((byId.get(from)?.readAt ?? first.t.readAt) + 1500 + r() * 4000) });
   }
-  return { messages, remember, readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids) };
+  // what they did besides writing: blocking, leaving, renaming, travelling, new people, storylines
+  const deeds = deedsOf(raw ?? {}, ids, allPeople(meta), shown);
+  return { messages, remember, readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids), deeds };
 }
 
 /** The feelings, moments, moods and silences Claude reported, for the people of the thread only. */
@@ -255,20 +301,30 @@ export interface Own {
 }
 
 /** What the people write on their own in the next hours (written now, each shown at its moment). */
-export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, deps: Deps, hours = 3): Promise<Own[]> {
+export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, deps: Deps, hours = 3): Promise<{ messages: Own[]; deeds: Deeds }> {
   const r = deps.r ?? Math.random;
   const live = threads.filter((t) => !t.gone);
   refreshLives(meta, [...new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)))], ctx.now, r);
-  const raw = await deps.ask<{ messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown }[]; feel?: Record<string, unknown>; moment?: Record<string, unknown> }>(
+  const raw = await deps.ask<{
+    messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown; gloss?: unknown; unsend?: unknown }[];
+    feel?: Record<string, unknown>;
+    moment?: Record<string, unknown>;
+    acts?: unknown;
+    drama?: unknown;
+    newPerson?: unknown;
+  }>(
     ownPrompt(live, meta, ctx, hours),
     { ...deps.opts, cache: false },
   );
   // feelings move while the learner is away too (missing them, cooling off)
   const everyone = new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)));
   applyFeelings(meta, feelingsOf({ feel: raw?.feel, moment: raw?.moment }, everyone), ctx.now);
+  // what they do besides writing; someone unblocking the learner now may write to them again
+  const deeds = deedsOf(raw ?? {}, allPeople(meta), allPeople(meta));
+  const unblocking = new Set(deeds.acts.filter((a) => a.do === "unblock").map((a) => a.who));
   const byChat = new Map(live.map((t) => [t.id, t]));
   const drafts = (raw?.messages ?? [])
-    .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)), ...extras(m) }))
+    .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), ...extras(m) }))
     .filter((m) => {
       const t = byChat.get(m.chat);
       if (!t || !(m.la || m.photo)) return false;
@@ -278,18 +334,21 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
       if (!member) return false;
       // the silent treatment: not a word to the learner in private (in the group they may still talk)
       if (t.kind !== "group" && silentNow(meta.bonds?.[member.id], ctx.now + m.in * 60000)) return false;
+      // blocked: nothing reaches the learner in private, unless they unblock them now
+      if (t.kind !== "group" && isBlocked(meta, member.id) && !unblocking.has(member.id)) return false;
       return statusAt(member.day, member.tz, ctx.now + m.in * 60000).state !== "asleep";
     })
     .slice(0, 10);
   const vetted = await vetAll(drafts, ctx, deps);
   const last = new Map<string, number>();
-  return vetted.map((d) => {
+  const messages = vetted.map((d) => {
     // a burst stays in order: each message after the one before
     let at = ctx.now + d.in * 60000 + Math.round(r() * 20000);
     at = Math.max(at, (last.get(d.chat) ?? 0) + typingTime(d.la));
     last.set(d.chat, at);
-    return { chat: d.chat, msg: { id: msgId(), from: d.from, at, src: "own" as const, ...fields(d) } };
+    return { chat: d.chat, msg: { id: msgId(), from: d.from, at, src: "own" as const, ...fields(d), ...deletedAtOf(d, at) } };
   });
+  return { messages, deeds };
 }
 
 // ------------------------------------------------------------ strangers

@@ -10,9 +10,9 @@ You are the phone side of the messenger (Nūntiī) of "Tabula Latina", a Latin t
    - If it prints NO BRIEF, the learner has not opened the messenger yet: finish with exactly "Open Nūntiī once, and your Roman friends will start writing to you." and stop.
    - If the learner was in the messenger less than 20 minutes ago, they are chatting right now: write nothing and go to step 5.
 
-3. Decide, as life would, whether anyone writes now. Often nobody does. Usually one person writes one to three short messages; now and then two or three friends talk in the group (chat id "amici"). Someone writes only when awake (not "asleep") and with a reason: their mood and what is going on for them (moods can be extreme, and the hour and what others said shift them), news, a festival or a birthday (theirs or a friend's), the news from Rome, a question, a follow-up to the last conversation, missing the learner, the hour (good morning, good night). Each person's sheet also says how they feel about the learner now and what has happened between them: let it drive who writes and how, as with real people (someone who misses or fancies the learner writes; someone hurt writes something pointed, or nothing; someone giving the silent treatment does not write to the learner in private, though they may complain about them in the group). The friends know each other and hear each other's news; strangers mostly know one of the friends (their sheets say how). Do not write into a chat that already has unseen messages from that person, unless hours have passed. Two chats at most. The brief (/tmp/nuntii/data/users/me/messenger/brief/now.json) has who everyone is (people[].sheet), the learner (learner) and the language rules (language).
+3. Decide, as life would, whether anyone writes now. Often nobody does. Usually one person writes one to three short messages; now and then two or three friends talk in the group (chat id "amici"), and the storylines among them (state prints them, with the group's name and members now) take their own turns: no script, as in real life. Someone writes only when awake (not "asleep") and with a reason: their mood and what is going on for them (moods can be extreme, and the hour and what others said shift them), news, a festival or a birthday (theirs or a friend's), the news from Rome, a question, a follow-up to the last conversation, missing the learner, the hour (good morning, good night). Each person's sheet also says how they feel about the learner now and what has happened between them: let it drive who writes and how, as with real people (someone who misses or fancies the learner writes; someone hurt writes something pointed, or nothing; someone giving the silent treatment, or who has blocked the learner, does not write to the learner in private, though they may complain about them in the group; someone away writes rarely). The friends know each other and hear each other's news; strangers mostly know one of the friends (their sheets say how). Do not write into a chat that already has unseen messages from that person, unless hours have passed. Two chats at most. The brief (/tmp/nuntii/data/users/me/messenger/brief/now.json) has who everyone is (people[].sheet), the learner (learner) and the language rules (language).
 
-4. Write the messages in character, following the brief's language exactly: ONLY the words and forms it lists (names a festival or the news brings are in the allowed forms too), with long marks. Real texting: short, emoji welcome (also the Roman ones the language lists, written as codes like :lupa:); real people with moods, pride and opinions, warm or cold, flirty, sulky or rude as they feel (anything sexual stays off the page); never correct the learner and never mention lessons, rules, AI or phones. Now and then (about one message in eight) a message is a short voice message: add "voice": true (its "la" is what they say, 3-14 words). Rarely, someone sends a photo from the brief's list that is theirs (or "any"): add "photo": "<id>", with a short caption in "la" (or only an emoji). Check them all with `python3 /tmp/nuntii.py check /tmp/nuntii "<message 1>" "<message 2>"` and rewrite any that is not OK until all are. Then save each as its own new document in collection "data/users/me/messenger/inbox" (ArtifactData set; doc_id "r" + the time in base 36 + three random letters) with data {"chat": <chat id>, "from": <person id>, "la": <the Latin>, "en": <English translation>, "at": <now in ms (date +%s%3N), a few seconds apart within a burst>} and, when it is one, "voice": true or "photo": <photo id>. The page moves them into the chats. Also write the same list as JSON to /tmp/nuntii/new.json.
+4. Write the messages in character, following the brief's language exactly: ONLY the words and forms it lists (names a festival or the news brings are in the allowed forms too), with long marks. Real texting: short, emoji welcome (also the Roman ones the language lists, written as codes like :lupa:); real people with moods, pride and opinions, warm or cold, flirty, sulky or rude as they feel (adult themes as in a Roman comedy; anything sexual stays implied); in a strong moment a message may carry one or two other simple Latin words, given with their meanings in "gloss" (the check flags them; everything else must be OK); never correct the learner and never mention lessons, rules, AI or phones. Now and then (about one message in eight) a message is a short voice message: add "voice": true (its "la" is what they say, 3-14 words). Rarely, someone sends a photo from the brief's list that is theirs (or "any"): add "photo": "<id>", with a short caption in "la" (or only an emoji). Check them all with `python3 /tmp/nuntii.py check /tmp/nuntii "<message 1>" "<message 2>"` and rewrite any that is not OK until all are. Then save each as its own new document in collection "data/users/me/messenger/inbox" (ArtifactData set; doc_id "r" + the time in base 36 + three random letters) with data {"chat": <chat id>, "from": <person id>, "la": <the Latin>, "en": <English translation>, "at": <now in ms (date +%s%3N), a few seconds apart within a burst>} and, when it is one, "voice": true or "photo": <photo id>, and "gloss": {<new word>: <meaning>} for new words. The page moves them into the chats. Also write the same list as JSON to /tmp/nuntii/new.json.
 
 5. Run `python3 /tmp/nuntii.py notify /tmp/nuntii /tmp/nuntii/new.json` (without the last argument if you wrote nothing). Your final message is exactly the one line it prints, nothing else: it becomes the phone notification.
 
@@ -80,10 +80,11 @@ def names(brief):
 def unseen(threads, now, extra=()):
     out = []
     for cid, t in threads.items():
-        if t.get("gone"):
+        # the Ācta Diurna is a news board, not a chat
+        if t.get("gone") or cid == "acta":
             continue
         for m in t.get("messages", []):
-            if m.get("from") != "me" and t.get("readAt", 0) < m.get("at", 0) <= now:
+            if m.get("from") not in ("me", "sys") and t.get("readAt", 0) < m.get("at", 0) <= now:
                 out.append(dict(m, chat=cid))
     out += [dict(m) for m in extra]
     return sorted(out, key=lambda m: m.get("at", 0))
@@ -103,6 +104,8 @@ def state(d):
     day = next((c for c in brief.get("calendar", []) if c.get("day") == today), None)
     if day:
         print("\n" + day["text"])
+    if brief.get("world"):
+        print("\n" + brief["world"])
     if brief.get("photos"):
         print("\nPHOTOS (id: what it shows; who may send it):")
         for ph in brief["photos"]:
@@ -111,14 +114,17 @@ def state(d):
     n = names(brief)
     print("\nCHATS (oldest first; times in Rome):")
     for cid, t in sorted(threads.items()):
-        if t.get("gone"):
+        if t.get("gone") or cid == "acta":
             continue
         msgs = [m for m in t.get("messages", []) if m.get("at", 0) <= now]
         waiting = [m for m in t.get("messages", []) if m.get("at", 0) > now]
-        new = [m for m in msgs if m.get("from") != "me" and m.get("at", 0) > t.get("readAt", 0)]
+        new = [m for m in msgs if m.get("from") not in ("me", "sys") and m.get("at", 0) > t.get("readAt", 0)]
         print(f"- chat {cid}: {len(new)} unseen by the learner{'; messages still on their way' if waiting else ''}")
         for m in msgs[-6:]:
-            print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] {n.get(m.get('from'), m.get('from'))}: {m.get('la')}")
+            if m.get("from") == "sys":
+                print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] ({m.get('en')})")
+            else:
+                print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] {n.get(m.get('from'), m.get('from'))}: {m.get('la')}" + (" (deleted)" if m.get("deletedAt") else ""))
 
 
 def plain(w):

@@ -36,6 +36,59 @@ export interface Msg {
   /** A post of the Ācta Diurna: its title, and its kind (the day, the city, the friends, a notice, a wonder); `la` and `en` hold its lines, one per line. */
   title?: { la: string; en: string };
   tag?: string;
+  /** A line of the messenger itself ("Lūcius left the group"), from "sys": `en` is its text, `by` who did it. */
+  by?: string;
+  /** Deleted by its writer at that moment: afterwards it shows as a deleted message. */
+  deletedAt?: number;
+  /** New words a person used in a strong moment, with their meanings (tap one to see it). */
+  gloss?: Record<string, string>;
+}
+
+/** The writer of the messenger's own lines ("Lūcius left the group"). */
+export const SYS = "sys";
+
+/** A storyline among the people (a romance, a feud, a secret, a debt), with who is in it; who knows what is in its text. */
+export interface Drama {
+  id: string;
+  en: string;
+  who: string[];
+  since: number;
+  updatedAt: number;
+}
+
+/**
+ * What the people have done that changes the messenger itself, as real people
+ * do: the group's name and who is in it, who has blocked the learner, who is
+ * away and where, the status lines they set, and the storylines among them.
+ */
+export interface World {
+  group?: { name?: string; members?: string[] };
+  blocked?: Record<string, number>;
+  away?: Record<string, { until: number; where: string }>;
+  status?: Record<string, { text: string; at: number }>;
+  dramas?: Drama[];
+  updatedAt: number;
+}
+
+/** The group's members now (the five friends to begin with; people leave and join). */
+export const groupMembers = (meta: Meta): string[] => meta.world?.group?.members ?? PEOPLE.map((p) => p.id);
+/** The group's name now (Amīcī, until someone renames it). */
+export const groupName = (meta: Meta): string => meta.world?.group?.name || GROUP.name;
+/** Has this person blocked the learner? */
+export const isBlocked = (meta: Meta, id: string) => !!meta.world?.blocked?.[id];
+/** Where someone is away, if they are, now. */
+export const awayNow = (meta: Meta, id: string, now: number) => {
+  const a = meta.world?.away?.[id];
+  return a && a.until > now ? a : undefined;
+};
+
+/** Two copies of the world together: the newer one, with the storylines of both by id (the newer of each). */
+export function mergeWorld(a: World | undefined, b: World | undefined): World | undefined {
+  if (!a || !b) return a ?? b;
+  const [older, newer] = a.updatedAt > b.updatedAt ? [b, a] : [a, b];
+  const dramas = new Map((older.dramas ?? []).map((d) => [d.id, d]));
+  for (const d of newer.dramas ?? []) if (!dramas.has(d.id) || d.updatedAt >= dramas.get(d.id)!.updatedAt) dramas.set(d.id, d);
+  return { ...newer, dramas: [...dramas.values()] };
 }
 
 /** The emoji anyone may react with: the learner's bar, and what the people may choose. */
@@ -126,6 +179,8 @@ export interface Meta {
   strangers: Record<string, Stranger>;
   /** How each person feels about the learner (see Bond). */
   bonds?: Record<string, Bond>;
+  /** What the people did to the messenger itself (see World). */
+  world?: World;
 }
 
 export const newMeta = (): Meta => ({ v: 1, seenAt: 0, plannedAt: 0, life: {}, strangers: {} });
@@ -193,7 +248,7 @@ export function whoOf(id: string, meta: Meta): Who | null {
 
 /** Who is in a thread. */
 export function membersOf(threadId: string, meta: Meta): Who[] {
-  if (threadId === GROUP.id) return PEOPLE.map((p) => ({ ...p, stranger: false }));
+  if (threadId === GROUP.id) return groupMembers(meta).map((id) => whoOf(id, meta)).filter((w): w is Who => !!w);
   const w = whoOf(threadId, meta);
   return w ? [w] : [];
 }
@@ -206,10 +261,15 @@ export const msgId = () => `m${Date.now().toString(36)}${Math.random().toString(
 export const arrived = (t: Thread, now: number) => t.messages.filter((m) => m.at <= now);
 
 /** Messages from the others the learner has not seen yet. */
-export const unreadCount = (t: Thread, now: number) => t.messages.filter((m) => m.from !== "me" && m.at <= now && m.at > t.readAt).length;
+export const unreadCount = (t: Thread, now: number) => t.messages.filter((m) => m.from !== "me" && m.from !== SYS && m.at <= now && m.at > t.readAt).length;
+
+/** Is a message deleted by now? */
+export const deletedNow = (m: Msg, now: number) => !!m.deletedAt && m.deletedAt <= now;
 
 /** A message in one line, for lists and notices: a voice message and a photo say what they are. */
-export function preview(m: Msg): string {
+export function preview(m: Msg, now = Infinity): string {
+  if (m.from === SYS) return m.en ?? "";
+  if (deletedNow(m, now)) return "🚫 Message deleted";
   if (m.title) return m.title.la;
   if (m.voice) return "🎤 Voice message";
   if (m.photo) return `📷 ${m.la || "Photo"}`;

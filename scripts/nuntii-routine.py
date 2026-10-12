@@ -68,10 +68,11 @@ def names(brief):
 def unseen(threads, now, extra=()):
     out = []
     for cid, t in threads.items():
-        if t.get("gone"):
+        # the Ācta Diurna is a news board, not a chat
+        if t.get("gone") or cid == "acta":
             continue
         for m in t.get("messages", []):
-            if m.get("from") != "me" and t.get("readAt", 0) < m.get("at", 0) <= now:
+            if m.get("from") not in ("me", "sys") and t.get("readAt", 0) < m.get("at", 0) <= now:
                 out.append(dict(m, chat=cid))
     out += [dict(m) for m in extra]
     return sorted(out, key=lambda m: m.get("at", 0))
@@ -91,6 +92,8 @@ def state(d):
     day = next((c for c in brief.get("calendar", []) if c.get("day") == today), None)
     if day:
         print("\n" + day["text"])
+    if brief.get("world"):
+        print("\n" + brief["world"])
     if brief.get("photos"):
         print("\nPHOTOS (id: what it shows; who may send it):")
         for ph in brief["photos"]:
@@ -99,14 +102,17 @@ def state(d):
     n = names(brief)
     print("\nCHATS (oldest first; times in Rome):")
     for cid, t in sorted(threads.items()):
-        if t.get("gone"):
+        if t.get("gone") or cid == "acta":
             continue
         msgs = [m for m in t.get("messages", []) if m.get("at", 0) <= now]
         waiting = [m for m in t.get("messages", []) if m.get("at", 0) > now]
-        new = [m for m in msgs if m.get("from") != "me" and m.get("at", 0) > t.get("readAt", 0)]
+        new = [m for m in msgs if m.get("from") not in ("me", "sys") and m.get("at", 0) > t.get("readAt", 0)]
         print(f"- chat {cid}: {len(new)} unseen by the learner{'; messages still on their way' if waiting else ''}")
         for m in msgs[-6:]:
-            print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] {n.get(m.get('from'), m.get('from'))}: {m.get('la')}")
+            if m.get("from") == "sys":
+                print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] ({m.get('en')})")
+            else:
+                print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] {n.get(m.get('from'), m.get('from'))}: {m.get('la')}" + (" (deleted)" if m.get("deletedAt") else ""))
 
 
 def plain(w):

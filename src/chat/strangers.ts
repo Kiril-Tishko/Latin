@@ -41,6 +41,8 @@ export interface Stranger {
   secret?: string;
   /** How they felt about the learner from the start (Claude, when they were made real). */
   first?: string;
+  /** Brought into the story by the people themselves (hidden from the chat list until they write). */
+  invented?: boolean;
   createdAt: number;
 }
 
@@ -226,6 +228,56 @@ export function rollStranger(r: Rand, used: { names: string[]; portraits: string
     happenings: [],
     writesFirst: r() < 0.6,
     ...(link ? { link: { to: link[0], how: link[1] } } : {}),
+    createdAt: now,
+  };
+}
+
+/** Someone the people bring into their lives themselves (a lover, a rival, a cousin), as Claude described them. */
+export interface NewPerson {
+  name: string;
+  g: "m" | "f";
+  age: number;
+  job: string;
+  city: string;
+  about: string;
+  /** Which of the five they are tied to, and how. */
+  link?: { to: string; how: string };
+  /** How they feel about the learner from the start. */
+  first?: string;
+}
+
+/**
+ * A new person in the story: the dice give them a face, a day and a way of
+ * texting; Claude's description gives the rest. Their city keeps its time zone
+ * when it is one of the known cities (else Rome's).
+ */
+export function inventStranger(p: NewPerson, r: Rand, used: { names: string[]; portraits: string[] }, now = Date.now()): Stranger {
+  const s = rollStranger(r, used, now);
+  const age = Math.max(18, Math.min(90, Math.round(p.age) || s.age));
+  // a face of their sex and age group, unused if possible
+  const group = age < 28 ? "young" : age < 56 ? "adult" : "old";
+  const personas = new Set(PEOPLE.map((x) => x.portrait));
+  const pool = PORTRAITS.filter((x) => x.g === p.g && !personas.has(x.id));
+  const fit = pool.filter((x) => x.age === group || (group === "old" && x.age === "adult"));
+  const unused = (fit.length ? fit : pool).filter((x) => !used.portraits.includes(x.id));
+  const portrait = (unused.length ? unused : fit.length ? fit : pool)[Math.floor(r() * (unused.length || fit.length || pool.length))] ?? PORTRAITS[0];
+  const place = CITIES.find((c) => c.city.toLowerCase().startsWith(p.city.toLowerCase().split(/[ ,]/)[0])) ?? { city: p.city, tz: "Europe/Rome" };
+  return {
+    ...s,
+    name: p.name,
+    voc: vocative(p.name),
+    g: p.g,
+    age,
+    portrait: portrait.id,
+    flip: used.portraits.includes(portrait.id),
+    city: p.city || place.city,
+    tz: place.tz,
+    job: p.job || s.job,
+    day: rollDay(r, p.job || s.job),
+    about: p.about,
+    first: p.first,
+    writesFirst: false,
+    ...(p.link && PEOPLE.some((x) => x.id === p.link!.to) ? { link: p.link } : {}),
     createdAt: now,
   };
 }

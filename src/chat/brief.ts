@@ -5,7 +5,8 @@
 import { PEOPLE } from "../content/people";
 import { Life, LifeSpec, lifeNow, Rand } from "./life";
 import { Meta, Who, whoOf } from "./model";
-import { bondBlock, knownPeople, languageBlock, learnerBlock, PromptCtx } from "./prompts";
+import { bondBlock, dramaBlock, knownPeople, languageBlock, learnerBlock, PromptCtx, worldLine } from "./prompts";
+import { groupMembers, groupName } from "./model";
 import { allowedSpellings, calendarEntry, formsFor } from "./words";
 import { calendarBlock, calendarWords, romeDay } from "./calendar";
 import { PHOTOS } from "../content/photos";
@@ -30,6 +31,8 @@ export interface Brief {
   calendar: { day: string; text: string }[];
   /** The photos the people may send: id, what it shows, who would send it ("any": anyone). */
   photos: { id: string; en: string; who: string[] | "any" }[];
+  /** The group (its name and members now) and the storylines among them. */
+  world: string;
 }
 
 /** Their lives for the next hours, rolled ahead at random. */
@@ -58,8 +61,9 @@ function sheet(w: Who, meta: Meta, now: number): string {
     w.heart ? `With people they care about: ${w.heart}` : "",
     w.ties ? `With the others: ${Object.entries(w.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
     knownPeople(w, meta),
-    // how they feel about the learner now, and a silent treatment going on
+    // how they feel about the learner now, and a silent treatment going on; blocked, away, a status line, the group
     bondBlock(w, meta.bonds?.[w.id], now),
+    worldLine(w, meta, now),
   ]
     .filter(Boolean)
     .join("\n");
@@ -95,5 +99,6 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
     lives,
     calendar,
     photos: PHOTOS.map((p) => ({ id: p.id, en: p.en, who: p.who })),
+    world: [`THE GROUP «${groupName(meta)}» (chat id "amici"): ${groupMembers(meta).map((id) => whoOf(id, meta)?.name ?? id).join(", ")} and the learner.`, dramaBlock(meta)].filter(Boolean).join("\n"),
   };
 }

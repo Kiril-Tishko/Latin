@@ -10,9 +10,11 @@ import { useEffect, useState } from "preact/hooks";
 import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
 import { ACTA_ID, actaKey, boardOf, earlierBoards, writeActa } from "../chat/acta";
-import { applyFeelings, checkDraft, Deps, meetStranger, refreshLives, timingFor, writeOwn, writeReply } from "../chat/engine";
+import { applyFeelings, checkDraft, Deps, glossOf, meetStranger, refreshLives, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
+import { applyDeeds, Deeds, welcome } from "../chat/world";
+import { typingTime } from "../chat/life";
 import { deviceZone, hashRand } from "../chat/life";
-import { CoachTurn, membersOf, mergeBonds, mergeReactions, Meta, Msg, msgId, newMeta, newThread, Thread, unreadCount } from "../chat/model";
+import { CoachTurn, isBlocked, membersOf, mergeBonds, mergeReactions, mergeWorld, Meta, Msg, msgId, newMeta, newThread, SYS, Thread, unreadCount } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
 import { allowedWords, calendarEntry, chatEntries, chatLexicon, nameEntry } from "../chat/words";
 import { calendarBlock, calendarWords, romeDay } from "../chat/calendar";
@@ -28,7 +30,8 @@ import { derived, getProgress } from "./store";
 
 const LOCAL_KEY = "tabula-latina-messenger-v1";
 const MAX_MESSAGES = 300;
-const PLAN_EVERY = 3 * 3600_000;
+/** How often opening the messenger lets them do things on their own (the learner asked for much more). */
+const PLAN_EVERY = 3600_000;
 
 interface Local {
   meta: Meta;
@@ -73,10 +76,14 @@ export const getMeta = () => meta;
 export const getThread = (id: string): T => threads[id] ?? newThread(id, kindOf(id));
 const kindOf = (id: string): Thread["kind"] => (id === GROUP.id ? "group" : id === ACTA_ID ? "channel" : PEOPLE.some((p) => p.id === id) ? "dm" : "stranger");
 
-/** Every conversation: the five friends and the group always, strangers until the learner says goodbye. */
-export function allThreads(): T[] {
+/**
+ * Every conversation: the five friends and the group always, strangers until
+ * the learner says goodbye; someone the friends brought into the story shows
+ * once they write (`hidden`: them too, for Claude).
+ */
+export function allThreads(hidden = false): T[] {
   const ids = [...PEOPLE.map((p) => p.id), GROUP.id, ...Object.keys(meta.strangers)];
-  return ids.map(getThread).filter((t) => !t.gone);
+  return ids.map(getThread).filter((t) => !t.gone && (hidden || t.messages.length || !meta.strangers[t.id]?.invented));
 }
 
 export const errorOf = (id: string) => errors.get(id);
@@ -118,6 +125,7 @@ function nextEvent(now: number): number {
       const typing = m.at - typingMs(m) - (m.src === "reply" ? 15_000 : 0);
       if (typing > now) next = Math.min(next, typing);
       if (m.readAt && m.readAt > now) next = Math.min(next, m.readAt);
+      if (m.deletedAt && m.deletedAt > now) next = Math.min(next, m.deletedAt);
       for (const r of Object.values(m.reactions ?? {})) if (r.at > now) next = Math.min(next, r.at);
     }
   return next;
@@ -130,7 +138,7 @@ export const typingMs = (m: Msg) => Math.min(14_000, 1200 + m.la.length * 95);
  * while they type it (an answer: from a little before, as they think it over).
  */
 export function typingIn(t: Thread, now: number): string | null {
-  const next = t.messages.filter((m) => m.from !== "me" && m.at > now).sort((a, b) => a.at - b.at)[0];
+  const next = t.messages.filter((m) => m.from !== "me" && m.from !== SYS && m.at > now).sort((a, b) => a.at - b.at)[0];
   if (!next) return null;
   const lead = typingMs(next) + (next.src === "reply" ? 15_000 : 0);
   // never before they have read what the learner wrote
@@ -148,7 +156,7 @@ function merge(a: T | undefined, b: T): T {
   for (const m of [...a.messages, ...b.messages]) {
     const had = byId.get(m.id);
     // the copy with more news wins (a read time, a check)
-    byId.set(m.id, had ? { ...had, ...m, readAt: m.readAt ?? had.readAt, check: m.check ?? had.check, reactions: mergeReactions(had.reactions, m.reactions) } : m);
+    byId.set(m.id, had ? { ...had, ...m, readAt: m.readAt ?? had.readAt, check: m.check ?? had.check, reactions: mergeReactions(had.reactions, m.reactions), deletedAt: Math.min(m.deletedAt ?? Infinity, had.deletedAt ?? Infinity) || undefined } : m);
   }
   const messages = [...byId.values()].filter((m) => !dropped.includes(m.id)).sort((x, y) => x.at - y.at).slice(-MAX_MESSAGES);
   return {
@@ -242,6 +250,7 @@ function follow(s: NonNullable<typeof store>) {
         plannedAt: Math.max(meta.plannedAt, Number(remote.plannedAt) || 0),
         life: { ...meta.life, ...(remote.life ?? {}) },
         strangers: { ...meta.strangers, ...(remote.strangers ?? {}) },
+        world: mergeWorld(meta.world, remote.world),
         // feelings: for each person the newer, from either copy
         bonds: mergeBonds(meta.bonds, remote.bonds),
       };
@@ -282,7 +291,7 @@ function follow(s: NonNullable<typeof store>) {
 }
 
 function takeFromInbox(d: DocSnap) {
-  const x = d.data() as { chat?: string; from?: string; la?: string; en?: string; at?: number; voice?: unknown; photo?: unknown } | undefined;
+  const x = d.data() as { chat?: string; from?: string; la?: string; en?: string; at?: number; voice?: unknown; photo?: unknown; gloss?: unknown } | undefined;
   const chat = String(x?.chat ?? "");
   // a photo needs no caption; a photo the page does not have is dropped
   const photo = typeof x?.photo === "string" && PHOTO_BY_ID.has(x.photo) ? x.photo : undefined;
@@ -301,8 +310,15 @@ function takeFromInbox(d: DocSnap) {
       src: "routine",
       ...(x.voice === true && !photo ? { voice: true } : {}),
       ...(photo ? { photo } : {}),
+      ...(glossOf(x.gloss) ? { gloss: glossOf(x.gloss) } : {}),
     };
     saveThread(merge(t, { ...t, messages: [...t.messages, msg] }));
+    // writing to the learner in private again: whoever blocked them has unblocked them
+    if (t.kind !== "group" && isBlocked(meta, msg.from)) {
+      const { [msg.from]: _, ...rest } = meta.world?.blocked ?? {};
+      meta = { ...meta, world: { ...meta.world!, blocked: rest, updatedAt: Date.now() } };
+      saveMeta();
+    }
   }
   void store?.inbox.doc(d.id).delete().catch(() => undefined);
 }
@@ -397,6 +413,8 @@ export function reactTo(id: string, msg: string, e: string) {
 /** The people answer what the learner wrote. */
 export async function answer(id: string) {
   pending.delete(id);
+  // blocked: the message never reaches them (one tick stays one tick)
+  if (getThread(id).kind !== "group" && isBlocked(meta, id)) return;
   const ctx = promptCtx();
   const d = await deps();
   if (!ctx) return;
@@ -411,7 +429,7 @@ export async function answer(id: string) {
   const started = getThread(id);
   const lastMine = started.messages.filter((m) => m.from === "me").at(-1)?.id;
   // when they read it is known at once: the ticks turn as soon as they have read it, while the answer is being written
-  const timing = timingFor(membersOf(id, meta), Date.now());
+  const timing = timingFor(membersOf(id, meta), Date.now(), Math.random, meta);
   if (started.kind !== "group") {
     saveThread({ ...started, messages: started.messages.map((m) => (m.from === "me" && !m.readAt ? { ...m, readAt: Math.max(timing.first.t.readAt, m.at + 1000) } : m)) });
   }
@@ -436,6 +454,7 @@ export async function answer(id: string) {
     saveThread({ ...t, messages: [...reacted, ...messages], memory: [...new Set([...t.memory, ...reply.remember])].slice(-24) });
     // what the conversation did to them: feelings about the learner, a moment, a mood, the silent treatment
     applyFeelings(meta, reply, now);
+    await enact(reply.deeds, ctx, d, Math.max(now, (messages.at(-1)?.at ?? now) + 1000));
     meta = { ...meta };
     saveMeta();
     void writeBrief();
@@ -454,6 +473,33 @@ export async function answer(id: string) {
 const readingAt = new Map<string, { at: number; who: string }>();
 export const composing = (id: string) => (writing.has(id) ? readingAt.get(id) ?? null : null);
 
+/**
+ * Makes real what they did besides writing: new people welcomed (their first
+ * words vetted like any message, in private or in the group they join), and
+ * the world changed, with the lines a messenger shows (left, joined, added,
+ * renamed) and the messages they deleted.
+ */
+async function enact(deeds: Deeds, ctx: PromptCtx, d: Deps, at: number) {
+  if (!deeds.acts.length && !deeds.dramas.length && !deeds.newPeople.length) return;
+  const born = welcome(meta, deeds.newPeople, Math.random, at);
+  refreshLives(meta, born.map((s) => s.id), at);
+  const specOf = (name: string) => deeds.newPeople.find((p) => p.name === name)!;
+  const joining = born.filter((s) => specOf(s.name).joinGroup);
+  const all: Record<string, T> = Object.fromEntries(allThreads(true).map((t) => [t.id, t]));
+  for (const t of applyDeeds(meta, all, deeds, at, GROUP.id, joining)) saveThread(t);
+  // their first words: in private, or in the group they have just joined
+  for (const s of born) {
+    const first = specOf(s.name).firstMessages ?? [];
+    if (!first.length) continue;
+    const vetted = await vetAll(first.map((m) => ({ ...m, from: s.id })), ctx, d).catch(() => []);
+    const where = joining.includes(s) ? GROUP.id : s.id;
+    const t = getThread(where);
+    let when = at + 20_000;
+    const msgs: Msg[] = vetted.map((m) => ({ id: msgId(), from: s.id, la: m.la, en: m.en, at: (when += 8000 + typingTime(m.la)), src: "first", ...(m.newWords ? { newWords: m.newWords } : {}) }));
+    if (msgs.length) saveThread({ ...t, messages: [...t.messages, ...msgs] });
+  }
+}
+
 /** Opening the messenger: notes the visit, and lets the people write on their own (at most every three hours). */
 export async function opened() {
   const now = Date.now();
@@ -471,12 +517,15 @@ export async function opened() {
   meta = { ...meta, plannedAt: now };
   saveMeta();
   try {
-    const own = await writeOwn(allThreads(), meta, ctx, d, 3);
-    for (const o of own) {
+    const own = await writeOwn(allThreads(true), meta, ctx, d, 1);
+    for (const o of own.messages) {
       const t = getThread(o.chat);
       saveThread({ ...t, messages: [...t.messages, o.msg] });
     }
+    await enact(own.deeds, ctx, d, now + 60_000);
+    meta = { ...meta };
     saveMeta();
+    void writeBrief();
   } catch {
     /* nobody writes this time */
   }
@@ -633,6 +682,8 @@ let lastBrief = 0;
 
 /** "online", "typing…", "last seen 14:20": how present someone looks. */
 export function presence(who: { id: string; day: import("../content/people").Day; tz: string }, t: Thread, now: number, status: { state: string }): string {
+  // blocked: nothing of them shows any more
+  if (t.kind !== "group" && isBlocked(meta, who.id)) return "last seen a long time ago";
   if (typingIn(t, now) === who.id) return "typing…";
   const lastOwn = t.messages.filter((m) => m.from === who.id && m.at <= now).at(-1)?.at ?? 0;
   if (now - lastOwn < 90_000) return "online";

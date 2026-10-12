@@ -42,7 +42,16 @@ published as a private claude.ai artifact.
   in how people write), reactions like a real person's (grudges, the silent
   treatment, complaining to the others, forgiving), and bonds that can grow
   into anything, "the wilder the better" (crushes, passion, rivalry, hatred);
-  anything sexual stays off the page (Claude does not write it).
+  anything sexual stays off the page (Claude does not write it). Then: a new
+  word or two in a strong moment (glossed), every kind of trolling (they fall
+  for lies, troll first, test the learner, the smart ones see through it), the
+  friends' own dramas with the learner dragged in, anything real life has
+  (illness, debt, grief, a wedding), adult themes within limits, much more
+  texting, blocks, leaving, people appearing, moving or vanishing, strangers
+  fully tied into the friends' lives, the learner still a foreigner far away.
+  Above all: "don't make the rules/prompts very strict… let them have freedom,
+  no scenario/script", things they do that the learner did not expect, and new
+  abilities added over time for the learner to discover.
 
 ## Commands
 
@@ -591,6 +600,29 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   own, feelings drift too (missing the learner, cooling off), and someone
   ignoring the learner writes nothing in private (`writeOwn`). Bonds merge per
   person, the newer winning (`mergeBonds`).
+- Freedom (src/chat/world.ts): the persona text describes people, not a plot
+  ("BE THEM"), and `CAN_DO` lists what they may do, never must; Claude chooses.
+  Besides messages a reply or their own writing may carry `acts` (block /
+  unblock the learner, leave / join / add to the group, rename it, delete a
+  message of theirs, a status line, away for hours to days and back),
+  `drama` (storylines among them with who knows what, kept in
+  `Meta.world.dramas`, six at most) and `newPerson` (someone they bring in: a
+  face and a day from the dice, `inventStranger`; hidden from the chat list
+  until they write; may join the group or write first); a message may carry
+  `gloss` (one or two new words in a strong moment, kept by `vetAll` instead
+  of rewritten, shown on tap) and `unsend` (taken back seconds later:
+  `deletedAt`, shown as a deleted message). `deedsOf` checks what Claude said,
+  `welcome` and `applyDeeds` make it real, `enact` (src/ui/messenger.ts) saves
+  it; the group's name and members are `groupName` / `groupMembers` (the five
+  to begin with). The messenger's own lines ("Lūcius left the group") are
+  messages from `SYS` with their text in `en` and the actor in `by`.
+  Blocked: the learner's messages are not answered (one tick), presence says
+  "last seen a long time ago", and their profile shows nothing they set; a
+  message from them (or an "unblock") ends it. Away: they read much later.
+  Heavy happenings (`HEAVY_HAPPENINGS`, and two of each friend's own) come
+  rarely and last days. Opening the messenger lets them act every hour
+  (`PLAN_EVERY`). Add a new ability by adding it to `ACT_KINDS`, `applyDeeds`,
+  `CAN_DO` and the page.
 - Like a real messenger (the learner asked for it to feel even more like real
   people): a tap on someone's message shows its English and a row of reactions
   (❤️ 😂 👍 😮 😢 🙏) with Reply. A reply carries `re` and shows the message it
@@ -640,7 +672,7 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   `tests/acta.test.ts`; the smoke test reads one on two devices.
 - Phone notifications: a Claude Code routine (trigger "Nūntiī: Roman friends
   write", trig_01QU7TocqJanmp7LVdamvvdJ, a fresh session per run, push
-  notifications, CRON_TZ=Europe/Kyiv at 8:51, 11:51, 14:51, 17:51 and 20:51) follows scripts/messenger-routine.md (with
+  notifications, CRON_TZ=Europe/Kyiv every hour from 7:51 to 23:51, as the learner asked for much more texting) follows scripts/messenger-routine.md (with
   its helper scripts/nuntii-routine.py embedded, as a routine's session may not
   have this repo: who is awake, moods, the chats; the word check; the
   notification line): it reads the brief (src/chat/brief.ts: the learner, the language block, every

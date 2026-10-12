@@ -13,7 +13,7 @@ import { GROUP, PEOPLE } from "../../content/people";
 import { phrasebook } from "../../content/phrases";
 import { PORTRAIT_BY_ID } from "../../content/portraits";
 import { localTime, moodText, statusAt } from "../../chat/life";
-import { arrived, Check, CoachTurn, membersOf, Msg, preview, REACTIONS, reactionsOf, Thread, unreadCount, voiceOf, Who, whoOf } from "../../chat/model";
+import { arrived, awayNow, Check, CoachTurn, deletedNow, groupName, isBlocked, membersOf, Msg, preview, REACTIONS, reactionsOf, SYS, Thread, unreadCount, voiceOf, Who, whoOf } from "../../chat/model";
 import { romanDate, romeDay, todayLine } from "../../chat/calendar";
 import { PHOTO_BY_ID, photoSrc } from "../../content/photos";
 import { speak, stopSpeaking, useSpeaking, useVoices } from "../../audio/speech";
@@ -77,10 +77,11 @@ export function Avatar({ who, size = 44, dot }: { who: Pick<Who, "portrait" | "n
 
 /** The group's picture: four of its faces. */
 function GroupAvatar({ size = 44 }: { size?: number }) {
+  const meta = getMeta();
   return (
-    <span class="avatar group-avatar" style={{ "--av-size": `${size}px` }} aria-label={GROUP.name}>
-      {PEOPLE.slice(0, 4).map((p) => (
-        <img key={p.id} src={PORTRAIT_BY_ID.get(p.portrait)?.src} alt="" />
+    <span class="avatar group-avatar" style={{ "--av-size": `${size}px` }} aria-label={groupName(meta)}>
+      {membersOf(GROUP.id, meta).slice(0, 4).map((p) => (
+        <img key={p.id} src={PORTRAIT_BY_ID.get(p.portrait)?.src} alt="" style={p.flip ? { transform: "scaleX(-1)" } : undefined} />
       ))}
     </span>
   );
@@ -184,7 +185,7 @@ export function Messenger({ thread }: { thread?: string }) {
   const known = t && (acta || thread === GROUP.id || PEOPLE.some((x) => x.id === thread) || getMeta().strangers[thread!]) && !t.gone;
   useScreen(
     "page",
-    acta ? "Messenger: the Ācta Diurna (Rome's daily board of news)" : known ? `Messenger: chat with ${thread === GROUP.id ? `the group ${GROUP.name}` : nameOf(thread!)}` : "Messenger",
+    acta ? "Messenger: the Ācta Diurna (Rome's daily board of news)" : known ? `Messenger: chat with ${thread === GROUP.id ? `the group ${groupName(getMeta())}` : nameOf(thread!)}` : "Messenger",
     () => (acta ? boardText(t!, now) : known ? screenText(t!, now) : "The list of chats in the messenger."),
   );
   return (
@@ -266,7 +267,7 @@ function lastOf(t: Thread, now: number): Msg | undefined {
 /** Does a chat match a search: a name, or any message, Latin or English (long marks never needed)? */
 function matches(t: Thread, who: Who | null, q: string, now: number): boolean {
   if (!q) return true;
-  const hay = [who?.name ?? GROUP.name, ...(who ? [] : PEOPLE.map((p) => p.name)), ...arrived(t, now).flatMap((m) => [m.la, m.en ?? ""])];
+  const hay = [who?.name ?? groupName(getMeta()), ...(who ? [] : membersOf(GROUP.id, getMeta()).map((p) => p.name)), ...arrived(t, now).flatMap((m) => [m.la, m.en ?? ""])];
   return hay.some((s) => plain(s).includes(q));
 }
 
@@ -318,7 +319,7 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
               {who ? <Avatar who={who} size={64} dot={dotOf(who, t, now)} /> : <GroupAvatar size={64} />}
               <span class="chat-row-main">
                 <span class="chat-row-top">
-                  <span class="chat-row-name" lang="la">{who?.name ?? GROUP.name}</span>
+                  <span class="chat-row-name" lang="la">{who?.name ?? groupName(meta)}</span>
                   {last && <span class="chat-row-time">{when(last.at, now)}</span>}
                 </span>
                 <span class="chat-row-bottom">
@@ -328,10 +329,10 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
                     ) : last ? (
                       <>
                         {(t.kind === "group" || last.from === "me") && <span>{nameOf(last.from)}: </span>}
-                        <span lang="la">{showEmoji(preview(last))}</span>
+                        <span lang="la">{showEmoji(preview(last, now))}</span>
                       </>
                     ) : (
-                      <span>{who ? `${who.job}, ${who.city}` : PEOPLE.map((x) => x.name).join(", ")}</span>
+                      <span>{who ? `${who.job}, ${who.city}` : membersOf(GROUP.id, meta).map((x) => x.name).join(", ")}</span>
                     )}
                   </span>
                   {unread > 0 && <span class="unread-badge" aria-label={`${unread} unread`}>{roman(unread)}</span>}
@@ -444,11 +445,14 @@ function wordNoteText(a: Analysis, text: string, e: Entry, name: boolean): { tex
 }
 
 /** The word tapped in a text (its index among the words), as a card says it. */
-function tappedWord(text: string, index: number, lex: ReturnType<typeof chatWords>["lex"]): { word: string; text: string; entry?: Entry; add?: string } | null {
+function tappedWord(text: string, index: number, lex: ReturnType<typeof chatWords>["lex"], gloss?: Record<string, string>): { word: string; text: string; entry?: Entry; add?: string } | null {
   const tok = annotate(showEmoji(text), lex).filter((x) => x.isWord)[index];
   if (!tok) return null;
   const a = tok.analysis ?? tok.readings?.[0];
-  return { word: tok.text, ...(a ? wordNote(a, tok.text) : { text: `${tok.text} — a word you have not learned yet`, add: tok.text }) };
+  if (a) return { word: tok.text, ...wordNote(a, tok.text) };
+  // a new word someone used in a strong moment, with the meaning they gave
+  const meant = Object.entries(gloss ?? {}).find(([w]) => plain(w) === plain(tok.text))?.[1];
+  return { word: tok.text, text: meant ? `${tok.text} — ${meant} (a new word)` : `${tok.text} — a word you have not learned yet`, add: tok.text };
 }
 
 /** What a tapped word is, under its message: hear it, open it, or add it to the learner's words. */
@@ -583,18 +587,18 @@ function ChatView({ id, now }: { id: string; now: number }) {
   };
 
   /** The word card for a message, if one of its words was tapped (with the word itself, to hear it). */
-  const cardOf = (m: Msg) => (card?.msg === m.id ? tappedWord(m.la, card.index, lex) : null);
+  const cardOf = (m: Msg) => (card?.msg === m.id ? tappedWord(m.la, card.index, lex, m.gloss) : null);
 
   let lastDay = "";
   const lastMine = shown.filter((m) => m.from === "me").at(-1)?.id;
   return (
-    <section class="chat msgr-panel" aria-label={`Chat with ${who?.name ?? GROUP.name}`}>
+    <section class="chat msgr-panel" aria-label={`Chat with ${who?.name ?? groupName(meta)}`}>
       <header class="chat-head">
         <button class="btn ghost small chat-back" onClick={() => go({ page: "messenger" })} aria-label="Back to the chats">←</button>
         <button class="chat-head-who" onClick={() => who && setProfile(who)} disabled={!who} id="chat-profile">
           {who ? <Avatar who={who} size={72} dot={dotOf(who, t, now)} /> : <GroupAvatar size={72} />}
           <span class="stack" style={{ gap: 0, minWidth: 0 }}>
-            <span class="chat-head-name" lang="la">{who?.name ?? GROUP.name}</span>
+            <span class="chat-head-name" lang="la">{who?.name ?? groupName(meta)}</span>
             <span class={`chat-head-sub${typingWho ? " typing-text" : ""}`}>{who && typingWho ? "typing…" : sub}</span>
           </span>
         </button>
@@ -679,6 +683,18 @@ function ChatView({ id, now }: { id: string; now: number }) {
                   </div>
                 )}
                 {m.id === firstUnread.current && <div class="chat-new"><span>New</span></div>}
+                {m.from === SYS ? (
+                  <div class="chat-sys" id={`msg-${m.id}`}><span>{m.en}</span></div>
+                ) : deletedNow(m, now) ? (
+                  <div class={`bubble-row${mine ? " mine" : ""}${firstOfRun ? " first" : ""}`} id={`msg-${m.id}`}>
+                    {!mine && (firstOfRun && sender ? <span class="bubble-face"><Avatar who={sender} size={56} /></span> : <span class="bubble-face" />)}
+                    <div class={`bubble deleted${mine ? " mine" : ""}${firstOfRun ? " tail" : ""}`}>
+                      {group && sender && firstOfRun && <span class="bubble-name" lang="la">{sender.name}</span>}
+                      <span class="bubble-text"><i>🚫 Message deleted</i></span>
+                      <span class="bubble-meta">{clock(m.at)}</span>
+                    </div>
+                  </div>
+                ) : (
                 <div class={`bubble-row${mine ? " mine" : ""}${firstOfRun ? " first" : ""}${reactionsOf(m, now).length ? " reacted" : ""}`} id={`msg-${m.id}`}>
                   {!mine &&
                     (firstOfRun && sender ? (
@@ -713,6 +729,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     <Reactions m={m} id={id} now={now} />
                   </div>
                 </div>
+                )}
                 {!mine && openEn.includes(m.id) && (
                   <div class="react-row" role="group" aria-label="React or reply">
                     {LEARNER_REACTIONS.map((e) => (
@@ -1517,6 +1534,10 @@ function Profile({ who, t, now, onClose }: { who: Who; t: Thread; now: number; o
   const status = statusAt(who.day, who.tz, now);
   const p = PORTRAIT_BY_ID.get(who.portrait);
   const [bye, setBye] = useState(false);
+  // what they set for themselves; someone who blocked the learner shows nothing of it
+  const blocked = isBlocked(meta, who.id);
+  const statusLine = blocked ? "" : meta.world?.status?.[who.id]?.text ?? "";
+  const away = blocked ? undefined : awayNow(meta, who.id, now);
   return (
     <Modal onClose={onClose} label={`${who.name}'s profile`}>
       <div class="stack profile">
@@ -1528,6 +1549,7 @@ function Profile({ who, t, now, onClose }: { who: Who; t: Thread; now: number; o
           <Avatar who={who} size={132} dot={dotOf(who, t, now)} />
           <div class="stack" style={{ gap: "4px" }}>
             <h2 lang="la">{who.name}</h2>
+            {statusLine && <span class="profile-status" lang="la">«{showEmoji(statusLine)}»</span>}
             <span class="ui">{who.age} · {who.job}</span>
             <span class="ui muted">{who.city}</span>
             <span class="ui small">
@@ -1547,6 +1569,11 @@ function Profile({ who, t, now, onClose }: { who: Who; t: Thread; now: number; o
               "An ordinary day."
             )}
           </span>
+          {away && (
+            <span class="ui small">
+              Away: {away.where}, until {new Date(away.until).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+            </span>
+          )}
         </div>
         {t.memory.length > 0 && (
           <details class="small">
@@ -1616,13 +1643,13 @@ export function ArrivalNotice({ current }: { current: string | null }) {
     },
   );
   if (!shown) return null;
-  const who = whoOf(shown.m.from, getMeta());
+  const who = whoOf(shown.m.from === SYS ? shown.m.by ?? "" : shown.m.from, getMeta());
   return (
     <button key={shown.m.id} class="arrival ansata" role="status" aria-label={`New message from ${who?.name ?? ""}: tap to open, swipe to dismiss`} {...swipe}>
       {who && <Avatar who={who} size={34} />}
       <span class="stack" style={{ gap: 0, minWidth: 0 }}>
-        <b class="ui small" lang="la">{who?.name ?? nameOf(shown.m.from)}{shown.t.kind === "group" ? ` · ${GROUP.name}` : ""}</b>
-        <span class="arrival-text" lang="la">{showEmoji(preview(shown.m))}</span>
+        <b class="ui small" lang="la">{who?.name ?? nameOf(shown.m.from)}{shown.t.kind === "group" ? ` · ${groupName(getMeta())}` : ""}</b>
+        <span class="arrival-text" lang="la">{showEmoji(preview(shown.m, Date.now()))}</span>
       </span>
     </button>
   );

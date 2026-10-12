@@ -94,8 +94,24 @@ async function run(name, viewport, colorScheme) {
   await p.locator(".rule-more summary").click();
   if (!(await p.locator(".rule-detail").first().isVisible())) errors.push(`${name}: More detail does not open`);
   await p.screenshot({ path: `${out}/${name}-rule-more.png`, fullPage: true });
+  // Verba > Orīginēs: where the words come from: the reader, stories of culture in words, hidden links, families
+  await p.locator(nav, { hasText: "Verba" }).first().click();
+  await p.click("#origins-tab");
+  await p.waitForTimeout(200);
+  if ((await p.locator(".culture-card").count()) < 15) errors.push(`${name}: Orīginēs shows no stories of culture in words`);
+  if ((await p.locator(".family-row").count()) < 20) errors.push(`${name}: Orīginēs shows no word families`);
+  if (!(await p.locator(".english-card").count())) errors.push(`${name}: Latin in English is not under Orīginēs`);
+  if (await p.locator(nav + "[aria-current='page']", { hasText: "Verba" }).count() === 0) errors.push(`${name}: Orīginēs is not under the Verba tab`);
+  await p.fill("#family-search", "aquarium");
+  if ((await p.locator(".family-row").count()) !== 1) errors.push(`${name}: the family search does not find aqua by "aquarium"`);
+  await p.fill("#family-search", "");
+  await p.screenshot({ path: `${out}/${name}-origins.png`, fullPage: true });
+  await p.click("#culture-schola");
+  await p.waitForTimeout(200);
+  if (!(await p.locator(".culture-story", { hasText: "leisure" }).count())) errors.push(`${name}: a story of culture in words does not open`);
+  await p.screenshot({ path: `${out}/${name}-origins-story.png` });
+  await p.keyboard.press("Escape");
   // Latin in English: one screen at a time, Next, a quick question now and then
-  await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();
   await p.locator(".english-card").click();
   await p.waitForTimeout(300);
   if (!(await p.locator(".reader-card").count())) errors.push(`${name}: Latin in English is not a reader`);

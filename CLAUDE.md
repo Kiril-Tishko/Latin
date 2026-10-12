@@ -181,16 +181,34 @@ Latin names (English in the tooltip; `TABS` in src/ui/app.tsx, routes in nav.ts)
   practice chooser; `#train` without a round goes home).
 - **Lectiōnēs** (`src/ui/pages/lessons.tsx`): the whole path. Each lesson
   watched with its rules one line each (`RuleList`) and its three stories under
-  them; a lesson fully learned folds into its title line. Then the Latin in
-  English card, and the endings at a glance (closed). A lesson's own page
+  them; a lesson fully learned folds into its title line. Then the endings at a
+  glance (closed). A lesson's own page
   (`#lesson-n`: the video's sentences with Listen & repeat, its story, phrases,
   differences from the video) is reached from the line under its stories; its
   rules are on Lectiōnēs and its words on Verba. `#rules` and `#stories` land here.
-- **Verba** (`src/ui/pages/words.tsx`): search (any form, or English), Add a
+- **Verba** (`src/ui/pages/words.tsx`): two halves under one tab, switched at
+  the top (`VerbaSwitch`): the words, and Orīginēs, where they come from.
+  The words: search (any form, or English), Add a
   word, the five mystery cards (`CardStrip` in src/ui/cards.tsx: opened cards turn
   face up in place; five more come when all five are open), the filters All /
   lessons / Cards / Yours / Chat on one sideways-scrolling line, and the word
   grid (reviews come through Continue). `#discover` lands here.
+  **Orīginēs** (`#origins`, src/ui/pages/origins.tsx): etymology is "one of the
+  main reasons" the learner learns Latin, with the culture it carries, and they
+  chose it inside Verba. One page: the Latin in English reader's card (moved here
+  from Lectiōnēs; the reader's back link leads here), Culture in words (twenty
+  short stories in src/content/culture.ts: schola was leisure, magister and
+  minister, salary and salt, why September is the ninth month, Monēta, the white
+  toga of the candidate, Europa on the bull, muscle the little mouse…, each
+  tied to the learner's words where it can be, with today's words in English,
+  Russian and Ukrainian, "Ask Claude about it"; `tests/origins.test.ts` checks the
+  long marks of known words in them), Hidden links (`hiddenLinks` in
+  src/trainer/origins.ts: every link Claude found, from the learner's added
+  words and from Ask Claude's "**Hidden link:**" lines, newest first, each once),
+  and Word families (`wordFamilies`: every word's relatives, borrowed / same root /
+  not related, with its note, searchable by a relative in any language).
+  Claims there follow the deck's rule: borrowed vs. cousin vs. look-alike, and
+  "probably" where scholars are unsure.
 - **Nūntiī**: the messenger (below).
 
 Typing on a phone (src/ui/keyboard.ts), as the learner asked: while a text
@@ -667,7 +685,7 @@ Italian and a Spanish voice to exercise the audio paths.
   how English took Latin (waves), each known word's English relatives, Latin
   verb forms and plurals inside English, grammar rules English took from Latin,
   word parts, spelling, grammar terms, abbreviations, phrases, Russian /
-  Ukrainian parallels. It sits under Lectiōnēs (a card after the lessons) and
+  Ukrainian parallels. It sits under Verba > Orīginēs (a card at the top) and
   is read one screen at a time, with quick questions (`englishSteps`; the old
   "find the Latin" `derive` exercises remain only for mistakes made in them).
   Claims there must be etymologically sound: borrowed vs. cousin (kin) vs.

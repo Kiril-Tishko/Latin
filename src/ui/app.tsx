@@ -10,6 +10,7 @@ import { LearnPage } from "./pages/learn";
 import { startSession, Train } from "./pages/train";
 import { Words } from "./pages/words";
 import { English } from "./pages/english";
+import { Origins } from "./pages/origins";
 import { StoryPage } from "./pages/stories";
 import { Settings } from "./settings";
 import { connect, getSync, useProgress } from "./store";
@@ -25,15 +26,16 @@ import { connectMessenger, unreadTotal, useMessenger } from "./messenger";
 const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.Element }[] = [
   { route: { page: "home" }, label: "Domus", en: "Today", icon: Icon.home },
   { route: { page: "lessons" }, label: "Lectiōnēs", en: "Lessons, rules, stories", icon: Icon.scroll },
-  { route: { page: "words" }, label: "Verba", en: "Words", icon: Icon.book },
+  { route: { page: "words" }, label: "Verba", en: "Words and where they come from", icon: Icon.book },
   { route: { page: "messenger" }, label: "Nūntiī", en: "Messages", icon: Icon.letter },
 ];
 
-// a round of exercises belongs to Domus (Continue starts it); a lesson, a rule, the stories and Latin in English to Lectiōnēs
-const UNDER: Partial<Record<Route["page"], Route["page"]>> = { train: "home", lesson: "lessons", learn: "lessons", english: "lessons", stories: "lessons", story: "lessons" };
+// a round of exercises belongs to Domus (Continue starts it); a lesson, a rule and the stories to Lectiōnēs;
+// where the words come from (Orīginēs, with Latin in English) to Verba
+const UNDER: Partial<Record<Route["page"], Route["page"]>> = { train: "home", lesson: "lessons", learn: "lessons", stories: "lessons", story: "lessons", origins: "words", english: "words" };
 const active = (r: Route, t: Route) => r.page === t.page || UNDER[r.page] === t.page;
 
-const PAGE_NAME: Record<Route["page"], string> = { home: "Today", lessons: "Lessons", lesson: "A lesson", learn: "A rule to learn", train: "Practice", words: "Words", english: "Latin in English", stories: "Stories", story: "A story", messenger: "Messages" };
+const PAGE_NAME: Record<Route["page"], string> = { home: "Today", lessons: "Lessons", lesson: "A lesson", learn: "A rule to learn", train: "Practice", words: "Words", origins: "Origins", english: "Latin in English", stories: "Stories", story: "A story", messenger: "Messages" };
 
 const SYNC_TEXT = { local: "saved in this browser", connecting: "connecting…", synced: "saved to your account", saving: "saving…", error: "saving failed, will retry" };
 
@@ -77,6 +79,9 @@ export function App() {
       break;
     case "words":
       page = <Words />;
+      break;
+    case "origins":
+      page = <Origins />;
       break;
     case "english":
       page = <English />;

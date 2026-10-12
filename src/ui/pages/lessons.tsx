@@ -8,14 +8,13 @@ import { partState, seenSkills } from "../../trainer/path";
 import { todayStep } from "../../trainer/today";
 import { storyOpen } from "../../trainer/stories";
 import { partsOf } from "../../content/parts";
-import { CaseChip, Hedera, Icon } from "../components";
+import { CaseChip, Icon } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
 import { go } from "../nav";
 import { derived, useProgress } from "../store";
 import { useScreen } from "../screen";
 import { NounTable, VerbTable } from "../tables";
-import { englishProgress } from "./english";
 import { RuleList } from "./learn";
 import { continueLearning, vocabIds } from "./train";
 import { stepLabel } from "./home";
@@ -37,7 +36,7 @@ export function Lessons({ focus }: { focus?: "stories" }) {
   }, [focus]);
   useScreen("page", "Lessons", () =>
     [
-      "The Lectiōnēs page: every rule of the lessons watched, one line each, grouped by lesson with the lesson's short stories under its rules (a tap opens the rule or the story; the line under a lesson opens its page with the video's sentences and story); then Latin in English, and the endings at a glance.",
+      "The Lectiōnēs page: every rule of the lessons watched, one line each, grouped by lesson with the lesson's short stories under its rules (a tap opens the rule or the story; the line under a lesson opens its page with the video's sentences and story); then the endings at a glance (Latin in English is under Verba > Orīginēs).",
       ...watched.map((l) => `Lesson ${l.n} (${l.title}): ${partsOf(l.n).map((x) => `${x.id} ${x.title} (${partState(p, x)})`).join("; ")}`),
       `Stories: ${STORIES.map((s) => `"${s.title}"${p.stories[s.id] ? " (read)" : storyOpen(s, seen) ? " (open)" : " (not open yet)"}`).join(", ")}.`,
     ].join("\n"),
@@ -94,14 +93,6 @@ export function Lessons({ focus }: { focus?: "stories" }) {
       )}
 
 
-      <button class="panel lesson-card english-card" onClick={() => go({ page: "english" })}>
-        <span class="numeral" aria-hidden="true"><Hedera /></span>
-        <span class="stack" style={{ gap: "4px" }}>
-          <h2 style={{ fontSize: "1.25rem" }}>Latin in English</h2>
-          <span class="muted small">What English took from Latin, a short piece at a time, with a quick question now and then.</span>
-          <span class="small ui">{englishProgress()}</span>
-        </span>
-      </button>
 
       <details class="rule-more" data-ask="Endings at a glance">
         <summary>Endings at a glance <span class="muted small ui">nouns and verbs; a ? is a form of a rule not learned yet</span></summary>

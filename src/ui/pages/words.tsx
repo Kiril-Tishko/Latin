@@ -255,6 +255,20 @@ function matches(e: Entry, q: string, formHits: Set<string>): boolean {
 
 type Filter = number | "all" | "cards" | "own" | "chat";
 
+/** Verba's two halves: the learner's words, and where they come from (Orīginēs). */
+export function VerbaSwitch({ at }: { at: "words" | "origins" }) {
+  return (
+    <div class="verba-switch" role="tablist" aria-label="Verba">
+      <button role="tab" id="words-tab" aria-selected={at === "words"} onClick={() => at !== "words" && go({ page: "words" })}>
+        Verba <span class="sub">your words</span>
+      </button>
+      <button role="tab" id="origins-tab" aria-selected={at === "origins"} onClick={() => at !== "origins" && go({ page: "origins" })}>
+        Orīginēs <span class="sub">where they come from</span>
+      </button>
+    </div>
+  );
+}
+
 export function Words() {
   const p = useProgress();
   const d = derived();
@@ -290,6 +304,7 @@ export function Words() {
   ];
   return (
     <div class="stack words-page">
+      <VerbaSwitch at="words" />
       <div class="row word-search-row">
         <input
           id="word-search"

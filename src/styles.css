@@ -1888,3 +1888,41 @@ main.page.msgr-page { padding-block: 14px; }
   .words-bar > .btn { width: 100%; }
 }
 .recap-go { justify-content: flex-end; margin-top: 4px; }
+
+/* ---------------------------------------------- Verba: the words and their origins */
+/* the two halves of Verba, as two big tabs */
+.verba-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-bottom: 1px solid var(--rule); }
+.verba-switch button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 14px 9px; border: 0; border-bottom: 3px solid transparent; background: none; font-family: var(--f-display, var(--f-text)); font-size: 1.25rem; letter-spacing: 0.04em; color: var(--ink-2); cursor: pointer; text-align: left; }
+.verba-switch button .sub { font-family: var(--f-ui); font-size: 0.78rem; letter-spacing: 0; color: var(--ink-2); }
+.verba-switch button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--gold); }
+.verba-switch button:hover { color: var(--ink); }
+.origins-title { font-size: clamp(1.8rem, 4vw, 2.4rem); letter-spacing: 0.06em; }
+.origins-h { font-size: 1.3rem; display: flex; align-items: baseline; gap: 10px; }
+/* culture in words: a grid of stories */
+.culture-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.culture-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 16px; text-align: left; cursor: pointer; color: inherit; position: relative; }
+.culture-card:hover { border-color: var(--gold-soft); }
+.culture-latin { font-family: var(--f-text); font-size: 1.05rem; color: var(--gold); }
+.culture-latin.big { font-size: 1.5rem; margin: 0; }
+.culture-title { font-family: var(--f-text); font-size: 1.15rem; font-weight: 600; color: var(--ink); line-height: 1.25; }
+.culture-yours { margin-top: auto; font-size: 0.72rem; }
+.culture-story p { line-height: 1.55; }
+/* hidden links: one line each */
+.link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.link-list li { display: grid; grid-template-columns: minmax(70px, auto) 1fr; gap: 2px 14px; padding: 10px 14px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); }
+.link-list li .small { grid-column: 2; }
+.link-word { font-size: 1.1rem; color: var(--gold); }
+/* word families */
+.family-list { display: flex; flex-direction: column; }
+.family-row { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 4px 18px; padding: 10px 2px; border-bottom: 1px solid var(--rule); }
+.family-word { text-align: left; align-self: start; }
+.family-word .latin { font-size: 1.12rem; }
+.family-rel p { margin: 0 0 3px; line-height: 1.45; }
+.rel-label { display: inline-block; min-width: 76px; margin-right: 6px; font-family: var(--f-ui); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gold); }
+.rel-label.kin { color: var(--ink-2); }
+.rel-label.trap { color: var(--bad); }
+@media (max-width: 640px) {
+  .verba-switch button { font-size: 1.1rem; padding: 6px 8px 8px; }
+  .family-row { grid-template-columns: 1fr; }
+  .rel-label { min-width: 0; }
+}

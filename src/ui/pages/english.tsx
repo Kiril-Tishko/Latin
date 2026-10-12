@@ -62,7 +62,7 @@ export function English() {
   return (
     <div class="reader">
       <div class="reader-top">
-        <button class="linkish" onClick={() => go({ page: "lessons" })}>← Lectiōnēs</button>
+        <button class="linkish" onClick={() => go({ page: "origins" })}>← Orīginēs</button>
         <div class="reader-strip" role="img" aria-label={`Screen ${at + 1} of ${steps.length}`}>
           <i style={{ width: `${((at + 1) / steps.length) * 100}%` }} />
         </div>

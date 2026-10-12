@@ -458,16 +458,16 @@ export function PartRecap({ part, onStart }: { part: Part; onStart: () => void }
   return (
     <div class="trainer">
       <section class="panel frame rule-intro" ref={panel} data-ask={`${partName(part)}: reminder`}>
-        <div class="spread rule-intro-head">
-          <div class="stack" style={{ gap: "4px" }}>
-            <span class="eyebrow">{partName(part)} · first, a reminder</span>
-            <h2>{part.title}</h2>
-          </div>
+        <div class="stack rule-intro-head" style={{ gap: "4px" }}>
+          <span class="eyebrow">{partName(part)} · first, a reminder</span>
+          <h2>{part.title}</h2>
+        </div>
+        <Explanation part={part} compact />
+        <div class="row recap-go">
           <button class="btn big" ref={start} onClick={onStart}>
             Start exercises <Icon.arrow />
           </button>
         </div>
-        <Explanation part={part} compact />
       </section>
     </div>
   );

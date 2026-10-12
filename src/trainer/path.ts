@@ -64,6 +64,19 @@ export function nextNewPart(p: Progress): Part | undefined {
   return PARTS.find((part) => watched(p, part) && !p.parts[part.id]);
 }
 
+/**
+ * What Continue does now: read the next rule (its explanation and two
+ * questions), practise the rule in hand until it holds, or, with every rule of
+ * the lessons watched learned, review everything; nothing before any lesson.
+ */
+export type NextStep = { kind: "learn"; part: Part } | { kind: "practise"; part: Part } | { kind: "review" } | { kind: "none" };
+
+export function nextStep(p: Progress): NextStep {
+  const part = currentPart(p);
+  if (part) return partState(p, part) === "new" ? { kind: "learn", part } : { kind: "practise", part };
+  return seenSkills(p).size ? { kind: "review" } : { kind: "none" };
+}
+
 /** The parts seen and still being practised. */
 export const partsInPractice = (p: Progress) => PARTS.filter((part) => watched(p, part) && partState(p, part) === "practising");
 

@@ -4,6 +4,7 @@ import {
   ABBREVIATIONS, ASSIMILATION, FROZEN_VERBS, GRAMMAR_RULES, GRAMMAR_TERMS, LATER_VERBS, LESSON_WORDS_IN_ENGLISH, PHRASES, PLURALS, SPELLINGS, SUFFIXES,
   TABLE_PAIRS, THREE_LANGUAGES, WAVES, quizWords, wordInEnglish,
 } from "../src/content/english";
+import { englishSteps } from "../src/content/english-steps";
 import { LESSON_WORDS, STORY_ONLY } from "../src/content/words";
 import { annotate } from "../src/latin/analyze";
 import { seeded } from "../src/latin/generate";
@@ -125,5 +126,39 @@ describe("Latin in English", () => {
       expect(words.some((w) => w.id === id)).toBe(true);
       expect(wordInEnglish(id)?.from.en).toContain(ex.ask);
     }
+  });
+});
+
+describe("Latin in English, the reader", () => {
+  const words = Object.values(LESSON_WORDS).flat();
+  const steps = englishSteps(words);
+
+  it("reads in order, from the first part to the end", () => {
+    expect(steps.length).toBeGreaterThan(40);
+    expect(steps.at(-1)!.body.kind).toBe("end");
+    expect(steps.filter((s) => s.body.kind === "end")).toHaveLength(1);
+    const parts = steps.map((s) => s.part).filter((x, i, xs) => xs.indexOf(x) === i && x !== "Fīnis");
+    expect(parts[0]).toMatch(/^I · /);
+    expect(parts.length).toBe(12);
+  });
+
+  it("asks quick questions with three different answers, the right one among them", () => {
+    const quizzes = steps.flatMap((s) => (s.body.kind === "quiz" ? [s.body] : []));
+    expect(quizzes.length).toBeGreaterThan(15);
+    for (const q of quizzes) {
+      expect(q.options).toHaveLength(3);
+      expect(new Set(q.options).size).toBe(3);
+      expect(q.answer).toBeGreaterThanOrEqual(0);
+      expect(q.options.every((o) => o.trim().length > 0)).toBe(true);
+    }
+  });
+
+  it("never puts two questions in a row, and keeps each screen short", () => {
+    steps.forEach((s, i) => {
+      if (s.body.kind === "quiz" && steps[i + 1]?.body.kind === "quiz") expect(steps[i + 1].part).not.toBe(s.part);
+      const b = s.body;
+      const size = b.kind === "text" ? b.paras.length : b.kind === "list" ? b.items.length : b.kind === "table" ? b.rows.length : b.kind === "words" ? b.entries.length : 0;
+      expect(size, s.title).toBeLessThanOrEqual(8);
+    });
   });
 });

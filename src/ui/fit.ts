@@ -11,16 +11,22 @@ export function fitToWindow(el: HTMLElement | null, answered: boolean) {
     el.style.removeProperty("zoom");
     const wide = window.innerWidth > 980;
     if (!wide && answered) return;
-    const min = wide ? 0.55 : 0.8;
     const doc = document.documentElement;
-    let zoom = 1;
-    for (let i = 0; i < 8; i++) {
-      const over = doc.scrollHeight - window.innerHeight;
-      if (over <= 0 || zoom <= min) break;
-      const h = el.getBoundingClientRect().height;
-      zoom = Math.max(min, zoom * Math.min(0.97, (h - over - 2) / h));
-      el.style.setProperty("zoom", zoom.toFixed(3));
+    const fits = (z: number) => {
+      el.style.setProperty("zoom", z.toFixed(3));
+      return doc.scrollHeight <= window.innerHeight;
+    };
+    if (doc.scrollHeight <= window.innerHeight) return;
+    // text reflows when zoomed (lines get longer), so search for the largest zoom that fits
+    let lo = wide ? 0.55 : 0.8;
+    let hi = 1;
+    if (!fits(lo)) return;
+    for (let i = 0; i < 6; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) lo = mid;
+      else hi = mid;
     }
+    el.style.setProperty("zoom", lo.toFixed(3));
   };
   run();
   let frame = 0;

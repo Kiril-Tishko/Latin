@@ -148,7 +148,7 @@ export function Hedera({ flip }: { flip?: boolean }) {
   );
 }
 
-/** The back of a Discover card: dark, framed in gold, a wreath round a question mark. */
+/** The back of a mystery card: dark, framed in gold, a wreath round a question mark. */
 export function CardBack({ n }: { n?: number }) {
   return (
     <span class="card-back" aria-hidden="true">

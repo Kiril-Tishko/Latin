@@ -14,7 +14,7 @@ published as a private claude.ai artifact.
   parts: a very simple explanation, open questions, then a bunch of simple
   exercises before harder ones, and never an exercise on a rule not seen yet.
 - Wants: only words and constructions from the videos (plus words they open
-  in Discover), lots of written exercises, colored endings, Roman classic look,
+  on the mystery cards), lots of written exercises, colored endings, Roman classic look,
   light motivation (daily goal + streak), and only sensible sentences: silly
   pairings ("the bull reads the letter") confused them, so `settings.silly`
   defaults to 0 and progress version 3 switched existing saves to it.
@@ -141,6 +141,38 @@ Runtime capabilities used:
   into their chats and deletes them) and `…/messenger/brief/now` (what the
   routine needs, written by the page).
 
+## The site: four tabs, one Continue
+
+The learner asked for a site "for a stupid person - obvious and no thinking
+required": as few places as possible, one obvious next step. Four tabs, with
+Latin names (English in the tooltip; `TABS` in src/ui/app.tsx, routes in nav.ts):
+
+- **Domus** (`src/ui/pages/home.tsx`): one big Continue (`continueLearning` in
+  train.tsx, `nextStep` in path.ts: a new rule opens its page, the rule in
+  practice starts its round, everything learned starts a mixed round), the day's
+  goal and streak, and three small cards: Answer in Latin, the next story, the
+  newest unread message. Nothing else (the sentence of the day and the practice
+  chooser are gone; `#train` without a round goes home).
+- **Lectiōnēs** (`src/ui/pages/lessons.tsx`): the whole path. Each lesson
+  watched with its rules one line each (`RuleList`); a lesson fully learned folds
+  into its title line. Then the stories (the ones not open yet folded into one
+  line), the Latin in English card, and the endings at a glance (closed). A lesson's
+  own page (`#lesson-n`: sentences, phrases, words, story, "Practise them") is
+  reached from the line under its rules. `#rules` and `#stories` land here.
+- **Verba** (`src/ui/pages/words.tsx`): search (any form, or English), Add a
+  word, the five mystery cards (`CardStrip` in src/ui/cards.tsx: opened cards turn
+  face up in place; five more come when all five are open), the filters All /
+  lessons / Cards / Yours / Chat on one sideways-scrolling line, Review, and the
+  word grid. `#discover` lands here.
+- **Nūntiī**: the messenger (below).
+
+Latin in English is a reader (`src/ui/pages/english.tsx`, the screens built by
+`englishSteps` in src/content/english-steps.ts): one short screen at a time (a
+text, a table, a list, the learner's own words, a quick question with three
+answers that must be answered before Next), every screen fitting a phone without
+scrolling (`fitToWindow` zooms down a little at most), the place kept in
+`Progress.english`. `tests/english.test.ts` checks its questions and screen sizes.
+
 ## Rules one at a time, then practice
 
 The learner asked for each video's rules in small parts, explained very simply,
@@ -161,12 +193,12 @@ without Claude the learner compares with the good answer. With both questions
 answered the part is seen (`markSeen`) and its exercises open.
 
 The learner values simplicity and obviousness above all ("make it simple, make
-it obvious"): one clear way to each thing. Rēgulae (`src/ui/pages/rules.tsx`) is
-one short list: every rule of the lessons watched, one line each (`RuleList` in
-learn.tsx: ✓ learned, its right answers as dots and "3/10", or new; the rule to
-work on now marked "you are here"; the whole line opens the rule), a Continue
-button, then the endings at a glance (a ? for forms of rules not learned yet)
-and the colors. Lesson pages show the same list. The lessons' full What / How /
+it obvious"): one clear way to each thing. Lectiōnēs lists every rule of the
+lessons watched, one line each (`RuleList` in learn.tsx: ✓ learned, its right
+answers as dots and "3/10", or new; the rule to work on now marked "you are
+here"; the whole line opens the rule), then the endings at a glance (a ? for
+forms of rules not learned yet) and the colors (`NounTable`, `VerbTable` in
+src/ui/tables.tsx). Lesson pages show the same list. The lessons' full What / How /
 When texts live only on each rule's page, under a closed "More detail"
 (`rulesOfPart`; general notes that teach no skill are attached with
 `Part.more`, and a test checks that every full rule is under some part).
@@ -185,19 +217,31 @@ learned; version 5 switched to counting right answers (parts in practice
 started from 0: the learner's 17 exercises on rule 3.2 had never shown its -ī).
 
 A part's round is made one exercise at a time (`partExercise`, from
-`Runner.next` in train.tsx), each for the progress at that moment, and every
-exercise shows the rule: its weakest piece first in the phase's kinds, a single
-form when only a form can show it (to …: -re; vīnī), the videos' and stories'
-sentences for et between two verbs (`practiceLines`). Past the simple phase one
-in five reviews earlier rules. The round's header shows the exact count
-(`PartCount`, ten dots `PartDots`); every answer says "+1 · Rule 3.2: 4 of 10" or
-that it stays; the round ends when the rule is learned, and its summary shows
-before → after. Home, the practice page, the rule page and the lesson pages show
-the same dots. On a later day a round starts with a one-screen reminder of the
-part (`PartRecap`), and each exercise's Rule button shows the parts behind it
-(`RuleBox`). `tests/parts.test.ts` plays a round of every part as the page does:
-each exercise must show the rule, add one when right, need only rules seen, and
-ten right answers must learn it.
+`Runner.next` in train.tsx, which passes the round so far), each for the
+progress at that moment, and every exercise shows the rule and counts when
+answered right (`countsFor` on its right answer, `rightAnswer`): its weakest
+piece first, a single form when only a form can show it (to …: -re; vīnī), the
+videos' and stories' sentences for et between two verbs (`practiceLines`; lines
+that say a word twice and verbless phrases are left out). The learner asked for
+coherent rounds: exercises come in blocks of three of one kind (`BLOCK`,
+`blockKind`), from the phase's main kinds toward harder ones, and only of kinds
+that can show the rule (`countingKinds`: "in / ad + -m" never shows in one
+ending). Past the simple phase every fifth reviews an earlier rule in the same
+kind (`earlier`). The day's review comes between: up to two mistakes (the
+rule's own first, then the oldest: `mistakesSession(…, prefer)`) and two words
+that are due, every fourth exercise (`dayReview`, marked `aside`, so they don't
+break a block); a mixed round (everything learned) gets the same.
+The round's header is one compact block: what is practised, "3 / 12" and an ✕,
+then the rule's ten dots (`PartCount`, `PartDots`) or, in other rounds, the
+tesserae. Every answer says "+1 · Rule 3.2: 4 of 10" or that it stays; the round
+ends when the rule is learned, and its summary shows before → after, with
+Continue and Done for now. Domus, the rule page and the lesson lines show the
+same dots. On a later day a round starts with a one-screen reminder of the
+part (`PartRecap`, Start at the bottom). Under each exercise: one Help button
+(the rule behind it, `RuleBox`, the hint and the colors at once) and Show
+answer. `tests/parts.test.ts` plays a round of every part as the page does:
+each exercise must show the rule, add one when right, need only rules seen, ten
+right answers must learn it, and the round must come in blocks.
 
 How rich a sentence is follows the same phases (`sentenceStyle`: bare while
 simple, colors on). Elsewhere (videos, stories, weak spots) the kinds follow the
@@ -221,8 +265,8 @@ examples ego. `judgeAnswer` checks with the engine: unknown words, grammar
 question's own verb, what the question asks for (a thing with -m, in + -ā / -ō,
 ad / in + -m, who, to …, quod …), and a correct but odd pair ("I read the water")
 is "almost" (`sensibleObject`). A right answer adds one to the rules it used;
-open answers are not logged as mistakes. Mode `answers`: a card on the practice
-page, and "Answer questions in Latin" on a story.
+open answers are not logged as mistakes. Mode `answers`: a card on Domus, and
+"Answer questions in Latin" on a story.
 Version 2, as the learner asked ("really open ended… so AI should check it"): a
 round starts with the fixed questions and Claude writes fresh ones for it
 (`freshQuestions` in src/ui/coach.ts: about the learner, the five friends of the
@@ -250,11 +294,11 @@ Every exercise shows one plain task line with a sign for how to answer (write,
 tap, type in the gap, listen, change: `taskOf` in `src/ui/pages/train.tsx`).
 Endings and forms are typed into the sentence itself (`GapInput`), a sentence to
 change starts in the answer box, and the infinitive is asked from the tū form
-(its vowel decides it: from discō alone it cannot be known). On a phone the
-round's header has two rows: what is practised, then the tesserae and
-"Exercise 3 of 12 · 2 right".
+(its vowel decides it: from discō alone it cannot be known). Only an exercise
+between the rule's own says where it is from ("an earlier mistake, once more",
+"a word to review", "an earlier rule").
 
-Stories (`src/content/stories.ts`, pages `#stories` and `#story-<id>` in
+Stories (`src/content/stories.ts`, listed on Lectiōnēs, each on `#story-<id>` in
 `src/ui/pages/stories.tsx`): three per lesson (`step`), each with a small plot,
 only lesson words and only the rules up to its lesson. A story opens for practice
 once all its rules are seen (`storyOpen`); the others wait, naming the parts they
@@ -262,9 +306,8 @@ need (`partsBefore`). `en` is the reader's English,
 `prompt` the exercise English when it must say more ("the friend (f)"), `who`
 the speaker of a dialogue line; two questions each, the right answer first.
 A tap on a line shows its English, a tap on a word its meaning; answering the
-questions marks the story read (`Progress.stories`). "Practise this story" and
-"Sentences from the stories" build rounds from the lines; Home offers the next
-unread open story. `tests/stories.test.ts` checks every word, long mark
+questions marks the story read (`Progress.stories`). "Practise this story"
+builds a round from its lines; Domus offers the next unread open story. `tests/stories.test.ts` checks every word, long mark
 and rule, and that each exercise on each line accepts its own answer: write a
 new story, then run the tests.
 
@@ -274,12 +317,20 @@ learned (`PUPILS`, `LEARNABLE`), whose things and people are (`OWNED`,
 `RELATIONS`, `OWNERS`, `mine` for "my"), where people and gods are and what they
 do there (`whoAt`, `doneAt`, `HOMES`, `REFUGES`, `NOT_DIVINE`, `makesSense`), and
 the word tags in `words.ts` / `deck.ts` (e.g. `long`, `unseen`, `story`). A
-genitive never stands between two nouns (`untangle`). Words whose good uses need
-care ("much water", "the school is full") get hand-made Discover examples
-(`CURATED` in `src/trainer/discover.ts`). "Fix my mistakes" (`mistakesSession`): unfixed mistakes on rules
-seen come back as fresh exercises of the same kind on the same rules and words;
-a right answer marks one fixed (`Mistake.fixed`), a wrong one never duplicates
-it. Home and the practice chooser show how many wait.
+genitive never stands between two nouns (`untangle`). The learner found odd
+sentences in practice, so `makesSense` also refuses: a teacher's work done by
+anyone but a teacher or a poet (`TEACHERS`; the taught are `PUPILS`), "has the
+farmer" (`HAD`), "writes the poet's letter", a place with an owner, "the poet is
+a student" (`TRADES`), a predicate noun with an adjective, the same adjective
+twice, "well" with a verb it doesn't suit (`WELL`), a verb that needs more
+standing alone ("they see", `NEEDS_MORE`), and "teaches in the forest"; "in +
+an island" reads "to the island". A swap exercise is offered only when the
+swapped sentence makes sense too. Words whose good uses need care ("much
+water", "the school is full") get hand-made card examples (`CURATED` in
+`src/trainer/discover.ts`). Mistakes (`mistakesSession`): unfixed mistakes on
+rules seen come back as fresh exercises of the same kind on the same rules and
+words, between a rule's exercises; a right answer marks one fixed
+(`Mistake.fixed`), a wrong one never duplicates it.
 
 ## Words the learner adds
 
@@ -287,7 +338,7 @@ it. Home and the practice chooser show how many wait.
 in the messenger) opens one window (src/ui/addword.tsx, `openAddWord`): the
 learner types a Latin word in any form, or an English, Russian or Ukrainian
 one. A word they have already (any form; lesson words, cards, chat words) is
-shown as it is; a Discover card not added yet is added as the card; anything
+shown as it is; a mystery card not added yet is added as the card; anything
 else Claude fills in (`lookupPrompt` in src/trainer/own.ts, the coach's model:
 dictionary line with long marks, meaning, English verb forms, tags from
 `NOUN_TAGS`, for a verb the tags of nouns that make sense as its object,
@@ -463,7 +514,7 @@ Italian and a Spanish voice to exercise the audio paths.
    so far, and two open questions whose good answer passes its own keys. Every
    new skill belongs to one part (`tests/parts.test.ts` checks all of this, and
    that each part's practice reaches every rule it opens).
-5. **Discover**: cards in `src/content/deck.ts` unlock by grammar; nouns of a
+5. **Mystery cards**: cards in `src/content/deck.ts` unlock by grammar; nouns of a
    new declension become usable once its skills exist. Every relative must be
    correct: `from` = borrowed from Latin, `kin` = same ancient root.
 6. Run `npm test` (the content test fails on any misspelled form or missing
@@ -478,16 +529,17 @@ Italian and a Spanish voice to exercise the audio paths.
   reading of an ambiguous form, and `word#x` leaves a word that only looks like
   a known form uncolored (*fīnis* is not *fīnīs*).
 - Famous sayings live in `src/content/sayings.ts`, linked to word ids; the
-  Words dialog and Discover cards show them. Check each one's colors with the
+  Words dialog and the mystery cards show them. Check each one's colors with the
   analyzer before adding it.
 - Latin in English (`#english`, `src/content/english.ts`, `src/ui/pages/english.tsx`):
   how English took Latin (waves), each known word's English relatives, Latin
   verb forms and plurals inside English, grammar rules English took from Latin,
   word parts, spelling, grammar terms, abbreviations, phrases, Russian /
   Ukrainian parallels. It sits under Lectiōnēs (a card after the lessons) and
-  has its own practice mode, "find the Latin" (`derive` exercises: any form of
-  the right word counts). Claims there must be etymologically sound: borrowed
-  vs. cousin (kin) vs. look-alike (trap), as in the deck.
+  is read one screen at a time, with quick questions (`englishSteps`; the old
+  "find the Latin" `derive` exercises remain only for mistakes made in them).
+  Claims there must be etymologically sound: borrowed vs. cousin (kin) vs.
+  look-alike (trap), as in the deck.
 - Each case owns one color (see `src/styles.css`); nothing else in the UI uses
   those hues.
 - Roman touches, in gold and brown only: the hedera (ivy-leaf mark, `Hedera`),

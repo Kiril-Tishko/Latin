@@ -1,5 +1,6 @@
-// My dictionary: every word from the lessons plus the cards added from
-// Discover, with strength, forms and spaced review.
+// Verba: every word the learner has (the lessons', the mystery cards' and
+// their own), with its strength, forms and spaced review; the five mystery
+// cards on top, a search that finds any form, and Add a word.
 import { useMemo, useState } from "preact/hooks";
 import { CHAT_WORD_LIST } from "../../chat/words";
 import { CARD_BY_ID } from "../../content/deck";
@@ -18,6 +19,8 @@ import { LatinText, LatinTokens } from "../latin";
 import { go } from "../nav";
 import { derived, update, useProgress } from "../store";
 import { openAddWord } from "../addword";
+import { CardModal, CardStrip, deck } from "../cards";
+import { Card } from "../../content/deck";
 import { startSession } from "./train";
 import { Speak } from "../speak";
 import { Sayings } from "../saying";
@@ -249,87 +252,101 @@ function matches(e: Entry, q: string, formHits: Set<string>): boolean {
   );
 }
 
+type Filter = number | "all" | "cards" | "own" | "chat";
+
 export function Words() {
   const p = useProgress();
   const d = derived();
-  const [filter, setFilter] = useState<number | "deck" | "own" | "all" | "chat">("all");
+  const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Entry | null>(null);
+  const [card, setCard] = useState<Card | null>(null);
   const vocab = d.words.filter((w) => w.kind !== "fixed" && !STORY_ONLY.has(w.id));
   const due = dueWords(p, vocab.map((w) => w.id)).length;
   const q = query.trim();
   // typing any form finds its word: puellam -> puella, labōrant -> labōrō
   const formHits = new Set(q ? d.lexicon.analyze(q).map((a) => a.entry.id) : []);
+  // the Cards filter shows every card opened: those added as words, the others as cards to add
+  const opened = filter === "cards" ? deck(p).opened.filter((c) => !p.added.includes(c.id) && matches(c.entry, q, formHits)) : [];
   const shown = vocab.filter(
     (w) =>
-      (filter === "all" || (filter === "deck" ? "deck" in w.source : filter === "own" ? "own" in w.source : filter !== "chat" && "lesson" in w.source && w.source.lesson === filter)) &&
+      (filter === "all" || (filter === "cards" ? "deck" in w.source : filter === "own" ? "own" in w.source : filter !== "chat" && "lesson" in w.source && w.source.lesson === filter)) &&
       matches(w, q, formHits),
   );
+  const chat = filter === "chat" ? CHAT_WORD_LIST.filter((w) => matches(w, q, formHits)) : [];
+  const count = shown.length + opened.length + chat.length;
   useScreen("page", "Words", () => {
-    const which = filter === "all" ? "all words" : filter === "deck" ? "the words added from Discover" : filter === "own" ? "the words the learner added themselves" : filter === "chat" ? "the chat words of the messenger" : `the words of Lesson ${filter}`;
-    const list = shown.slice(0, 40).map((w) => `${headword(w)} (${w.en})`).join(", ");
-    return `The learner's dictionary: ${vocab.length} words, ${due} due for review. Showing ${which}${q ? `, searching "${q}"` : ""}: ${shown.length} word${shown.length === 1 ? "" : "s"}${shown.length ? `: ${list}${shown.length > 40 ? ", …" : ""}` : ""}.`;
+    const which = filter === "all" ? "all words" : filter === "cards" ? "the words of the mystery cards opened" : filter === "own" ? "the words the learner added themselves" : filter === "chat" ? "the chat words of the messenger" : `the words of Lesson ${filter}`;
+    const list = [...shown, ...opened.map((c) => c.entry), ...chat].slice(0, 40).map((w) => `${headword(w)} (${w.en})`).join(", ");
+    return `Verba, the learner's dictionary: ${vocab.length} words, ${due} due for review; the mystery cards on top. Showing ${which}${q ? `, searching "${q}"` : ""}: ${count} word${count === 1 ? "" : "s"}${count ? `: ${list}${count > 40 ? ", …" : ""}` : ""}.`;
   });
+  const filters: [Filter, string, string?][] = [
+    ["all", "All"],
+    ...LESSONS.filter((l) => p.lessonsDone.includes(l.n)).map((l): [Filter, string, string] => [l.n, roman(l.n), `Lesson ${roman(l.n)}`]),
+    ["cards", d.added.length ? `Cards ${d.added.length}` : "Cards", "Words from the mystery cards"],
+    ...(d.own.length || filter === "own" ? [["own", `Yours ${d.own.length}`, "Words you added yourself"] as [Filter, string, string]] : []),
+    ["chat", "Chat", "Words for chatting in Nūntiī"],
+  ];
   return (
-    <div class="stack">
+    <div class="stack words-page">
       <div class="row word-search-row">
         <input
           id="word-search"
           class="search"
           type="search"
           value={query}
-          placeholder="Quaere… search Latin (any form) or English"
+          placeholder="Quaere… Latin or English"
+          aria-label="Search your words: Latin in any form, or English"
           autocomplete="off"
           autocapitalize="off"
           spellcheck={false}
           onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
         />
-        <button id="add-word" class="btn gold" onClick={() => openAddWord(q && !shown.length ? q : "", "words")} title="Add any Latin word to your dictionary: Claude fills in its card">
-          <Icon.plus /> Add a word
+        <button id="add-word" class="btn gold" onClick={() => openAddWord(q && !count ? q : "", "words")} title="Add any Latin word to your dictionary: Claude fills in its card">
+          <Icon.plus /> Add<span class="wide-only"> a word</span>
         </button>
       </div>
-      <div class="spread">
-        <div class="seg" role="group" aria-label="Filter words">
-          <button aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All</button>
-          {LESSONS.filter((l) => p.lessonsDone.includes(l.n)).map((l) => (
-            <button key={l.n} aria-pressed={filter === l.n} onClick={() => setFilter(l.n)}>{roman(l.n)}</button>
+      {!q && <CardStrip />}
+      <div class="spread words-bar">
+        <div class="seg scroll-x" role="group" aria-label="Show">
+          {filters.map(([f, label, title]) => (
+            <button key={String(f)} aria-pressed={filter === f} title={title} onClick={() => setFilter(f)}>{label}</button>
           ))}
-          <button aria-pressed={filter === "deck"} onClick={() => setFilter("deck")}>Discovered ({d.added.length})</button>
-          <button aria-pressed={filter === "own"} onClick={() => setFilter("own")} title="Words you added yourself">Yours ({d.own.length})</button>
-          <button aria-pressed={filter === "chat"} onClick={() => setFilter("chat")} title="Words for chatting in Nūntiī">Chat ({CHAT_WORD_LIST.length})</button>
         </div>
-        <button class="btn" disabled={!due} onClick={() => startSession({ kind: "words" }) && go({ page: "train" })}>
-          {due > 0 ? `Review ${due} word${due === 1 ? "" : "s"}` : "Nothing to review"}
+        <button id="review-words" class="btn" disabled={!due} onClick={() => startSession({ kind: "words" }) && go({ page: "train" })}>
+          {due > 0 ? `Review ${due} word${due === 1 ? "" : "s"}` : "No words to review"}
         </button>
       </div>
-      {filter === "chat" && (
-        <>
-          <p class="small muted">Words for chatting with your friends in Nūntiī. The lessons have not taught them yet, so the messenger shows their meanings.</p>
-          <div class="word-grid">
-            {CHAT_WORD_LIST.filter((w) => matches(w, q, formHits)).map((w) => (
-              <div key={w.id} class="panel word-tile">
-                <span class="head latin" lang="la">{headword(w)}</span>
-                <span class="gloss">{w.en}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+      {filter === "chat" && <p class="small muted">Words for chatting with your friends in Nūntiī. The lessons have not taught them yet, so the messenger shows their meanings.</p>}
       <div class="word-grid">
-        {filter !== "chat" && shown.map((w) => (
+        {shown.map((w) => (
           <button key={w.id} class="panel word-tile" onClick={() => setOpen(w)}>
             <span class="head latin" lang="la">{headword(w)}</span>
             <span class="gloss">{w.en}</span>
             <Mosaic value={strength(p.words[w.id])} tiles={6} thin />
           </button>
         ))}
+        {opened.map((c) => (
+          <button key={c.id} class="panel word-tile not-added" onClick={() => setCard(c)} title="A card you opened but did not add">
+            <span class="head latin" lang="la">{headword(c.entry)}</span>
+            <span class="gloss">{c.entry.en}</span>
+            <span class="small muted ui">not added</span>
+          </button>
+        ))}
+        {chat.map((w) => (
+          <div key={w.id} class="panel word-tile">
+            <span class="head latin" lang="la">{headword(w)}</span>
+            <span class="gloss">{w.en}</span>
+          </div>
+        ))}
       </div>
-      {!shown.length && filter !== "chat" && (
+      {!count && (
         <p class="muted">
-          {q ? <>Nothing found for "{q}". <button class="linkish" onClick={() => openAddWord(q, "words")}>Add «{q}» to your words</button></> : filter === "own" ? "No words of your own yet: add one with Add a word." : "No words here yet. Open some cards in Discover."}
+          {q ? <>Nothing found for "{q}". <button class="linkish" onClick={() => openAddWord(q, "words")}>Add «{q}» to your words</button></> : filter === "own" ? "No words of your own yet: add one with Add a word." : filter === "cards" ? "No cards opened yet: open one of the mystery cards above." : "No words here yet."}
         </p>
       )}
       {open && <WordModal e={open} onClose={() => setOpen(null)} />}
+      {card && <CardModal card={card} onClose={() => setCard(null)} />}
     </div>
   );
 }

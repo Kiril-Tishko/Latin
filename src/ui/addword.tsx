@@ -1,7 +1,7 @@
 // Adding a word to the learner's own dictionary: from the Words page, under an
 // answer of Ask Claude, or from a word tapped in the messenger. The learner
 // types a word (Latin in any form, or English, Russian, Ukrainian); a word the
-// site already has is shown as it is (a Discover card is added as the card);
+// site already has is shown as it is (a mystery card is added as the card);
 // anything else Claude fills in, the grammar engine builds its forms, and the
 // learner sees the whole card before adding it.
 import { useEffect, useRef, useState } from "preact/hooks";
@@ -52,7 +52,7 @@ export function knownWord(text: string): Entry | null {
   return d.lexicon.analyze(text.trim()).find((a) => mine.has(a.entry.id))?.entry ?? null;
 }
 
-/** A Discover card the word belongs to, not added yet. */
+/** A mystery card the word belongs to, not added yet. */
 function cardOf(text: string): Card | null {
   const p = derived();
   const mine = new Set(p.words.map((w) => w.id));

@@ -28,8 +28,8 @@ export function videoLines(lessons: number[], lex: Lexicon, k: Knowledge): Video
     for (const s of l.sentences) {
       for (const [la, en] of pairs(s.la, s.en)) {
         const line = makeLine({ kind: "video", lesson: l.n }, la, en, lex);
-        // only the rules of the lessons up to the step
-        if (line && line.skills.every((sk) => k.skills.has(sk))) out.push(line as VideoLine);
+        // only the rules of the lessons up to the step, and only sentences (not phrases such as "in Olympō")
+        if (line && line.skills.every((sk) => k.skills.has(sk)) && line.tokens.some((t) => t.role === "verb")) out.push(line as VideoLine);
       }
     }
   }

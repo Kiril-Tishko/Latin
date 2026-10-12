@@ -1,10 +1,10 @@
-// Fābulae: short stories made only of the words of the videos, each with the
-// rules of its step. Read a story (tap a line for its English, a word for its
-// meaning), listen to it, answer two questions, then practise its lines.
+// A story (Fābula): made only of the words of the videos, with the rules of its
+// step. Read it (tap a line for its English, a word for its meaning), listen to
+// it, answer two questions, then practise its lines. The list of stories is on
+// the Lectiōnēs page.
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { speakSequence } from "../../audio/speech";
 import { STORIES, Story, STORY_BY_ID } from "../../content/stories";
-import { LESSON_BY_N } from "../../content/lessons";
 import { seeded, shuffle } from "../../latin/generate";
 import { roman } from "../../latin/text";
 import { seenSkills } from "../../trainer/path";
@@ -18,76 +18,6 @@ import { audioReady, Speak } from "../speak";
 import { getProgress, update, useProgress } from "../store";
 import { partName } from "./learn";
 import { startSession } from "./train";
-
-function StoryCard({ s, read, needs }: { s: Story; read: boolean; needs?: string }) {
-  return (
-    <button class={`panel story-card${read ? " read" : ""}`} onClick={() => go({ page: "story", id: s.id })}>
-      <div class="spread" style={{ alignItems: "baseline" }}>
-        <LatinText text={s.title} cls="latin-lg" />
-        {read ? (
-          <span class="story-read" title="Read">
-            <Laurel cls="laurel-mini" /> lēcta
-          </span>
-        ) : needs ? null : (
-          <span class="chip">new</span>
-        )}
-      </div>
-      <span class="muted">{s.en}</span>
-      <span class="small"><Inline text={s.notice} /></span>
-      <span class="small ui muted">{needs ? `Opens after ${needs}` : `${s.lines.length} lines · ${s.questions.length} questions`}</span>
-    </button>
-  );
-}
-
-export function Stories() {
-  const p = useProgress();
-  const seen = seenSkills(p);
-  const now = STORIES.filter((s) => storyOpen(s, seen));
-  const later = STORIES.filter((s) => !storyOpen(s, seen));
-  const needs = (s: Story) => partsBefore(s, seen).map((x) => `${partName(x).toLowerCase()} (${x.title})`).join(", ");
-  useScreen("page", "Stories", () =>
-    [
-      "The list of short stories (Fābulae), made only of words from the videos. A story opens for practice once the learner has learned every rule it uses; the others wait under \"Not open yet\" with the rules they need.",
-      ...STORIES.map((s) => `Step ${s.step}: "${s.title}" (${s.en})${p.stories[s.id] ? ", read" : ""}${storyOpen(s, seen) ? "" : `, opens after ${needs(s)}`}`),
-    ].join("\n"),
-  );
-  return (
-    <div class="stack-lg">
-      <div class="stack" style={{ gap: "8px" }} data-ask="Stories: introduction">
-        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "lessons" })}>← Lessons</button>
-        <span class="eyebrow">Fābulae</span>
-        <h1>Short stories</h1>
-        <p class="muted prose">
-          Made only of the words from the videos. A story opens when you have learned the rules it uses. Read one, listen to it, answer two questions, then practise its lines.
-        </p>
-        {now.length > 0 && (
-          <div class="row">
-            <button class="btn" onClick={() => startSession({ kind: "stories" }) && go({ page: "train" })}>
-              <Icon.stylus /> Practise the open stories
-            </button>
-          </div>
-        )}
-      </div>
-      {!now.length && <p class="ansata small">The first stories open after the first rules of Lesson I. Learn them on the Home page.</p>}
-      {[...new Set(now.map((s) => s.step))].map((n) => (
-        <section key={n} class="stack" data-ask={`Stories of step ${n}`}>
-          <span class="eyebrow">Gradus {roman(n)} · {LESSON_BY_N.get(n)?.title}</span>
-          <div class="grid-2">
-            {now.filter((s) => s.step === n).map((s) => <StoryCard key={s.id} s={s} read={!!p.stories[s.id]} />)}
-          </div>
-        </section>
-      ))}
-      {later.length > 0 && (
-        <details class="later-stories">
-          <summary>Not open yet ({later.length}): stories with rules you will learn next</summary>
-          <div class="grid-2" style={{ marginTop: "12px" }}>
-            {later.map((s) => <StoryCard key={s.id} s={s} read={!!p.stories[s.id]} needs={needs(s)} />)}
-          </div>
-        </details>
-      )}
-    </div>
-  );
-}
 
 /** One comprehension question: three answers, shuffled once per story. */
 function Question({ q, seed, onRight }: { q: Story["questions"][number]; seed: number; onRight: () => void }) {
@@ -184,7 +114,7 @@ export function StoryPage({ id }: { id: string }) {
   return (
     <div class="stack-lg story-page">
       <div class="stack" style={{ gap: "8px" }} data-ask="Story: title">
-        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "stories" })}>← All stories</button>
+        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "stories" })}>← Lectiōnēs</button>
         <span class="eyebrow">Fābula · Gradus {roman(story.step)}</span>
         <h1 class="story-title"><LatinText text={story.title} /></h1>
         <p class="muted story-en">{story.en}</p>

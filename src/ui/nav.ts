@@ -1,6 +1,8 @@
 // Page routing. Only a bare #token survives in an artifact link, so routes
-// are plain words: #home, #lessons, #lesson-3, #learn-2-1, #train, #words, #discover, #rules, #english, #stories, #story-aqua,
-// #nuntii (the messenger) and #nuntii-iulia (a chat).
+// are plain words: #home, #lessons, #lesson-3, #learn-2-1, #train (a round in
+// progress), #words, #english, #stories, #story-aqua, #nuntii (the messenger)
+// and #nuntii-iulia (a chat). The old #rules and #discover lead to the pages
+// that hold them now (the lessons, the words).
 import { useEffect, useState } from "preact/hooks";
 
 export type Route =
@@ -10,8 +12,6 @@ export type Route =
   | { page: "learn"; id: string }
   | { page: "train" }
   | { page: "words" }
-  | { page: "discover" }
-  | { page: "rules" }
   | { page: "english" }
   | { page: "stories" }
   | { page: "story"; id: string }
@@ -27,7 +27,9 @@ export function parse(hash: string): Route {
   if (st) return { page: "story", id: st[1] };
   const chat = h.match(/^nuntii(?:-([a-z0-9]+))?$/);
   if (chat) return chat[1] ? { page: "messenger", thread: chat[1] } : { page: "messenger" };
-  if (["lessons", "train", "words", "discover", "rules", "english", "stories"].includes(h)) return { page: h as "lessons" };
+  if (h === "rules") return { page: "lessons" };
+  if (h === "discover") return { page: "words" };
+  if (["lessons", "train", "words", "english", "stories"].includes(h)) return { page: h as "lessons" };
   return { page: "home" };
 }
 

@@ -11,7 +11,7 @@ import { buildKnowledge, fullLexicon } from "../src/trainer/knowledge";
 import { lineSkills, readLine } from "../src/trainer/lines";
 import { currentPart, markSeen, meetsKeys, nextNewPart, PART_GOAL, partPhase, partProgress, partRight, partState, seenSkills, updatePath } from "../src/trainer/path";
 import { migrate, newProgress, Progress } from "../src/trainer/progress";
-import { applyResult, partExercise } from "../src/trainer/session";
+import { applyResult, BLOCK, partExercise } from "../src/trainer/session";
 import { practiceLines } from "../src/trainer/stories";
 
 const lex = fullLexicon();
@@ -272,7 +272,7 @@ function playRound(part: Part, seed: number, size = 12, startRight = 0) {
   const out: { ex: Exercise; phase: string; counted: boolean; right: number }[] = [];
   for (let i = 0; i < size; i++) {
     const phase = partPhase(p, part);
-    const ex = partExercise(p, ctx, part, lines, STEPWISE, seen);
+    const ex = partExercise(p, ctx, part, lines, STEPWISE, seen, out.map((x) => x.ex));
     if (!ex) break;
     const answer = modelAnswer(ex);
     const res = ex.check(answer);
@@ -323,6 +323,19 @@ describe("practice of each part", () => {
     expect(fresh.every((kind) => ["choose", "meaning", "tiles", "ending", "la2en", "form"].includes(kind))).toBe(true);
     const late = kinds(8);
     expect(late.filter((kind) => kind === "en2la" || kind === "transform").length).toBeGreaterThan(late.length * 0.3);
+  });
+
+  it("comes in short blocks of one kind, so one instruction serves a few exercises", () => {
+    for (const id of ["2.1", "3.1", "4.2"]) {
+      const part = PARTS.find((x) => x.id === id)!;
+      for (const seed of [1, 2, 3]) {
+        const kinds = playRound(part, seed * 7, 12).out.map((x) => x.ex.kind);
+        const runs: number[] = [];
+        kinds.forEach((k, i) => (i && k === kinds[i - 1] ? runs[runs.length - 1]++ : runs.push(1)));
+        expect(Math.max(...runs), `${id}: ${kinds.join(" ")}`).toBeLessThanOrEqual(BLOCK);
+        expect(kinds.length / runs.length, `${id}: ${kinds.join(" ")}`).toBeGreaterThanOrEqual(2);
+      }
+    }
   });
 
   it("never gives a hard exercise while a rule is new, even when the usual kinds cannot show it", () => {

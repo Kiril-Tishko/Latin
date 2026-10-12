@@ -57,8 +57,14 @@ export function storySession(p: Progress, ctx: Ctx, stories: Story[], size?: num
   return linesSession(p, ctx, lines, size ?? Math.min(12, lines.length * 2));
 }
 
+/** A word said twice ("legit et legit", again and again) reads well in a story but makes a confusing exercise. */
+const saysTwice = (l: Line) => {
+  const words = l.tokens.filter((t) => t.role !== "conj" && t.role !== "prep").map((t) => t.text.toLowerCase());
+  return new Set(words).size < words.length;
+};
+
 /** Every fixed sentence that needs only these rules: the videos' and the stories'. */
 export function practiceLines(lex: Lexicon, k: Knowledge): Line[] {
   const stories = STORIES.flatMap((s) => storyLines(s, lex)).filter((l) => l.skills.every((sk) => k.skills.has(sk)));
-  return [...videoLines([1, 2, 3, 4], lex, k), ...stories];
+  return [...videoLines([1, 2, 3, 4], lex, k), ...stories].filter((l) => !saysTwice(l));
 }

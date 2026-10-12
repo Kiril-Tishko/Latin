@@ -5,7 +5,7 @@ import { checkEnglish, checkLatin, CheckedToken, describe, hinted, Issue, slotsF
 import { normalizeEnglish } from "../latin/english";
 import {
   chance, Clause, english, generate, Knowledge, latinText, latinTokens, LToken, NP, pick, Rand, shuffle, swapRoles, verbUsable,
-  nounUsable, adjUsable, adjFits,
+  nounUsable, adjUsable, adjFits, makesSense, sensibleObject,
 } from "../latin/generate";
 import { conjugate, declineAdj, declineNoun, dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, adjDecl, declGroup, nounSkill } from "../latin/skills";
@@ -82,6 +82,10 @@ export interface Exercise {
   audio?: string;
   /** Aimed at a rule that is still new: shown with colors and as plainly as possible. */
   easy?: boolean;
+  /** A review between a rule's exercises (a mistake to fix, a word that is due): it doesn't break a block of one kind. */
+  aside?: boolean;
+  /** An earlier rule, reviewed in a rule's round (one in five past its simple exercises). */
+  earlier?: boolean;
   /** For "tiles": the words to build the answer from (the right ones and a wrong form or two). */
   tiles?: string[];
   /** A sentence from the video of this lesson. */
@@ -242,7 +246,7 @@ export function meaningOn(ctx: Ctx, tokens: LToken[], englishText: string, skill
       const ok = answer === correct;
       return {
         verdict: ok ? "correct" : "wrong",
-        issues: ok ? [] : [{ kind: "word", message: `Read the endings again: ${hinted(latinText(tokens))} means "${englishText}".` }],
+        issues: ok ? [] : [{ kind: "word", message: `Read the endings again: ${hinted(latinText(tokens))} means "${englishText.replace(/\.$/, "")}".` }],
         expected: englishText,
         credit: Object.fromEntries(skills.map((sk) => [sk, ok ? 1 : 0.3])),
         wordCredit: wordsCredit(ids, ok),
@@ -699,6 +703,8 @@ const TRANSFORMS: Transform[] = [
       if (s.subj.np.adj && !adjUsable(k, s.subj.np.adj, s.subj.np.noun, "nom", "sg")) return null;
       if (s.obj.adj && !adjUsable(k, s.obj.adj, s.obj.noun, "acc", "sg")) return null;
       if (s.subj.np.poss || s.obj.poss || s.inf) return null;
+      // sensible both ways: "the girl sees the poet" ↔ "the poet sees the girl", not "the water carries the girl"
+      if (k.silly === 0 && (!s.subj.np.noun.tags.includes("person") || !sensibleObject(k, s.verb, s.obj.noun) || !makesSense(s))) return null;
       return s;
     },
   },
@@ -976,3 +982,10 @@ export function makeExercise(kind: MadeKind, ctx: Ctx, focus: string[]): Exercis
 }
 
 export { shuffle, plainText };
+
+/** The answer an exercise takes as right (to check, before showing it, what a right answer would count for). */
+export function rightAnswer(ex: Exercise): string {
+  if (ex.answer === "choice") return ex.correctChoice!;
+  const expected = ex.check("xxxx").expected;
+  return ex.answer === "ending" ? expected.split(" → ")[0].replace("-", "") : expected;
+}

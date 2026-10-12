@@ -5,70 +5,152 @@ import { Lesson, LESSONS, LESSON_BY_N, videoUrl } from "../../content/lessons";
 import { STORIES } from "../../content/stories";
 import { dictionaryForm, headword } from "../../latin/morph";
 import { roman } from "../../latin/text";
-import { nextCard } from "../../trainer/discover";
-import { lessonProgress, partState, seenSkills } from "../../trainer/path";
+import { nextStep, partState, seenSkills } from "../../trainer/path";
 import { storyOpen } from "../../trainer/stories";
 import { partsOf } from "../../content/parts";
-import { Hedera, Icon, Modal, Mosaic } from "../components";
+import { CaseChip, Hedera, Icon } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
 import { go } from "../nav";
 import { derived, useProgress } from "../store";
 import { useScreen } from "../screen";
-import { CardView } from "./discover";
-import { PartsStrip, RuleList } from "./learn";
-import { startSession } from "./train";
+import { NounTable, VerbTable } from "../tables";
+import { englishProgress } from "./english";
+import { partName, PartsStrip, RuleList } from "./learn";
+import { continueLearning, startSession } from "./train";
 
-export function Lessons() {
+/**
+ * Lectiōnēs: the whole path on one page. Each lesson watched with its rules,
+ * one line each (a tap opens the rule); then the short stories, Latin in
+ * English, and the endings at a glance for looking things up.
+ */
+export function Lessons({ focus }: { focus?: "stories" }) {
   const p = useProgress();
+  const seen = seenSkills(p);
+  const watched = LESSONS.filter((l) => p.lessonsDone.includes(l.n));
+  const later = LESSONS.filter((l) => !p.lessonsDone.includes(l.n));
+  const step = nextStep(p);
+  useEffect(() => {
+    if (focus) document.getElementById(`lessons-${focus}`)?.scrollIntoView({ block: "start" });
+  }, [focus]);
   useScreen("page", "Lessons", () =>
-    `The list of lessons: ${LESSONS.map((l) => `${l.n}. ${l.title} (${p.lessonsDone.includes(l.n) ? `watched, ${partsOf(l.n).filter((x) => partState(p, x) === "learned").length} of ${partsOf(l.n).length} rules learned` : "not watched yet"})`).join("; ")}.`,
+    [
+      "The Lectiōnēs page: every rule of the lessons watched, one line each, grouped by lesson (a tap opens the rule; a lesson's title opens its page with the video sentences, its story, phrases and words); then the short stories, Latin in English, and the endings at a glance.",
+      ...watched.map((l) => `Lesson ${l.n} (${l.title}): ${partsOf(l.n).map((x) => `${x.id} ${x.title} (${partState(p, x)})`).join("; ")}`),
+      `Stories: ${STORIES.map((s) => `"${s.title}"${p.stories[s.id] ? " (read)" : storyOpen(s, seen) ? " (open)" : " (not open yet)"}`).join(", ")}.`,
+    ].join("\n"),
   );
   return (
-    <div class="stack-lg">
-      <div class="stack">
-        {LESSONS.map((l) => {
-          const done = p.lessonsDone.includes(l.n);
-          return (
-            <button key={l.n} class="panel lesson-card" onClick={() => go({ page: "lesson", n: l.n })}>
-              <span class="numeral">{roman(l.n)}</span>
-              <div class="stack" style={{ gap: "6px" }}>
-                <div class="spread">
-                  <h2 style={{ fontSize: "1.3rem" }}>{l.title}</h2>
-                  {done ? <Mosaic value={lessonProgress(p, l.n)} thin label={`${Math.round(lessonProgress(p, l.n) * 100)}% of its rules learned`} /> : <span class="chip">not watched yet</span>}
-                </div>
-                <p class="muted small">{l.summary}</p>
-                <span class="small ui muted">
-                  {l.words.length} words · {partsOf(l.n).length} rules{done ? `, ${partsOf(l.n).filter((x) => partState(p, x) === "learned").length} learned` : ""} · {l.minutes} min video
-                </span>
-              </div>
+    <div class="stack-lg lessons-page">
+      <div class="stack" style={{ gap: "8px" }}>
+        <span class="eyebrow">Lectiōnēs</span>
+        <h1>Your path</h1>
+        <p class="muted">Every rule of the lessons you watched, in order. Tap a rule to read it; Continue goes to the next step.</p>
+        {step.kind !== "none" && (
+          <div class="row">
+            <button class="btn" onClick={continueLearning}>
+              <Icon.play /> Continue{step.kind === "learn" || step.kind === "practise" ? `: ${partName(step.part).toLowerCase()}` : ""}
             </button>
-          );
-        })}
-        <button class="panel lesson-card" onClick={() => go({ page: "stories" })}>
-          <span class="numeral" aria-hidden="true"><Icon.scroll /></span>
-          <div class="stack" style={{ gap: "6px" }}>
-            <div class="spread">
-              <h2 style={{ fontSize: "1.3rem" }}>Fābulae: short stories</h2>
-              <span class="chip">{STORIES.filter((s) => storyOpen(s, seenSkills(p)) && !p.stories[s.id]).length} to read</span>
-            </div>
-            <p class="muted small">Stories made only of the words from the videos. Each opens when you have learned its rules: read, listen, answer, practise.</p>
-            <span class="small ui muted">{STORIES.length} stories, three for each step.</span>
           </div>
-        </button>
-        <button class="panel lesson-card" onClick={() => go({ page: "english" })}>
-          <span class="numeral" aria-hidden="true"><Hedera /></span>
-          <div class="stack" style={{ gap: "6px" }}>
-            <div class="spread">
-              <h2 style={{ fontSize: "1.3rem" }}>Latin in English</h2>
-              <span class="chip">extra</span>
-            </div>
-            <p class="muted small">What English took from Latin: your words in English, Latin verbs and plurals hiding in it, grammar rules, abbreviations, and the same words in Russian and Ukrainian.</p>
-            <span class="small ui muted">Read it, then practise finding the Latin inside English words.</span>
-          </div>
-        </button>
+        )}
       </div>
+
+      {watched.map((l) => {
+        const parts = partsOf(l.n);
+        const learned = parts.filter((x) => partState(p, x) === "learned").length;
+        // a lesson learned folds into one line; the one in hand stays open
+        return (
+          <details key={l.n} class="lesson-block" open={learned < parts.length} data-ask={`Lesson ${roman(l.n)}: its rules`}>
+            <summary class="lesson-head">
+              <span class="numeral">{roman(l.n)}</span>
+              <span class="lesson-head-title">{l.title}</span>
+              <span class="lesson-head-state small ui">
+                {learned === parts.length ? <span class="story-read"><Icon.check /> all learned</span> : `${learned} of ${parts.length} learned`}
+              </span>
+            </summary>
+            <div class="stack" style={{ gap: "6px" }}>
+              <div class="panel rule-list-panel">
+                <RuleList lesson={l.n} />
+              </div>
+              <button class="linkish small lesson-page-link" onClick={() => go({ page: "lesson", n: l.n })}>
+                Lesson {roman(l.n)}: the video's sentences, phrases and words ›
+              </button>
+            </div>
+          </details>
+        );
+      })}
+      {later.length > 0 && (
+        <p class="small muted">
+          Not watched yet: {later.map((l) => `${roman(l.n)} ${l.title}`).join(" · ")}. Tick a lesson under Settings when you have watched it.
+        </p>
+      )}
+
+      <section class="stack" id="lessons-stories" data-ask="Short stories">
+        <div class="stack" style={{ gap: "2px" }}>
+          <h2>Fābulae · short stories</h2>
+          <span class="small muted">Only words from the videos. A story opens when you have learned its rules.</span>
+        </div>
+        <div class="panel rule-list-panel">
+          {STORIES.filter((x) => storyOpen(x, seen) || p.stories[x.id]).map((x) => <StoryRow key={x.id} id={x.id} />)}
+        </div>
+        {STORIES.some((x) => !storyOpen(x, seen) && !p.stories[x.id]) && (
+          <details class="rule-more stories-later">
+            <summary>
+              {STORIES.filter((x) => !storyOpen(x, seen) && !p.stories[x.id]).length} more open as you learn <span class="muted small ui">their rules</span>
+            </summary>
+            <div class="panel rule-list-panel" style={{ marginTop: "8px" }}>
+              {STORIES.filter((x) => !storyOpen(x, seen) && !p.stories[x.id]).map((x) => <StoryRow key={x.id} id={x.id} />)}
+            </div>
+          </details>
+        )}
+      </section>
+
+      <button class="panel lesson-card english-card" onClick={() => go({ page: "english" })}>
+        <span class="numeral" aria-hidden="true"><Hedera /></span>
+        <span class="stack" style={{ gap: "4px" }}>
+          <h2 style={{ fontSize: "1.25rem" }}>Latin in English</h2>
+          <span class="muted small">What English took from Latin, a short piece at a time, with a quick question now and then.</span>
+          <span class="small ui">{englishProgress()}</span>
+        </span>
+      </button>
+
+      <details class="rule-more" data-ask="Endings at a glance">
+        <summary>Endings at a glance <span class="muted small ui">nouns and verbs; a ? is a form of a rule not learned yet</span></summary>
+        <div class="stack" style={{ marginTop: "12px" }}>
+          <NounTable k={derived().seenKnowledge} />
+          <VerbTable k={derived().seenKnowledge} />
+          <div class="row color-key small ui">
+            <span>Colors:</span>
+            <CaseChip c="nom" label="subject" />
+            <CaseChip c="acc" label="object" />
+            <CaseChip c="gen" label="of / 's" />
+            <CaseChip c="abl" label="in / at" />
+            <CaseChip c="verb" label="who does it" />
+            <span>An underline marks a plural.</span>
+          </div>
+        </div>
+      </details>
     </div>
+  );
+}
+
+/** One story on the list: its lesson, title and English, and whether it is read, new or for later. */
+function StoryRow({ id }: { id: string }) {
+  const p = useProgress();
+  const x = STORIES.find((s) => s.id === id)!;
+  const open = storyOpen(x, seenSkills(p));
+  const read = !!p.stories[x.id];
+  return (
+    <button class={`rule-row story-row${open ? "" : " locked"}`} onClick={() => go({ page: "story", id: x.id })}>
+      <span class="rule-row-id">{roman(x.step)}</span>
+      <span class="rule-row-title">
+        <LatinText text={x.title} /> <span class="muted small">{x.en}</span>
+      </span>
+      <span class="rule-row-state">
+        {read ? <span class="story-read"><Icon.check /> read</span> : open ? <span class="chip">new</span> : <span class="muted ui small">later</span>}
+      </span>
+      <span class="rule-row-go" aria-hidden="true">›</span>
+    </button>
   );
 }
 
@@ -76,7 +158,6 @@ export function LessonPage({ n }: { n: number }) {
   const l = LESSON_BY_N.get(n);
   const p = useProgress();
   const [showEn, setShowEn] = useState(true);
-  const [card, setCard] = useState(false);
   const [playing, setPlaying] = useState<{ part: "sentences" | "story"; line: number | null } | null>(null);
   const [stopFn, setStopFn] = useState<(() => void) | null>(null);
   useEffect(() => () => stopFn?.(), [stopFn]);
@@ -103,12 +184,10 @@ export function LessonPage({ n }: { n: number }) {
     setPlaying(null);
   };
   if (!l) return <p>That lesson isn't here yet.</p>;
-  const d = derived();
-  const next = nextCard(p.revealed, d.knowledge, new Set(d.words.map((w) => w.id)));
   return (
     <div class="stack-lg">
       <div class="stack" style={{ gap: "8px" }} data-ask={`Lesson ${roman(l.n)}: introduction`}>
-        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "lessons" })}>← All lessons</button>
+        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "lessons" })}>← Lectiōnēs</button>
         <span class="eyebrow">Lectiō {roman(l.n)}</span>
         <h1>{l.title}</h1>
         <p class="muted prose dropcap">{l.summary}</p>
@@ -116,20 +195,6 @@ export function LessonPage({ n }: { n: number }) {
           <a href={videoUrl(l.videoId)} target="_blank" rel="noopener">▶ Watch the video</a>
           <a href={videoUrl(l.newVideoId)} target="_blank" rel="noopener">▶ 2025 re-recording</a>
           {p.lessonsDone.includes(l.n) && <PartsStrip lesson={l.n} />}
-        </div>
-        <div class="row">
-          {partsOf(l.n).some((x) => partState(p, x) !== "new") ? (
-            <button class="btn" onClick={() => startSession({ kind: "lesson", n: l.n }) && go({ page: "train" })}>
-              <Icon.play /> Practise this lesson
-            </button>
-          ) : (
-            <button class="btn" onClick={() => go({ page: "learn", id: `${l.n}.1` })}>
-              <Icon.scroll /> Learn its first rule
-            </button>
-          )}
-          <button class="btn ghost" onClick={() => setCard(true)} disabled={!next}>
-            <Icon.card /> Show one more word
-          </button>
         </div>
       </div>
 
@@ -251,11 +316,6 @@ export function LessonPage({ n }: { n: number }) {
         </section>
       )}
 
-      {card && next && (
-        <Modal onClose={() => setCard(false)} label="One more word" screen={`Mystery card: ${dictionaryForm(next.entry)}`} wide>
-          <CardView card={next} onDone={() => setCard(false)} onClose={() => setCard(false)} />
-        </Modal>
-      )}
     </div>
   );
 }

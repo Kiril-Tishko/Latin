@@ -21,6 +21,8 @@ const SEED = JSON.stringify({
   lessonsDone: [1, 2, 3, 4],
   focusLesson: 3,
   parts: Object.fromEntries([...LEARNED.map((id) => [id, { seen: 1, right: 10, learned: 1 }]), ["3.1", { seen: 1, right: 2 }]]),
+  // an earlier mistake on the rule in practice: it comes back in the rule's round
+  mistakes: [{ at: 1000, kind: "ending", prompt: "I read the book.", answer: "a", expected: "um", skills: ["n2.acc.sg"], notes: [], words: ["liber", "lego"] }],
 });
 const seed = (ctx) =>
   ctx.addInitScript((data) => {
@@ -38,40 +40,51 @@ async function run(name, viewport, colorScheme) {
   await p.screenshot({ path: `${out}/${name}-home.png`, fullPage: true });
   const mobile = viewport.width < 760;
   const nav = mobile ? ".bottomnav button" : ".nav button";
-  for (const [label, file] of [["Lectiōnēs", "lessons"], ["Rēgulae", "rules"], ["Verba", "words"], ["Inventiō", "discover"]]) {
+  const hash = async (h) => {
+    await p.evaluate((h) => { location.hash = h; }, h);
+    await p.waitForTimeout(300);
+  };
+  // Domus: one Continue button and three small cards, four tabs in all
+  if ((await p.locator(nav).count()) !== 4) errors.push(`${name}: ${await p.locator(nav).count()} tabs (expected 4)`);
+  if (!(await p.locator("#continue").count())) errors.push(`${name}: Domus has no Continue button`);
+  if (!((await p.locator(".home-step").textContent()) ?? "").includes("3.1")) errors.push(`${name}: Domus does not name the rule in practice`);
+  if ((await p.locator(".home-also .also-card").count()) !== 3) errors.push(`${name}: Domus does not offer Answer in Latin, a story and the messages`);
+  for (const [label, file] of [["Lectiōnēs", "lessons"], ["Verba", "words"]]) {
     await p.locator(nav, { hasText: label }).first().click();
     await p.waitForTimeout(300);
     await p.screenshot({ path: `${out}/${name}-${file}.png`, fullPage: true });
   }
-  // open mystery cards: every card keeps its spot in the deck while others open
-  await p.locator(nav, { hasText: "Inventiō" }).first().click();
+  // Verba: five mystery cards on top; an opened card turns face up where it lies
+  await p.locator(nav, { hasText: "Verba" }).first().click();
   // (the mouse is moved off the tiles first: a hovered tile lifts by 2px)
-  const spots = () => p.mouse.move(1, 1).then(() => p.waitForTimeout(300)).then(() => p.locator(".deck-tile").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return `${Math.round(r.x)},${Math.round(r.y + scrollY)}`; }).join(" ")));
+  const spots = () => p.mouse.move(1, 1).then(() => p.waitForTimeout(300)).then(() => p.locator(".deck-strip .deck-tile").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return `${Math.round(r.x)},${Math.round(r.y + scrollY)}`; }).join(" ")));
   const before = await spots();
-  // five unopened cards at a time
-  const backs = await p.locator(".deck-tile:not(.face)").count();
+  const backs = await p.locator(".deck-strip .deck-tile:not(.face)").count();
   if (backs < 1 || backs > 5) errors.push(`${name}: ${backs} unopened cards on the table (expected 1-5)`);
-  await p.locator(".deck-head .btn").click();
+  await p.locator(".deck-strip .deck-tile:not(.face)").first().click();
   await p.waitForTimeout(700);
   await p.screenshot({ path: `${out}/${name}-card.png` });
   await p.locator("button", { hasText: "Next new card" }).click();
   await p.waitForTimeout(500);
   await p.locator(".card-modal button[aria-label='Close']").click();
   await p.waitForTimeout(500);
-  if ((await spots()) !== before) errors.push(`${name}: deck tiles moved after opening cards`);
-  if ((await p.locator(".deck-tile.face").count()) < 2) errors.push(`${name}: opened cards are not shown face up`);
-  await p.screenshot({ path: `${out}/${name}-deck.png`, fullPage: true });
-  // a lesson page, with its rules one at a time
-  await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();
-  await p.locator(".lesson-card").nth(3).click();
-  await p.waitForTimeout(300);
+  if ((await spots()) !== before) errors.push(`${name}: the cards moved after opening some`);
+  if ((await p.locator(".deck-strip .deck-tile.face").count()) < 2) errors.push(`${name}: opened cards are not shown face up`);
+  await p.locator(".words-bar button", { hasText: /^Cards/ }).click();
+  if ((await p.locator(".word-tile").count()) < 2) errors.push(`${name}: the Cards filter does not show the cards opened`);
+  await p.screenshot({ path: `${out}/${name}-words-cards.png`, fullPage: true });
+  // a lesson page: its rules one line each, no long rule texts
+  await hash("#lesson-4");
   if ((await p.locator(".rule-row").count()) !== 5) errors.push(`${name}: Lesson IV does not list its five rules`);
   if (await p.locator(".rule-detail, .rule-block").count()) errors.push(`${name}: the lesson page still shows the long rule texts`);
-  // Rēgulae: every rule one line each, the current one marked; a tap opens it, with the full text closed under More detail
-  await p.locator(nav, { hasText: "Rēgulae" }).first().click();
+  await p.screenshot({ path: `${out}/${name}-lesson4.png`, fullPage: true });
+  // Lectiōnēs: the lessons learned fold into one line; the rule in hand is marked; a tap opens it,
+  // with the full text closed under More detail
+  await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();
   await p.waitForTimeout(200);
-  if ((await p.locator(".rule-row").count()) !== 22) errors.push(`${name}: Rēgulae does not list the 22 rules`);
-  if ((await p.locator(".rule-row.current").count()) !== 1) errors.push(`${name}: Rēgulae does not mark the rule you are on`);
+  if ((await p.locator(".lesson-block[open] .rule-row").count()) !== 10) errors.push(`${name}: Lectiōnēs does not show the ten rules of Lessons III-IV (the learned ones folded)`);
+  if ((await p.locator(".lesson-block:not([open])").count()) !== 2) errors.push(`${name}: the learned lessons are not folded`);
+  if ((await p.locator(".rule-row.current").count()) !== 1) errors.push(`${name}: Lectiōnēs does not mark the rule you are on`);
   await p.locator(".rule-row.current").click();
   await p.waitForTimeout(200);
   if (!(await p.locator(".learn-line").count())) errors.push(`${name}: a tap on a rule does not open it`);
@@ -79,82 +92,57 @@ async function run(name, viewport, colorScheme) {
   await p.locator(".rule-more summary").click();
   if (!(await p.locator(".rule-detail").first().isVisible())) errors.push(`${name}: More detail does not open`);
   await p.screenshot({ path: `${out}/${name}-rule-more.png`, fullPage: true });
-  await p.screenshot({ path: `${out}/${name}-lesson4.png`, fullPage: true });
-  // Latin in English, from the lessons list, and its find-the-Latin round
+  // Latin in English: one screen at a time, Next, a quick question now and then
   await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();
-  await p.locator(".lesson-card", { hasText: "Latin in English" }).click();
+  await p.locator(".english-card").click();
   await p.waitForTimeout(300);
-  if ((await p.locator(".en-section").count()) !== 12) errors.push(`${name}: the Latin in English page is missing sections`);
-  if (!(await p.locator(".en-card").count())) errors.push(`${name}: no words of yours on the Latin in English page`);
+  if (!(await p.locator(".reader-card").count())) errors.push(`${name}: Latin in English is not a reader`);
+  for (let i = 0; i < 8 && !(await p.locator(".reader-option").count()); i++) {
+    await p.locator(".reader-nav .btn.big").click();
+    await p.waitForTimeout(150);
+  }
+  if (!(await p.locator(".reader-option").count())) errors.push(`${name}: no quick question in the first screens of Latin in English`);
+  else {
+    if (!(await p.locator(".reader-nav .btn.big").isDisabled())) errors.push(`${name}: Next works before the question is answered`);
+    await p.locator(".reader-option").first().click();
+    if (!(await p.locator(".reader-verdict").count())) errors.push(`${name}: the quick question gives no verdict`);
+  }
+  if ((await p.evaluate(() => document.documentElement.scrollHeight - innerHeight)) > 2) errors.push(`${name}: a Latin in English screen scrolls`);
   await p.screenshot({ path: `${out}/${name}-english.png` });
-  await p.locator("button", { hasText: "Practise: find the Latin" }).first().click();
-  await p.waitForTimeout(200);
-  await p.locator("#answer-input").fill("aqua");
-  await p.locator("#answer-input").press("Enter");
-  await p.waitForTimeout(200);
-  if (!(await p.locator(".verdict").count())) errors.push(`${name}: the find-the-Latin exercise gives no verdict`);
-  await p.screenshot({ path: `${out}/${name}-english-quiz.png` });
-  await p.locator(".trainer-top button", { hasText: "End" }).click();
-  await p.locator("button", { hasText: "Choose another practice" }).click();
   // rounds on the sentences of the videos (tiles and meanings among them: a round is random,
-  // so a second one runs if the first lacked one), then the mistakes come back
+  // so a second one runs if the first lacked one)
   const kinds = new Set();
   for (let round = 0; round < 3 && !(kinds.has("tiles") && kinds.has("meaning")); round++) {
-  if (round) await p.locator("button", { hasText: "Choose another practice" }).click();
-  await p.locator(".mode-card", { hasText: "Sentences from the videos" }).click();
-  for (let i = 0; i < 20 && !(await p.locator(".summary-head").count()); i++) {
-    await p.waitForTimeout(120);
-    if (await p.locator(".tile-board").count()) {
-      kinds.add("tiles");
-      await p.locator(".tile-tray .tile").first().click();
-      await p.locator("button", { hasText: "Check" }).click();
-    } else if (await p.locator(".meaning-choices").count()) {
-      kinds.add("meaning");
-      await p.locator(".meaning-choices .word-btn").first().click();
-    } else if (await p.locator(".word-btn.choice").count()) await p.locator(".word-btn.choice").first().click();
-    else {
-      await p.locator("#answer-input").fill("a");
-      await p.locator("#answer-input").press("Enter");
+    await hash("#lesson-2");
+    await p.locator("button", { hasText: "Practise them" }).click();
+    for (let i = 0; i < 20 && !(await p.locator(".summary-head").count()); i++) {
+      await p.waitForTimeout(120);
+      if (await p.locator(".tile-board").count()) {
+        kinds.add("tiles");
+        await p.locator(".tile-tray .tile").first().click();
+        await p.locator("button", { hasText: "Check" }).click();
+      } else if (await p.locator(".meaning-choices").count()) {
+        kinds.add("meaning");
+        await p.locator(".meaning-choices .word-btn").first().click();
+      } else if (await p.locator(".word-btn.choice").count()) await p.locator(".word-btn.choice").first().click();
+      else if (await p.locator(".gap-input").count()) {
+        await p.locator(".gap-input").fill("a");
+        await p.locator(".gap-input").press("Enter");
+      } else {
+        await p.locator("#answer-input").fill("a");
+        await p.locator("#answer-input").press("Enter");
+      }
+      await p.waitForTimeout(120);
+      await p.locator("button", { hasText: "Next" }).click();
     }
-    await p.waitForTimeout(120);
-    if (!(await p.locator(".ex-source", { hasText: "video" }).count())) errors.push(`${name}: a video round exercise does not say where it is from`);
-    await p.locator("button", { hasText: "Next" }).click();
-  }
+    await p.locator("button", { hasText: "Done for now" }).click();
   }
   if (!kinds.has("tiles") || !kinds.has("meaning")) errors.push(`${name}: the video rounds had no tiles or no meanings (${[...kinds]})`);
-  await p.screenshot({ path: `${out}/${name}-video-summary.png`, fullPage: true });
-  await p.locator("button", { hasText: "Choose another practice" }).click();
-  await p.locator(".mode-card", { hasText: "Fix my mistakes" }).click();
-  await p.waitForTimeout(200);
-  if (!(await p.locator(".ex-source", { hasText: "earlier mistake" }).count())) errors.push(`${name}: Fix my mistakes does not bring a mistake back`);
-  await p.screenshot({ path: `${out}/${name}-fix.png` });
-  await p.locator(".trainer-top button", { hasText: "End" }).click();
-  await p.locator("button", { hasText: "Choose another practice" }).click();
-  // every exercise says what to do; an ending or a form is typed into the sentence itself,
-  // and a sentence to change starts in the box
-  await p.locator(".mode-card", { hasText: "Endings drill" }).click();
-  let inline = 0;
-  for (let i = 0; i < 8 && !(await p.locator(".summary-head").count()); i++) {
-    await p.waitForTimeout(100);
-    if (!(await p.locator(".task-line .task-text").count())) errors.push(`${name}: an exercise without a plain task line`);
-    if (await p.locator(".gap-input").count()) {
-      inline++;
-      if (!(await p.locator(".prompt .gap-input").count())) errors.push(`${name}: the answer box is not inside the sentence`);
-      if (inline === 1) await p.screenshot({ path: `${out}/${name}-gap.png` });
-      await p.locator(".gap-input").fill("a");
-      await p.locator(".gap-input").press("Enter");
-    } else if (await p.locator(".word-btn.choice").count()) await p.locator(".word-btn.choice").first().click();
-    else break;
-    await p.waitForTimeout(120);
-    await p.locator("button", { hasText: "Next" }).click();
-  }
-  if (!inline) errors.push(`${name}: no ending or form was typed into the sentence`);
-  await p.locator(".trainer-top button", { hasText: "End" }).click().catch(() => {});
-  await p.locator("button", { hasText: "Choose another practice" }).click();
-  // Answer in Latin: a question about you, answered with your own words, then one answered wrong
+  // Answer in Latin, from Domus: a question about you, answered with your own words, then one answered wrong
   // (the "why" questions first: "Cūr aquam bibis?" also contains "bibis")
   const ANSWERS = { "Cūr labōrās": "Labōrō quod discō.", "Cūr aquam": "Aquam bibō quod labōrō.", legis: "Epistulam legō.", scrībis: "Epistulam scrībō.", bibis: "Aquam bibō.", vidēs: "Silvam videō.", habēs: "Librum habeō.", spectās: "Silvam spectō.", portās: "Aquam portō.", dēsīderās: "Amīcam dēsīderō.", discis: "Scrībere discō." };
-  await p.locator(".mode-card", { hasText: "Answer in Latin" }).click();
+  await p.locator(nav, { hasText: "Domus" }).first().click();
+  await p.locator(".also-card", { hasText: "Answer in Latin" }).click();
   await p.waitForTimeout(200);
   const question = (await p.locator(".answer-q").textContent()) ?? "";
   const key = Object.keys(ANSWERS).find((k) => question.includes(k));
@@ -173,28 +161,37 @@ async function run(name, viewport, colorScheme) {
   await p.waitForTimeout(200);
   if (!(await p.locator(".answer .eyebrow", { hasText: "For example" }).count()) && !(await p.locator(".eyebrow", { hasText: "For example" }).count())) errors.push(`${name}: an open answer shows no example`);
   await p.screenshot({ path: `${out}/${name}-answer-wrong.png` });
-  await p.locator(".trainer-top button", { hasText: "End" }).click();
-  await p.locator("button", { hasText: "Choose another practice" }).click();
-  // train: the current rule (3.1, learned on an earlier day): a reminder first, then three exercises
-  await p.locator(nav, { hasText: "Exercitium" }).first().click();
-  await p.waitForTimeout(200);
-  await p.screenshot({ path: `${out}/${name}-chooser.png`, fullPage: true });
-  await p.locator(".step-panel .btn.big").click();
+  await p.locator(".trainer-end").click();
+  await p.locator("button", { hasText: "Done for now" }).click();
+  // Continue: the rule in practice (3.1, learned on an earlier day): a reminder first, then its
+  // exercises in blocks of one kind; Help shows the rule; the fourth brings an earlier mistake back,
+  // its ending typed into the sentence itself
+  await p.locator("#continue").click();
   await p.waitForTimeout(200);
   await p.screenshot({ path: `${out}/${name}-rules-first.png`, fullPage: true });
   await p.locator("button", { hasText: "Start exercises" }).click();
-  for (let i = 0; i < 3; i++) {
+  if (!((await p.locator(".part-count").textContent()) ?? "").includes("/ 10 right")) errors.push(`${name}: the round does not show the rule's count`);
+  for (let i = 0; i < 4; i++) {
     await p.waitForTimeout(200);
+    if (!(await p.locator(".task-line .task-text").count())) errors.push(`${name}: an exercise without a plain task line`);
     if (i === 1) {
-      await p.locator(".ex-actions button", { hasText: "Rule" }).click();
+      await p.locator("#ex-help").click();
       await p.waitForTimeout(100);
-      if (!(await p.locator(".rule-box").count())) errors.push(`${name}: the Rule button shows no rule`);
+      if (!(await p.locator(".rule-box").count())) errors.push(`${name}: Help shows no rule`);
+    }
+    if (i === 3) {
+      if (!(await p.locator(".ex-source", { hasText: "earlier mistake" }).count())) errors.push(`${name}: the round does not bring an earlier mistake back`);
+      if (!(await p.locator(".prompt .gap-input").count())) errors.push(`${name}: the ending is not typed into the sentence`);
+      await p.screenshot({ path: `${out}/${name}-gap.png` });
     }
     if (await p.locator(".tile-board").count()) {
       await p.locator(".tile-tray .tile").first().click();
       await p.locator("button", { hasText: "Check" }).click();
     } else if (await p.locator(".word-btn").count()) await p.locator(".word-btn").first().click();
-    else {
+    else if (await p.locator(".gap-input").count()) {
+      await p.locator(".gap-input").fill("um");
+      await p.locator(".gap-input").press("Enter");
+    } else {
       await p.locator("#answer-input").fill(i === 0 ? "puella" : "agricola aquam portat");
       await p.screenshot({ path: `${out}/${name}-train-${i}-q.png` });
       await p.locator("#answer-input").press("Enter");
@@ -215,7 +212,13 @@ async function run(name, viewport, colorScheme) {
 // with acute accents only), listening exercises play by themselves.
 async function audio() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await seed(ctx);
+  // the earlier mistake to come back is a listening one: it plays by itself
+  await ctx.addInitScript((data) => {
+    if (localStorage.getItem("tabula-latina-progress-v1")) return;
+    const p = JSON.parse(data);
+    p.mistakes = [{ at: 1000, kind: "listen", prompt: "Listen", answer: "a", expected: "Amīcum videō.", skills: ["n2.acc.sg"], notes: [], words: ["amicus", "video"] }];
+    localStorage.setItem("tabula-latina-progress-v1", JSON.stringify(p));
+  }, SEED);
   await ctx.addInitScript(() => {
     const voices = [
       { name: "Alice", lang: "it-IT", voiceURI: "alice", localService: true, default: false },
@@ -243,10 +246,8 @@ async function audio() {
   });
   const p = await ctx.newPage();
   p.on("pageerror", (e) => errors.push(`audio: ${e.message}`));
-  await p.goto(`file://${page}`);
+  await p.goto(`file://${page}#lesson-2`);
   await p.waitForTimeout(800);
-  await p.locator(".nav button", { hasText: "Lectiōnēs" }).click();
-  await p.locator(".lesson-card").nth(1).click();
   const speakers = await p.locator(".speak").count();
   if (speakers < 20) errors.push(`audio: only ${speakers} speaker buttons on lesson II`);
   await p.locator(".speak").first().click();
@@ -272,11 +273,20 @@ async function audio() {
   await p.keyboard.press("Escape");
   if (!spoken.some((t) => /disquípula|maguístra/.test(t))) errors.push(`audio: no respelled Latin in ${JSON.stringify(spoken.slice(0, 3))}`);
   if (spoken.some((t) => /[àèìòù]/.test(t))) errors.push(`audio: grave accents would be spelled out: ${JSON.stringify(spoken.slice(0, 3))}`);
-  await p.locator(".nav button", { hasText: "Exercitium" }).click();
-  await p.locator("button", { hasText: "Listening" }).first().click();
+  // the rule's round: three exercises shown and skipped, then the listening mistake plays by itself
+  await p.locator(".nav button", { hasText: "Domus" }).click();
+  await p.locator("#continue").click();
+  await p.locator("button", { hasText: "Start exercises" }).click();
+  for (let i = 0; i < 3; i++) {
+    await p.waitForTimeout(150);
+    await p.locator(".ex-actions button", { hasText: "Show answer" }).click();
+    await p.locator("button", { hasText: "Next" }).click();
+  }
+  const heard = (await p.evaluate(() => window.__spoken)).length;
   await p.waitForTimeout(400);
   const before = (await p.evaluate(() => window.__spoken)).length;
-  if (before <= spoken.length) errors.push("audio: listening exercise did not play by itself");
+  if (!((await p.locator(".task-text").textContent()) ?? "").includes("Listen")) errors.push("audio: the listening mistake did not come back");
+  if (before <= heard) errors.push("audio: listening exercise did not play by itself");
   await p.screenshot({ path: `${out}/audio-listen.png` });
   await p.locator("#answer-input").fill("puella ambulat");
   await p.locator("#answer-input").press("Enter");
@@ -315,10 +325,10 @@ async function askClaude() {
   p.on("pageerror", (e) => errors.push(`ask: ${e.message}`));
   await p.goto(`file://${page}`);
   await p.waitForTimeout(800);
-  await p.locator("button", { hasText: "Ask Claude what to practise today" }).click();
+  await p.locator(".ask-btn").click();
   await p.waitForTimeout(300);
-  if (!(await p.locator("#ask-input").inputValue()).includes("practise")) errors.push("ask: no suggested question in the box");
-  if ((await p.evaluate(() => window.__asked.length)) !== 0) errors.push("ask: the suggestion was sent without the learner pressing Ask");
+  await p.locator("#ask-input").fill("What should I practise today?");
+  if ((await p.evaluate(() => window.__asked.length)) !== 0) errors.push("ask: a question was sent without the learner pressing Ask");
   await p.locator("#ask-input").press("Enter");
   await p.waitForTimeout(400);
   const answer = await p.locator(".msg.assistant").last().textContent();
@@ -391,8 +401,8 @@ async function askClaude() {
     return { sees, sent: await lastAsked() };
   };
   // an exercise: Claude sees it, and that it is not answered yet
-  await p.locator(".nav button", { hasText: "Exercitium" }).click();
-  await p.locator(".step-panel .btn.big").click();
+  await p.locator(".nav button", { hasText: "Domus" }).click();
+  await p.locator("#continue").click();
   await p.locator("button", { hasText: "Start exercises" }).click();
   await p.waitForTimeout(200);
   const ex = await askHere("What goes here?");
@@ -408,8 +418,8 @@ async function askClaude() {
   await p.locator(".drawer-sees").click();
   await p.keyboard.press("Escape");
   // a lesson page scrolled to its story, a word tapped
-  await p.locator(".nav button", { hasText: "Lectiōnēs" }).click();
-  await p.locator(".lesson-card").nth(1).click();
+  await p.evaluate(() => { location.hash = "#lesson-2"; });
+  await p.waitForTimeout(300);
   await p.locator("[data-ask^='Story']").scrollIntoViewIfNeeded();
   await p.locator("[data-ask^='Story'] .ex-line .w").first().click();
   const story = await askHere("What does this line mean?");
@@ -589,16 +599,15 @@ async function stories() {
   p.on("pageerror", (e) => errors.push(`stories: ${e.message}`));
   await p.goto(`file://${page}`);
   await p.waitForTimeout(700);
-  await p.locator(".story-panel button", { hasText: "Read the story" }).click();
+  await p.locator(".also-card", { hasText: "A story to read" }).click();
   await p.waitForTimeout(300);
   if (!(await p.locator(".story-line").count())) errors.push("stories: the home page's story does not open");
   await p.locator(".bottomnav button", { hasText: "Lectiōnēs" }).click();
-  await p.locator(".lesson-card", { hasText: "Fābulae" }).click();
   await p.waitForTimeout(300);
-  if ((await p.locator(".story-card").count()) < 6) errors.push("stories: fewer than six stories open after Lessons I-II");
-  if ((await p.locator(".later-stories .story-card").count()) < 3) errors.push("stories: the stories of later rules are not waiting");
+  if ((await p.locator("#lessons-stories > .rule-list-panel .story-row").count()) < 6) errors.push("stories: fewer than six stories open after Lessons I-II");
+  if ((await p.locator(".stories-later .story-row").count()) < 3) errors.push("stories: the stories of later rules are not waiting");
   await p.screenshot({ path: `${out}/stories.png`, fullPage: true });
-  await p.locator(".story-card").nth(1).click();
+  await p.locator("#lessons-stories > .rule-list-panel .story-row").nth(1).click();
   await p.waitForTimeout(300);
   await p.locator(".story-line").nth(1).click({ position: { x: 2, y: 2 } });
   if (!((await p.locator(".story-line").nth(1).locator(".story-tr").textContent()) ?? "").trim()) errors.push("stories: a tap on a line does not show its English");
@@ -615,13 +624,13 @@ async function stories() {
   await p.screenshot({ path: `${out}/story.png`, fullPage: true });
   await p.locator("button", { hasText: "Practise this story" }).click();
   await p.waitForTimeout(400);
-  if (!(await p.locator(".ex-source", { hasText: "from the story" }).count())) errors.push("stories: the practice does not come from the story");
+  if (!((await p.locator(".trainer-label").textContent()) ?? "").includes("Story")) errors.push("stories: the practice does not come from the story");
   await p.screenshot({ path: `${out}/story-practice.png` });
-  await p.locator(".trainer-top button", { hasText: "End" }).click();
+  await p.locator(".trainer-end").click();
+  await p.locator("button", { hasText: "Done for now" }).click();
   await p.locator(".bottomnav button", { hasText: "Lectiōnēs" }).click();
-  await p.locator(".lesson-card", { hasText: "Fābulae" }).click();
   await p.waitForTimeout(300);
-  if (!(await p.locator(".story-card.read").count())) errors.push("stories: the list does not show the story as read");
+  if (!(await p.locator(".story-row .story-read").count())) errors.push("stories: the list does not show the story as read");
   await ctx.close();
 }
 
@@ -647,12 +656,9 @@ async function learnFlow(name, viewport, withClaude) {
   await p.goto(`file://${page}`);
   await p.waitForTimeout(800);
   const nav = viewport.width < 760 ? ".bottomnav button" : ".nav button";
-  if (!(await p.locator(".hero .btn.big", { hasText: "Learn rule 1.1" }).count())) errors.push(`${name}: home does not offer the first rule`);
-  await p.locator(nav, { hasText: "Exercitium" }).first().click();
-  await p.waitForTimeout(200);
-  if (await p.locator(".mode-card", { hasText: "Sentences from the videos" }).count()) errors.push(`${name}: rule exercises offered before any rule was learned`);
-  await p.screenshot({ path: `${out}/${name}-chooser-new.png`, fullPage: true });
-  await p.locator(".step-panel .btn.big").click();
+  if (!((await p.locator(".home-step").textContent()) ?? "").includes("Rule 1.1") || !(await p.locator(".home-new").count())) errors.push(`${name}: home does not offer the first rule as new`);
+  await p.screenshot({ path: `${out}/${name}-home-new.png`, fullPage: true });
+  await p.locator("#continue").click();
   await p.waitForTimeout(300);
   if ((await p.locator(".learn-line").count()) < 2) errors.push(`${name}: the rule is not explained`);
   if ((await p.locator(".part-tile").count()) !== 5) errors.push(`${name}: the rules of Lesson I are not shown as a path`);
@@ -710,13 +716,13 @@ async function learnFlow(name, viewport, withClaude) {
     await p.locator("button", { hasText: "Next" }).click();
   }
   const count = (await p.locator(".part-count-num").textContent()) ?? "";
-  await p.locator(".trainer-top button", { hasText: "End" }).click();
+  await p.locator(".trainer-end").click();
   await p.screenshot({ path: `${out}/${name}-learn-summary.png`, fullPage: true });
   if (!((await p.locator(".panel h3", { hasText: "Rule 1.1" }).count()))) errors.push(`${name}: the end of the round does not show the rule's progress`);
-  await p.locator("button", { hasText: "Choose another practice" }).click();
-  if (!((await p.locator(".step-panel").textContent()) ?? "").includes(`${count.split(" / ")[0].trim()} / 10`)) errors.push(`${name}: the practice page does not show the same count (${count})`);
-  if (!(await p.locator(".mode-card", { hasText: "Sentences from the videos" }).count())) errors.push(`${name}: practice did not open after learning the rule`);
-  if (!(await p.locator(".step-panel .btn.big", { hasText: "Practise rule 1.1" }).count())) errors.push(`${name}: the rule in practice is not offered`);
+  await p.locator("button", { hasText: "Done for now" }).click();
+  await p.waitForTimeout(200);
+  if (!((await p.locator(".home-dots").textContent()) ?? "").includes(`${count.split(" / ")[0].trim()} of 10`)) errors.push(`${name}: Domus does not show the same count (${count})`);
+  if (await p.locator(".home-new").count()) errors.push(`${name}: the rule in practice is still offered as new`);
   await ctx.close();
 }
 

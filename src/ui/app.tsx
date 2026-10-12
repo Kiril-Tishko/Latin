@@ -4,15 +4,13 @@ import { AddWordHost } from "./addword";
 import { Hedera, Icon, Toaster } from "./components";
 import { roman } from "../latin/text";
 import { go, Route, useRoute } from "./nav";
-import { Discover } from "./pages/discover";
 import { Home } from "./pages/home";
 import { LessonPage, Lessons } from "./pages/lessons";
 import { LearnPage } from "./pages/learn";
-import { Rules } from "./pages/rules";
 import { startSession, Train } from "./pages/train";
 import { Words } from "./pages/words";
 import { English } from "./pages/english";
-import { Stories, StoryPage } from "./pages/stories";
+import { StoryPage } from "./pages/stories";
 import { Settings } from "./settings";
 import { connect, getSync, useProgress } from "./store";
 import { connectChats } from "./chats";
@@ -22,22 +20,20 @@ import { useScreen } from "./screen";
 import { ArrivalNotice, Messenger } from "./pages/messenger";
 import { connectMessenger, unreadTotal, useMessenger } from "./messenger";
 
-// Section names in Latin; the English shows as a tooltip.
+// Four sections, named in Latin (the English shows as a tooltip): today's next step,
+// everything to read and learn, the learner's words, and the messenger.
 const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.Element }[] = [
-  { route: { page: "home" }, label: "Domus", en: "Home", icon: Icon.home },
-  { route: { page: "lessons" }, label: "Lectiōnēs", en: "Lessons", icon: Icon.scroll },
-  { route: { page: "train" }, label: "Exercitium", en: "Train", icon: Icon.stylus },
+  { route: { page: "home" }, label: "Domus", en: "Today", icon: Icon.home },
+  { route: { page: "lessons" }, label: "Lectiōnēs", en: "Lessons, rules, stories", icon: Icon.scroll },
   { route: { page: "words" }, label: "Verba", en: "Words", icon: Icon.book },
-  { route: { page: "discover" }, label: "Inventiō", en: "Discover", icon: Icon.card },
-  { route: { page: "rules" }, label: "Rēgulae", en: "Rules", icon: Icon.column },
   { route: { page: "messenger" }, label: "Nūntiī", en: "Messages", icon: Icon.letter },
 ];
 
-// a lesson page, a rule to learn, the stories and Latin in English belong to Lectiōnēs
-const UNDER_LESSONS = new Set<Route["page"]>(["lesson", "learn", "english", "stories", "story"]);
-const active = (r: Route, t: Route) => r.page === t.page || (UNDER_LESSONS.has(r.page) && t.page === "lessons");
+// a round of exercises belongs to Domus (Continue starts it); a lesson, a rule, the stories and Latin in English to Lectiōnēs
+const UNDER: Partial<Record<Route["page"], Route["page"]>> = { train: "home", lesson: "lessons", learn: "lessons", english: "lessons", stories: "lessons", story: "lessons" };
+const active = (r: Route, t: Route) => r.page === t.page || UNDER[r.page] === t.page;
 
-const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", learn: "A rule to learn", train: "Practice", words: "Words", discover: "Discover", rules: "Rules", english: "Latin in English", stories: "Stories", story: "A story", messenger: "Messages" };
+const PAGE_NAME: Record<Route["page"], string> = { home: "Today", lessons: "Lessons", lesson: "A lesson", learn: "A rule to learn", train: "Practice", words: "Words", english: "Latin in English", stories: "Stories", story: "A story", messenger: "Messages" };
 
 const SYNC_TEXT = { local: "saved in this browser", connecting: "connecting…", synced: "saved to your account", saving: "saving…", error: "saving failed, will retry" };
 
@@ -82,17 +78,11 @@ export function App() {
     case "words":
       page = <Words />;
       break;
-    case "discover":
-      page = <Discover />;
-      break;
-    case "rules":
-      page = <Rules />;
-      break;
     case "english":
       page = <English />;
       break;
     case "stories":
-      page = <Stories />;
+      page = <Lessons focus="stories" />;
       break;
     case "story":
       page = <StoryPage id={route.id} />;
@@ -132,7 +122,7 @@ export function App() {
 
       <main class={`page${route.page === "train" ? " wide" : route.page === "messenger" ? " wide msgr-page" : ""}`} id="main">{page}</main>
 
-      {route.page !== "train" && route.page !== "messenger" && (
+      {route.page !== "train" && route.page !== "messenger" && route.page !== "english" && (
         <footer class="site-foot" aria-label={`Tabula Latina, ${new Date().getFullYear()}`}>
           <Hedera />
           <span>{roman(new Date().getFullYear())}</span>

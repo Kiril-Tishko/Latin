@@ -7,12 +7,12 @@ import { Lexicon } from "../latin/analyze";
 import { Knowledge, pick, Rand, shuffle } from "../latin/generate";
 import { latinKey } from "../latin/text";
 import { Entry } from "../latin/types";
-import { Ctx, deriveExercise, Exercise, ExerciseKind, MadeKind, makeExercise, Result, vocabExercise } from "./exercises";
+import { Ctx, deriveExercise, Exercise, ExerciseKind, MadeKind, makeExercise, Result, rightAnswer, vocabExercise } from "./exercises";
 import { quizWords, wordInEnglish } from "../content/english";
 import { mastery, Mistake, Phase, phaseOf, Progress, recordDay, recordMistake, recordSkill } from "./progress";
-import { partPhase, updatePath } from "./path";
+import { countsFor, partPhase, updatePath } from "./path";
 import { Part } from "../content/parts";
-import { kindsFor, Line, lineExercise } from "./lines";
+import { kindsFor, Line, lineExercise, LineKind } from "./lines";
 import { dueWords, exposeWord, reviewWord } from "./srs";
 
 export const KIND_WEIGHTS: [ExerciseKind, number][] = [
@@ -111,7 +111,9 @@ export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set
       const reviewing = !!opts.review && !!opts.skills && phaseOf(average(p, opts.skills)) !== "simple" && ctx.r() < opts.review;
       focus = pickFocus(p, ctx.k, ctx.r, reviewing ? undefined : opts.skills, opts.focusLesson);
       const m = average(p, focus);
-      kind = weighted(ctx.r, kindWeights(m).filter(allowed));
+      const ws = kindWeights(m).filter(allowed);
+      if (!ws.length) continue;
+      kind = weighted(ctx.r, ws);
       c = { ...ctx, k: { ...ctx.k, ...sentenceStyle(m, ctx.k.silly) } };
       easy = phaseOf(m) === "simple";
     } else kind = weighted(ctx.r, kinds);
@@ -156,11 +158,14 @@ function sameFamily(kind: string): ExerciseKind[] {
  * "Fix my mistakes": each mistake comes back as a fresh exercise on the same
  * rules (and words), sensible and not too long. A right answer marks it fixed.
  */
-export function mistakesSession(p: Progress, ctx: Ctx, vocab: Entry[], size = 10): Exercise[] {
+export function mistakesSession(p: Progress, ctx: Ctx, vocab: Entry[], size = 10, prefer: string[] = []): Exercise[] {
   const c: Ctx = { ...ctx, k: { ...ctx.k, richness: 0.5 } };
   const out: Exercise[] = [];
   const seen = new Set<string>();
-  for (const m of mistakesToFix(p, ctx.k)) {
+  // the mistakes on the rule in hand first, then the ones that have waited longest
+  const near = (m: Mistake) => (m.skills.some((s) => prefer.includes(s)) ? 0 : 1);
+  const order = [...mistakesToFix(p, ctx.k)].sort((a, b) => near(a) - near(b) || a.at - b.at);
+  for (const m of order) {
     if (out.length >= size) break;
     const words = vocab.filter((w) => m.words?.includes(w.id));
     let ex: Exercise | null = null;
@@ -200,6 +205,61 @@ function deriveFrom(ctx: Ctx, vocab: Entry[]): Exercise | null {
 /** What a part's phase stands for when choosing exercise kinds and how rich a sentence is. */
 const PHASE_LEVEL: Record<Phase, number> = { simple: 0.3, mixed: 0.75, hard: 0.95 };
 
+/** Exercise kinds from the easiest (recognise) to the hardest (write it all yourself). */
+const EASY_TO_HARD: MadeKind[] = ["meaning", "choose", "tiles", "ending", "identify", "form", "la2en", "listen", "transform", "en2la"];
+/** How many exercises of one kind come in a row: one instruction, then a few of the same. */
+export const BLOCK = 3;
+
+const counting = new Map<string, Set<ExerciseKind>>();
+
+/**
+ * The kinds of exercise that can show a rule at this level (a right answer
+ * adds one to it): "in / ad + -m" shows in a whole sentence, never in one
+ * ending to fill in. Tried once per rule, level and vocabulary.
+ */
+function countingKinds(part: Part, c: Ctx, level: number, phaseKinds: [ExerciseKind, number][], fixed: Line[], lines: Line[]): [ExerciseKind, number][] {
+  const key = `${part.id}:${level}:${c.k.nouns.length}:${c.k.verbs.length}:${c.k.adjs.length}:${c.audio}`;
+  let ok = counting.get(key);
+  if (!ok) {
+    ok = new Set();
+    for (const [kind] of phaseKinds) {
+      const onLines = fixed.length && kindsFor(level).some(([k]) => k === kind);
+      for (let i = 0; i < 4 && !ok.has(kind); i++) {
+        const ex = onLines && i % 2 ? lineExercise(c, pick(c.r, fixed), kind as LineKind, lines) : makeExercise(kind as MadeKind, c, part.skills);
+        if (ex && ex.skills.some((s) => part.skills.includes(s)) && countsFor(part, ex.check(rightAnswer(ex)))) ok.add(kind);
+      }
+    }
+    counting.set(key, ok);
+  }
+  const fitting = phaseKinds.filter(([k]) => ok!.has(k));
+  return fitting.length ? fitting : phaseKinds;
+}
+
+/**
+ * The kind of the next exercise in a round: the kind of the last ones until
+ * there are three of it, then a harder kind of the phase (by its weights),
+ * so a round reads as a few short blocks from easy to hard.
+ */
+export function blockKind(r: Rand, prev: Exercise[], phaseKinds: [ExerciseKind, number][]): MadeKind | undefined {
+  const own = prev.filter((e) => !e.aside);
+  const last = own.at(-1);
+  const inPhase = (k: ExerciseKind) => phaseKinds.some(([x]) => x === k);
+  if (last && inPhase(last.kind)) {
+    let run = 0;
+    for (let i = own.length - 1; i >= 0 && own[i].kind === last.kind; i--) run++;
+    if (run < BLOCK) return last.kind as MadeKind;
+  }
+  const rank = (k: ExerciseKind) => EASY_TO_HARD.indexOf(k as MadeKind);
+  // a round starts with one of the phase's main kinds (the hardest ones in the last phase)
+  if (!last) {
+    const top = Math.max(0, ...phaseKinds.map(([, w]) => w));
+    return weighted(r, phaseKinds.filter(([, w]) => w >= top / 2)) as MadeKind | undefined;
+  }
+  const harder = phaseKinds.filter(([k]) => rank(k) > rank(last.kind));
+  const pool = harder.length ? harder : phaseKinds.filter(([k]) => k !== last.kind);
+  return weighted(r, pool.length ? pool : phaseKinds) as MadeKind | undefined;
+}
+
 /**
  * The next exercise of a round on one part, made for where the learner is right
  * now: simple ones for its first five right answers, then harder ones. Every
@@ -208,44 +268,61 @@ const PHASE_LEVEL: Record<Phase, number> = { simple: 0.3, mixed: 0.75, hard: 0.9
  * between two verbs, live only there). A piece that only a single form can show
  * (to …: -re; vīnī) gets one. Past the simple ones, one in five reviews earlier rules.
  */
-export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], kinds: ExerciseKind[], seen: Set<string>): Exercise | null {
+export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], kinds: ExerciseKind[], seen: Set<string>, prev: Exercise[] = []): Exercise | null {
   const phase = partPhase(p, part);
   const level = PHASE_LEVEL[phase];
   const allowed = kinds.filter((kind) => kind !== "vocab" && kind !== "derive" && (kind !== "listen" || !!ctx.audio)) as MadeKind[];
   const phaseKinds = kindWeights(level).filter(([kind]) => allowed.includes(kind as MadeKind));
-  const lineKinds = kindsFor(level);
-  const fits = (ex: Exercise | null, wanted: string[]): ex is Exercise => !!ex && !seen.has(ex.context) && ex.skills.some((s) => wanted.includes(s));
+  const fixed = lines.filter((l) => l.skills.some((s) => part.skills.includes(s)) && l.skills.every((s) => ctx.k.skills.has(s)));
+  const c: Ctx = { ...ctx, k: { ...ctx.k, ...sentenceStyle(level, ctx.k.silly) } };
+  // a few of one kind in a row, from easy to hard, of the kinds that can show this rule
+  const usable = countingKinds(part, c, level, phaseKinds, fixed, lines);
+  const block = blockKind(ctx.r, prev, usable);
+  const blockKinds: [ExerciseKind, number][] = block ? [[block, 1]] : usable;
+  // when the block's kind can't show the rule: another kind, not the one that just had its few
+  const lastKind = prev.filter((e) => !e.aside).at(-1)?.kind;
+  const others = usable.filter(([k]) => k !== lastKind || k === block);
+  const otherKinds = others.length ? others : usable;
+  const lineKinds = block ? kindsFor(level).filter(([k]) => k === block) : kindsFor(level).filter(([k]) => k !== lastKind);
+  // aimed at the rule, new in this round, and a right answer adds one to the rule
+  const fits = (ex: Exercise | null, wanted: string[]): ex is Exercise =>
+    !!ex && !seen.has(ex.context) && ex.skills.some((s) => wanted.includes(s)) && countsFor(part, ex.check(rightAnswer(ex)));
   const done = (ex: Exercise) => {
     seen.add(ex.context);
     if (phase === "simple") ex.easy = true;
     return ex;
   };
-  if (phase !== "simple" && ctx.r() < 0.2) {
-    const review = nextExercise(p, ctx, { size: 1, adaptive: true, kinds }, seen);
-    if (review) return review;
+  // past the simple phase, one in five is an earlier rule, in the same kind of exercise
+  const own = prev.filter((e) => !e.aside);
+  let since = 0;
+  for (let i = own.length - 1; i >= 0 && !own[i].earlier; i--) since++;
+  if (phase !== "simple" && since >= 4) {
+    const review = nextExercise(p, ctx, { size: 1, adaptive: true, kinds: block ? [block] : kinds }, seen);
+    if (review) return { ...review, earlier: true };
   }
-  const fixed = lines.filter((l) => l.skills.some((s) => part.skills.includes(s)) && l.skills.every((s) => ctx.k.skills.has(s)));
-  const c: Ctx = { ...ctx, k: { ...ctx.k, ...sentenceStyle(level, ctx.k.silly) } };
   const focus = pickFocus(p, ctx.k, ctx.r, part.practised ?? part.skills, part.lesson);
-  // the weakest piece of the rule, in the phase's kinds of exercise
-  for (let attempt = 0; attempt < 16 && phaseKinds.length; attempt++) {
-    const ex =
-      fixed.length && ctx.r() < 1 / 3
-        ? lineExercise(c, pick(ctx.r, fixed), weighted(ctx.r, lineKinds) ?? "tiles", lines)
-        : makeExercise(weighted(ctx.r, phaseKinds) as MadeKind, c, focus);
-    if (fits(ex, focus)) return done(ex);
+  // the weakest piece of the rule, in the block's kind (else the phase's kinds)
+  for (const kindsNow of block ? [blockKinds, otherKinds] : [otherKinds]) {
+    const linesNow = kindsNow === blockKinds ? lineKinds : kindsFor(level).filter(([k]) => otherKinds.some(([o]) => o === k));
+    for (let attempt = 0; attempt < 12 && kindsNow.length; attempt++) {
+      const ex =
+        fixed.length && linesNow.length && ctx.r() < 1 / 3
+          ? lineExercise(c, pick(ctx.r, fixed), weighted(ctx.r, linesNow)!, lines)
+          : makeExercise(weighted(ctx.r, kindsNow) as MadeKind, c, focus);
+      if (fits(ex, focus)) return done(ex);
+    }
   }
   // a piece only a single form can show: the form first, then the phase's kinds (the harder ones never while the rule is new)
   const order = [...new Set([...allowed.filter((k) => k === "form"), ...phaseKinds.map(([k]) => k as MadeKind), ...(phase === "simple" ? [] : shuffle(ctx.r, allowed))])];
   for (const kind of order) {
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       const ex = makeExercise(kind, c, focus);
       if (fits(ex, focus)) return done(ex);
     }
   }
   // any piece of the rule: the fixed sentences (et between two verbs), then new ones
   for (const line of shuffle(ctx.r, fixed)) {
-    for (const [kind] of shuffle(ctx.r, lineKinds)) {
+    for (const [kind] of shuffle(ctx.r, kindsFor(level))) {
       const ex = lineExercise(c, line, kind, lines);
       if (fits(ex, part.skills)) return done(ex);
     }
@@ -253,6 +330,13 @@ export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], k
   for (let attempt = 0; attempt < 12 && phaseKinds.length; attempt++) {
     const ex = makeExercise(weighted(ctx.r, phaseKinds) as MadeKind, c, part.skills);
     if (fits(ex, part.skills)) return done(ex);
+  }
+  // the rule has few words to show it (to …: -re): one seen earlier in the round again, rather than none
+  for (const kind of order) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const ex = makeExercise(kind, c, part.skills);
+      if (ex && ex.skills.some((s) => part.skills.includes(s)) && countsFor(part, ex.check(rightAnswer(ex)))) return done(ex);
+    }
   }
   return null;
 }

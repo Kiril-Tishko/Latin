@@ -119,6 +119,27 @@ export function makesSense(c: Clause): boolean {
   const godly = gods > 0;
   if (godly && (NOT_DIVINE.has(c.verb.id) || (c.inf && NOT_DIVINE.has(c.inf.verb.id)))) return false;
   if (c.pred?.np && (godly || divine(c.pred.np.noun) || c.pred.np.noun.tags.includes("group"))) return false; // "the goddess is a poet", "you are a family"
+  if (c.pred?.np) {
+    if (c.pred.np.adj) return false; // "the student is a beautiful farmer"
+    const subj = c.subj.kind === "np" ? c.subj.np.noun : undefined;
+    if (subj && !subj.proper && TRADES.has(subj.id) && TRADES.has(c.pred.np.noun.id)) return false; // "the poet is a student"
+  }
+  // a teacher or a poet teaches (or I, you); not "the farmer teaches", "the student teaches Europa"
+  if (c.verb.id === "doceo" && c.subj.kind === "np" && !TEACHERS.has(c.subj.np.noun.id)) return false;
+  if (c.verb.id === "doceo" && c.subj.kind === "coord" && !nps.every((np) => TEACHERS.has(np.noun.id))) return false;
+  // one writes one's own letter: not "writes the poet's letter", nor "my letter" unless I write it
+  if (c.verb.id === "scribo" && (c.obj?.poss || (c.obj?.adj?.id === "meus" && !(c.subj.kind === "pron" && c.person === 1)))) return false;
+  // a teacher doesn't learn to teach; nobody "cannot have the friend"
+  if (c.inf?.verb.id === "doceo" && nps.some((np) => TEACHERS.has(np.noun.id))) return false;
+  if (c.inf?.verb.id === "habeo" && c.inf.obj && isHuman(c.inf.obj.noun)) return false;
+  // well: works, writes, sleeps well; not "walks well", "drinks well"
+  if (c.adv === "bene" && !WELL.has(c.verb.id)) return false;
+  // places belong to no one: not "the poet's earth", "the student's forest"
+  if ([...nps, c.obj, c.inf?.obj, c.pp?.np, c.pred?.np].some((np) => np?.poss && isPlace(np.noun))) return false;
+  // the same describing word twice is clumsy: "ad Olympum pulchrum pulchrum gladium"
+  const adjs = [...nps, c.obj, c.inf?.obj, c.pp?.np, c.pred?.np].flatMap((np) => (np ? [np.adj?.id, np.poss?.adj?.id] : [])).filter(Boolean);
+  if (c.pred?.adj) adjs.push(c.pred.adj.id);
+  if (new Set(adjs).size < adjs.length) return false;
   // a poet already writes
   if (c.inf?.verb.id === "scribo" && ((c.verb.id === "disco" && c.subj.kind === "np" && c.subj.np.noun.id === "poeta") || (c.verb.id === "doceo" && c.obj?.noun.id === "poeta"))) return false;
   const place = c.pp?.np.noun;
@@ -402,6 +423,14 @@ const NEEDS_MORE = new Set(["video", "sentio", "audio", "habito"]);
 const LEARNABLE = new Set(["scribo", "lego", "laboro", "doceo", "canto", "aro", "texo", "respondeo", "struo"]);
 /** Who is taught: students, a girl, a friend, a farmer (the Lesson II story); not a teacher, a poet or a god. */
 const PUPILS = new Set(["discipula", "discipulus", "puella", "amica", "amicus", "agricola", "femina", "europa"]);
+/** Who teaches without saying whom: a teacher, a poet; not "the farmer teaches". */
+const TEACHERS = new Set(["magistra", "magister", "poeta"]);
+/** What one does well: work, write, read, sing, learn, teach, sleep, study, answer. */
+const WELL = new Set(["laboro", "scribo", "lego", "canto", "disco", "doceo", "dormio", "studeo", "respondeo"]);
+/** People one "has": a friend, a family; not "has the farmer". */
+const HAD = new Set(["amicus", "amica", "familia"]);
+/** What people are by trade: "the poet is a student" sounds wrong, "the girl is a student" doesn't. */
+const TRADES = new Set(["poeta", "agricola", "magistra", "magister", "discipula", "discipulus", "nauta", "scriba"]);
 
 const none = () => false;
 const OBJECTS: Record<string, (n: NounEntry) => boolean> = {
@@ -421,7 +450,7 @@ const OBJECTS: Record<string, (n: NounEntry) => boolean> = {
   teneo: portable,
   traho: (n) => (solid(n) && !n.tags.includes("writing")) || n.tags.includes("animal"), // a sword, a bull; not a letter
   cupio: portable,
-  habeo: (n) => portable(n) || (isHuman(n) && !n.tags.includes("divine") && !n.proper),
+  habeo: (n) => portable(n) || HAD.has(n.id), // has a book, a friend; not "has the farmer"
   tango: solid,
   moveo: solid,
   rumpo: solid,
@@ -436,7 +465,7 @@ const OBJECTS: Record<string, (n: NounEntry) => boolean> = {
   audio: isPerson,
   voco: isHuman,
   moneo: isHuman,
-  doceo: isHuman,
+  doceo: (n) => PUPILS.has(n.id) || ("own" in n.source && isHuman(n) && !divine(n)), // teaches the student, not the goddess
   desidero: isHuman,
   transformo: isPerson,
   terreo: (n) => isPerson(n) && !n.tags.includes("divine"),
@@ -471,7 +500,7 @@ function placeNoun(k: Knowledge, r: Rand, c: Case, exclude: string[]) {
   // a place whose ending is the one being practised (in Olympō for -ō), when there is one
   const wanted = (n: NounEntry) => isPlace(n) && !!k.focus?.includes(nounSkill(n.decl, c, "sg"));
   const focused = k.nouns.some((n) => wanted(n) && nounUsable(k, n, c, "sg") && !exclude.includes(n.id));
-  return makeNP(k, r, { case: c, num: "sg", prefer: focused ? wanted : isPlace, require: (n) => !n.tags.includes("vague"), exclude, adjChance: 0.2, possChance: 0.05, sillyScale: 0.3 });
+  return makeNP(k, r, { case: c, num: "sg", prefer: focused ? wanted : isPlace, require: (n) => !n.tags.includes("vague"), exclude, adjChance: 0.2, possChance: k.silly > 0 ? 0.05 : 0, sillyScale: 0.3 });
 }
 
 /** What one does at a place: on the land you work or sleep, not read; at school you don't live or drink. */
@@ -482,7 +511,7 @@ function doneAt(place: NounEntry, v: VerbEntry): boolean {
   if (place.id === "via") return ["ambulo", "curro", "sto", "sedeo", "laboro", "canto"].includes(v.id);
   if (place.id === "theatrum") return ["specto", "sedeo", "canto", "sto", "video", "audio", "laboro"].includes(v.id);
   if (v.id === "credo") return false;
-  if (["respondeo", "dico"].includes(v.id)) return place.id === "schola"; // answers in class, not in the forest
+  if (["respondeo", "dico", "doceo"].includes(v.id)) return place.id === "schola"; // answers and teaches in class, not in the forest
   if (place.id === "schola") return !["habito", "bibo", "aro"].includes(v.id);
   return true;
 }
@@ -520,7 +549,7 @@ const TEMPLATES: Record<string, Template> = {
   sv: (k, r) => {
     const s = makeSubject(k, r, { allowNemo: true });
     if (!s) return null;
-    const verbs = finite(k, (v) => v.intrans && v.id !== "habito", s.person, s.num);
+    const verbs = finite(k, (v) => v.intrans && v.id !== "habito" && (k.silly > 0 || !NEEDS_MORE.has(v.id)), s.person, s.num);
     if (!verbs.length) return null;
     const c = base(k, r, s, pick(r, verbs), []);
     if (k.skills.has("s.conn") && k.fixed.has("bene") && takeExtra(k, r, ["s.conn"], 0.15)) {
@@ -1016,8 +1045,9 @@ function ppEnglish(c: Clause, twins: Set<string>): EnPhrase {
     preps = ["to", "toward", "towards", "up to"];
     shown = "to";
   } else if (pp.case === "acc") {
-    preps = ["into", "in to", "onto", "in"];
-    shown = "into";
+    // into a forest, but to an island, to Olympus
+    preps = tags.includes("on") ? ["to", "onto", "into", "on to"] : ["into", "in to", "onto", "in"];
+    shown = tags.includes("on") ? "to" : "into";
   } else {
     preps = ["in", "on", "at", "inside"];
     shown = tags.includes("on") ? "on" : "in";

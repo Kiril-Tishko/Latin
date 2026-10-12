@@ -98,7 +98,7 @@ export interface Progress {
   rulesShown: Record<string, string>;
   skills: Record<string, SkillStat>;
   words: Record<string, WordStat>;
-  /** Discover cards opened (seen) and added to the dictionary. */
+  /** Mystery cards opened (seen) and added to the dictionary. */
   revealed: string[];
   added: string[];
   /** Words the learner added to their dictionary themselves (Claude filled them in). */
@@ -108,6 +108,8 @@ export interface Progress {
   mistakes: Mistake[];
   /** Stories read to the end, keyed by id: when. */
   stories: Record<string, number>;
+  /** The screen reached in Latin in English (read one screen at a time). */
+  english?: number;
 }
 
 // sensible sentences only: silly pairings confused the learner

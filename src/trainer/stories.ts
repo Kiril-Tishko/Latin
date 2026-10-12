@@ -3,13 +3,12 @@
 import { Part, PARTS } from "../content/parts";
 import { STORIES, Story } from "../content/stories";
 import { Lexicon } from "../latin/analyze";
-import { Ctx, Exercise } from "./exercises";
 import { Knowledge } from "../latin/generate";
 import { fullLexicon } from "./knowledge";
 import { Line, makeLine } from "./lines";
 import { seenSkills } from "./path";
 import { Progress } from "./progress";
-import { linesSession, videoLines } from "./video";
+import { videoLines } from "./video";
 
 /** A story's sentences as practice lines ("Et tū?", with no verb, is only read). */
 export function storyLines(story: Story, lex: Lexicon): Line[] {
@@ -17,9 +16,6 @@ export function storyLines(story: Story, lex: Lexicon): Line[] {
     .map((l) => makeLine({ kind: "story", id: story.id, title: story.title }, l.la, l.en, lex, l.prompt))
     .filter((x): x is Line => !!x);
 }
-
-/** The stories of these steps (lessons), in order. */
-export const storiesUpTo = (step: number) => STORIES.filter((s) => s.step <= step);
 
 let lexicon: Lexicon | null = null;
 const skillsOf = new Map<string, string[]>();
@@ -51,11 +47,6 @@ export function nextStory(p: Progress): Story | undefined {
   return open.find((s) => s.step === p.focusLesson) ?? open[0];
 }
 
-/** A round on the sentences of these stories (one story, or all of a step). */
-export function storySession(p: Progress, ctx: Ctx, stories: Story[], size?: number): Exercise[] {
-  const lines = stories.flatMap((s) => storyLines(s, ctx.lex)).filter((l) => l.skills.every((sk) => ctx.k.skills.has(sk)));
-  return linesSession(p, ctx, lines, size ?? Math.min(12, lines.length * 2));
-}
 
 /** A word said twice ("legit et legit", again and again) reads well in a story but makes a confusing exercise. */
 const saysTwice = (l: Line) => {

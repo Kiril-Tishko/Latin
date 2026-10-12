@@ -16,39 +16,12 @@ export const CASE_NAMES: Record<Case, string> = {
   voc: "vocative",
 };
 
-/** The matching Russian / Ukrainian case, for learners who know those systems. */
-export const CASE_SLAVIC: Record<Case, { ru: string; uk: string }> = {
-  nom: { ru: "именительный", uk: "називний" },
-  gen: { ru: "родительный", uk: "родовий" },
-  dat: { ru: "дательный", uk: "давальний" },
-  acc: { ru: "винительный", uk: "знахідний" },
-  abl: { ru: "творительный / предложный", uk: "орудний / місцевий" },
-  voc: { ru: "звательная форма", uk: "кличний" },
-};
-
-export const CASE_ROLE: Record<Case, string> = {
-  nom: "the subject: who or what does the action",
-  gen: "of / 's: whose",
-  dat: "to / for whom",
-  acc: "the direct object: who or what receives the action",
-  abl: "by / with / from / in (often after a preposition)",
-  voc: "calling someone directly",
-};
-
 export type NounKey = `${Case}.${Num}`;
 
 export type Tense = "pres" | "impf" | "fut" | "perf";
 export type PN = "1sg" | "2sg" | "3sg" | "1pl" | "2pl" | "3pl";
 export const PNS: PN[] = ["1sg", "2sg", "3sg", "1pl", "2pl", "3pl"];
-export const TENSES: Tense[] = ["pres", "impf", "fut", "perf"];
 export type VerbKey = `${Tense}.${PN}` | "imp.2sg" | "imp.2pl" | "inf";
-
-export const TENSE_NAMES: Record<Tense, string> = {
-  pres: "present",
-  impf: "imperfect",
-  fut: "future",
-  perf: "perfect",
-};
 
 export const PN_NAMES: Record<PN, string> = {
   "1sg": "I",

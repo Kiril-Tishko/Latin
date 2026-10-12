@@ -569,14 +569,6 @@ export function dictionaryForm(e: Entry): string {
   }
 }
 
-export function nounForm(e: NounEntry, c: Case, n: Num): Form | undefined {
-  return declineNoun(e)[`${c}.${n}`];
-}
-
-export function verbForm(e: VerbEntry, key: VerbKey): Form | undefined {
-  return conjugate(e)[key];
-}
-
 export function pnOf(person: 1 | 2 | 3, n: Num): PN {
   return `${person}${n}` as PN;
 }

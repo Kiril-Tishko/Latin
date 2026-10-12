@@ -5,7 +5,7 @@ import { STORIES } from "../src/content/stories";
 import { annotate } from "../src/latin/analyze";
 import { seeded } from "../src/latin/generate";
 import { full } from "../src/latin/types";
-import { answersSession, openExercise, sceneExercise, storyExercise, storyQuestions, youExercise, youQuestions } from "../src/trainer/answers";
+import { answersSession, closingQuestion, openExercise, sceneExercise, storyExercise, storyQuestions, youExercise, youQuestions } from "../src/trainer/answers";
 import { CHAT_WORDS } from "../src/chat/words";
 import { buildKnowledge, fullLexicon, skillsUpTo } from "../src/trainer/knowledge";
 import { lineSkills, readLine } from "../src/trainer/lines";
@@ -135,6 +135,21 @@ describe("a round of open questions", () => {
     // a learner who has seen only Lesson I gets questions they can answer
     const early = answersSession(newProgress(), ctx(skillsUpTo([1])));
     for (const ex of early) expect(ex.check(ex.check("x").expected).verdict, ex.ask).toBe("correct");
+  });
+
+  it("ends every round: a question on the round's rule when one fits, answerable with the rules seen", () => {
+    const p = newProgress();
+    for (const part of PARTS) {
+      const seen = upTo(part.skills);
+      const last = closingQuestion(p, ctx(seen, 7), part.skills);
+      if (!last) continue;
+      expect(last.last).toBe(true);
+      expect(last.skills.every((s) => seen.has(s)), `${part.id}: ${last.ask}`).toBe(true);
+      expect(last.check(last.check("x").expected).verdict, `${part.id}: ${last.ask}`).toBe("correct");
+    }
+    // the rule of -m (2.1) gets a question whose answer needs an object
+    const object = closingQuestion(p, ctx(upTo(["n1.acc.sg"]), 2), ["n1.acc.sg"]);
+    expect(object?.skills).toContain("n1.acc.sg");
   });
 });
 

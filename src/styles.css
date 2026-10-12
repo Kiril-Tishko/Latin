@@ -279,8 +279,7 @@ p { margin: 0; }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .spread { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
-.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; }
-.grid-2 > *, .grid-3 > *, .row > *, .spread > * { min-width: 0; }
+.grid-2 > *, .row > *, .spread > * { min-width: 0; }
 .prose { max-width: 66ch; }
 .prose > * + * { margin-top: 0.7em; }
 
@@ -576,10 +575,8 @@ p { margin: 0; }
 .ex-next .btn { white-space: nowrap; }
 .btn svg { flex: none; }
 .ex-next > .btn.big { margin-left: auto; flex: none; }
-.narrow-only { display: none; }
 @media (max-width: 600px) {
   .wide-only { display: none; }
-  .narrow-only { display: inline; }
   .ex-next .btn { padding: 10px 12px; }
   .ex-next .btn.big { padding: 12px 18px; }
 }
@@ -607,6 +604,12 @@ p { margin: 0; }
 .rule-mini .rule-ex { font-size: 0.95rem; }
 .rule-box .rule-mini:first-child { border-top: 0; padding-top: 0; }
 .rule-hint { display: flex; flex-direction: column; gap: 2px; border-left: 3px solid var(--gold-soft); padding: 2px 0 2px 12px; font-size: 1.02rem; }
+/* after an answer: short (Feedback), the rest under Why? (WhyBox) */
+.feedback { gap: clamp(8px, 1.6vh, 14px); }
+.ex-side .verdict .en b { font-weight: 700; }
+.why-line { margin: 0; font-size: 1.1rem; line-height: 1.4; }
+.why-box { gap: 10px; font-size: 1.02rem; }
+.why-box .issues { font-size: 1.02rem; }
 .rule-hint .eyebrow { font-size: 0.72rem; }
 
 /* ------------------------------------------------------------ cards */
@@ -887,16 +890,7 @@ p.labelled .label { font-family: var(--f-display); font-size: 0.78em; letter-spa
 .home-continue { min-width: min(100%, 260px); justify-content: center; font-size: 1.25rem; padding: 18px 34px; }
 .home-continue svg { width: 20px; height: 20px; }
 .home-goal { gap: 6px; flex: 1 1 260px; max-width: 360px; }
-.home-also { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.also-card { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: start; text-align: left; cursor: pointer; color: inherit; padding: 16px 18px; }
-.also-card:hover { border-color: var(--gold-soft); }
-.also-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-2); color: var(--gold); }
-.also-icon svg { width: 19px; height: 19px; }
-.also-text { gap: 3px; min-width: 0; }
-.also-text strong { display: inline-flex; align-items: center; gap: 8px; font-family: var(--f-text); font-size: 1.05rem; }
-.also-quote { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 760px) {
-  .home-also { grid-template-columns: minmax(0, 1fr); }
   .home-continue { width: 100%; }
   .home-goal { max-width: none; }
 }
@@ -1569,6 +1563,8 @@ main.page.msgr-page { padding-block: 14px; }
 .composer .check-note { margin: 0 0 10px; max-width: none; }
 .check-note.almost { border-left-color: var(--almost); }
 .check-note.wrong { border-left-color: var(--bad); }
+.check-note.say { border-left-color: var(--gold); }
+.composer-hint { margin: 0 0 6px 52px; color: var(--ink-2); }
 .check-verdict { font-weight: 600; font-size: 0.85rem; }
 .check-better { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-family: var(--f-text); font-size: 1.04rem; }
 .check-ask { align-self: flex-start; margin-top: 2px; font-size: 0.8rem; }
@@ -1837,7 +1833,6 @@ main.page.msgr-page { padding-block: 14px; }
 .lesson-head:hover .lesson-head-title { text-decoration: underline; text-decoration-color: var(--gold-soft); text-underline-offset: 4px; }
 .lesson-page-link { align-self: flex-end; color: var(--ink-2); }
 .story-row.locked .rule-row-title { opacity: 0.7; }
-.stories-later > summary { font-family: var(--f-ui); }
 .english-card { align-items: center; }
 @media (max-width: 760px) {
   /* the reader's buttons stay above the tab bar */

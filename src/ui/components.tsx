@@ -235,20 +235,3 @@ export function Toaster() {
   const swipe = useSwipeAway(() => setText(null), () => setText(null));
   return text ? <div key={text} class="toast ansata" role="status" {...swipe}>{text}</div> : null;
 }
-
-export function Section({ eyebrow, title, children, actions }: { eyebrow?: string; title?: string; children: ComponentChildren; actions?: ComponentChildren }) {
-  return (
-    <section class="stack">
-      {(eyebrow || title || actions) && (
-        <div class="spread">
-          <div class="stack" style={{ gap: "4px" }}>
-            {eyebrow && <span class="eyebrow">{eyebrow}</span>}
-            {title && <h2>{title}</h2>}
-          </div>
-          {actions}
-        </div>
-      )}
-      {children}
-    </section>
-  );
-}

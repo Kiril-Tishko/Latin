@@ -1,6 +1,6 @@
 // The grammar points a learner can know. Lessons unlock them; exercises
 // practise them; mastery is tracked per skill.
-import { Case, Decl, Gender, Num, PN } from "./types";
+import { Case, Decl, Gender, Num } from "./types";
 
 export type SkillGroup = "verbs" | "nouns" | "adjectives" | "sentences";
 
@@ -93,8 +93,4 @@ export function nounSkill(decl: Decl, c: Case, n: Num): string {
 /** Adjectives of the -us/-a/-um type borrow the endings of these declensions. */
 export function adjDecl(g: Gender): Decl {
   return g === "f" ? "1" : g === "n" ? "2n" : "2";
-}
-
-export function verbSkill(pn: PN): string {
-  return `v.${pn}`;
 }

@@ -304,6 +304,16 @@ export function sceneExercise(ctx: Ctx, r: Rand): Exercise | null {
 }
 
 /**
+ * The question that ends a round: one the learner answers in their own Latin,
+ * using one of the round's rules when a question fits them.
+ */
+export function closingQuestion(p: Progress, ctx: Ctx, skills: string[] = []): Exercise | undefined {
+  const all = answersSession(p, ctx, {}, 12);
+  const ex = all.find((e) => e.skills.some((s) => skills.includes(s))) ?? all[0];
+  return ex && { ...ex, last: true };
+}
+
+/**
  * A round of open questions: about the learner, about the stories they have
  * read (or one story), and a scene or two, mixed. Only what the rules seen allow.
  */

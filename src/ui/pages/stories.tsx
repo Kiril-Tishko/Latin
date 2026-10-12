@@ -8,7 +8,8 @@ import { STORIES, Story, STORY_BY_ID } from "../../content/stories";
 import { seeded, shuffle } from "../../latin/generate";
 import { roman } from "../../latin/text";
 import { seenSkills } from "../../trainer/path";
-import { nextStory, partsBefore, storyOpen } from "../../trainer/stories";
+import { partsBefore, storyOpen } from "../../trainer/stories";
+import { storyRead } from "../../trainer/today";
 import { Hedera, Icon, Laurel } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
@@ -17,7 +18,7 @@ import { useScreen } from "../screen";
 import { audioReady, Speak } from "../speak";
 import { getProgress, update, useProgress } from "../store";
 import { partName } from "./learn";
-import { startSession } from "./train";
+import { continueLearning } from "./train";
 
 /** One comprehension question: three answers, shuffled once per story. */
 function Question({ q, seed, onRight }: { q: Story["questions"][number]; seed: number; onRight: () => void }) {
@@ -87,7 +88,6 @@ export function StoryPage({ id }: { id: string }) {
   const index = STORIES.indexOf(story);
   const seen = seenSkills(p);
   const practisable = storyOpen(story, seen);
-  const next = STORIES.slice(index + 1).find((s) => storyOpen(s, seen)) ?? nextStory(p);
   const play = () => {
     stopFn?.();
     const stop = speakSequence(story.lines.map((l) => l.la), { repeatPause: false, onLine: (line) => setPlaying(line) });
@@ -98,8 +98,13 @@ export function StoryPage({ id }: { id: string }) {
     setStopFn(null);
     setPlaying(null);
   };
+  // read to the end (or left with Continue): Continue goes on to the next thing, and the next story waits for a round
   const markRead = () => {
-    if (!getProgress().stories[story.id]) update((q) => void (q.stories[story.id] = Date.now()));
+    if (!getProgress().stories[story.id] && practisable)
+      update((q) => {
+        q.stories[story.id] = Date.now();
+        storyRead(q);
+      });
   };
   const toggleLine = (i: number) => setOpen(open.includes(i) ? open.filter((x) => x !== i) : [...open, i]);
   /** A tap on a word shows what it is; a tap elsewhere on the line shows its English. */
@@ -178,25 +183,19 @@ export function StoryPage({ id }: { id: string }) {
             <Laurel cls="laurel-mini" />
             <span class="stack" style={{ gap: "0" }}>
               <span lang="la">Fābula lēcta!</span>
-              <span class="small ui">{practisable ? "The story is read: practise its lines next." : "The story is read."}</span>
+              <span class="small ui">The story is read.</span>
             </span>
           </div>
         )}
       </section>
 
       <section class="row" data-ask="Story: what next">
-        {practisable ? (
-          <>
-            <button class="btn" onClick={() => { markRead(); if (startSession({ kind: "story", id: story.id })) go({ page: "train" }); }}>
-              <Icon.stylus /> Practise this story
-            </button>
-            <button class="btn ghost" onClick={() => { markRead(); if (startSession({ kind: "answers", story: story.id })) go({ page: "train" }); }}>
-              <Icon.quill /> Answer questions in Latin
-            </button>
-          </>
-        ) : (
+        <button id="story-continue" class="btn big" onClick={() => { markRead(); continueLearning(); }}>
+          <Icon.play /> Continue
+        </button>
+        {!practisable && (
           <span class="small ui muted story-locked">
-            Its exercises open after{" "}
+            It uses rules you meet soon:{" "}
             {partsBefore(story, seen).map((x, i) => (
               <span key={x.id}>
                 {i > 0 && ", "}
@@ -205,11 +204,6 @@ export function StoryPage({ id }: { id: string }) {
             ))}
             .
           </span>
-        )}
-        {next && next.id !== story.id && (
-          <button class="btn ghost" onClick={() => go({ page: "story", id: next.id })}>
-            Next story: <span lang="la" style={{ marginLeft: "6px" }}>{next.title}</span> →
-          </button>
         )}
         <span class="story-mark" aria-hidden="true"><Hedera /></span>
       </section>

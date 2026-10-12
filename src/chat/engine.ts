@@ -5,7 +5,7 @@
 // back, and each message gets the moment it arrives (reading, typing, pauses,
 // sleep). The sampler is passed in, so tests can play Claude.
 import { knownEmojiOnly, withoutEmoji } from "./emoji";
-import { GROUP, PERSON_BY_ID } from "../content/people";
+import { PERSON_BY_ID } from "../content/people";
 import { Lexicon } from "../latin/analyze";
 import { checkAnswer, literalReading } from "../latin/facts";
 import { PHOTO_BY_ID, photoSrc } from "../content/photos";
@@ -235,9 +235,7 @@ export function engineNotes(draft: string, lex: Lexicon): string[] {
 
 export async function checkDraft(draft: string, thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps): Promise<NonNullable<Msg["check"]>> {
   const out = await deps.ask<{ verdict?: string; better?: string; note?: string }>(checkPrompt(draft, thread, meta, ctx, engineNotes(draft, deps.lex)), { ...(deps.coach ?? deps.opts), cache: false });
-  const verdict = out?.verdict === "good" || out?.verdict === "almost" || out?.verdict === "wrong" ? out.verdict : "almost";
+  const verdict = out?.verdict === "good" || out?.verdict === "almost" || out?.verdict === "wrong" || out?.verdict === "say" ? out.verdict : "almost";
   const better = clean(out?.better);
   return { verdict, ...(better && verdict !== "good" ? { better: withMacrons(better, deps.lex) } : {}), note: clean(out?.note) };
 }
-
-export const isGroup = (id: string) => id === GROUP.id;

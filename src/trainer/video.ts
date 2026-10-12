@@ -65,7 +65,3 @@ export function linesSession(p: Progress, ctx: Ctx, lines: Line[], size = 12): E
   return out;
 }
 
-/** A round on the sentences of the videos. */
-export function videoSession(p: Progress, ctx: Ctx, lessons: number[], size = 12): Exercise[] {
-  return linesSession(p, ctx, videoLines(lessons, ctx.lex, ctx.k), size);
-}

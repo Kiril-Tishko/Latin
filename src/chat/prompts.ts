@@ -332,8 +332,9 @@ export function checkPrompt(draft: string, thread: Thread, meta: Meta, ctx: Prom
     engine.length ? `The site's grammar engine found: ${engine.join(" ")}` : "The site's grammar engine found nothing wrong.",
     `The learner: ${ctx.me.name}, a ${gender(ctx.me.g)}. ${ANY_WORD}`,
     knownRules(ctx.seen),
-    `Decide: "good" (correct Latin that says what they mean; missing long marks are fine), "almost" (one small slip), or "wrong". If they wrote English or a mix, give the Latin they could send. In a correction keep their own words and change only what is wrong.
-Reply with only JSON: {"verdict": "good" | "almost" | "wrong", "better": "<the corrected Latin with long marks; empty when good>", "note": "<one or two short, friendly sentences in English about what was wrong or right; Latin inside «»>"}`,
+    `Decide: "good" (correct Latin that says what they mean; missing long marks are fine), "almost" (one small slip), or "wrong". In a correction keep their own words and change only what is wrong.
+If they wrote it in English, Russian or Ukrainian (or mostly so), they are asking how to say it in Latin: the verdict is "say", "better" is the Latin they could send (simple, with their own words where they have them; a new word is welcome), and the note gives each word they have not learned with its meaning.
+Reply with only JSON: {"verdict": "good" | "almost" | "wrong" | "say", "better": "<the corrected Latin, or the Latin for what they wrote, with long marks; empty when good>", "note": "<one or two short, friendly sentences in English about what was wrong or right, or the new words; Latin inside «»>"}`,
   ].join("\n\n");
 }
 

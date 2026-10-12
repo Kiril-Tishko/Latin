@@ -22,14 +22,6 @@ export function cardUnlocked(card: Card, k: Knowledge): boolean {
   }
 }
 
-/** Why a card is still closed, in learner terms. */
-export function lockedReason(card: Card): string {
-  const e = card.entry;
-  if (e.kind === "noun") return `Opens when you learn the ${e.decl.replace("n", "")}rd-declension nouns.`;
-  if (e.kind === "adj") return "Opens with third-declension adjectives.";
-  return "Opens in a later lesson.";
-}
-
 /** The next unopened, unlocked card, in deck order. */
 export function nextCard(revealed: string[], k: Knowledge, known: Set<string>): Card | undefined {
   return DECK_CARDS.find((c) => !revealed.includes(c.id) && !known.has(c.id) && cardUnlocked(c, k));

@@ -1,23 +1,24 @@
 // The trainer: one exercise at a time, written answers on a wax tablet,
 // detailed feedback with colored endings, and Claude on hand for "why?".
 // Every round uses only the rules of the parts the learner has seen.
+import { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Part, PART_BY_ID, PARTS } from "../../content/parts";
-import { STORY_BY_ID } from "../../content/stories";
 import { latinText, seeded } from "../../latin/generate";
 import { SKILL_BY_ID } from "../../latin/skills";
 import { roman } from "../../latin/text";
 import { Exercise, ExerciseKind, KIND_LABEL, plainText, Result } from "../../trainer/exercises";
-import { countsFor, currentPart, nextNewPart, nextStep, PART_GOAL, PART_PHASES, partRight, partsInPractice, partState, seenSkills } from "../../trainer/path";
+import { countsFor, currentPart, nextNewPart, PART_GOAL, PART_PHASES, partRight, partsInPractice, partState, seenSkills } from "../../trainer/path";
 import { dueWords } from "../../trainer/srs";
+import { todayStep, WORD_ROUND, wordsGiven } from "../../trainer/today";
 import { Entry } from "../../latin/types";
 import { dayKey, Progress } from "../../trainer/progress";
 import { applyResult, buildSession, mistakesSession, nextExercise, partExercise } from "../../trainer/session";
 import { Line } from "../../trainer/lines";
-import { practiceLines, storySession } from "../../trainer/stories";
-import { answersSession, openExercise } from "../../trainer/answers";
+import { practiceLines } from "../../trainer/stories";
+import { closingQuestion, openExercise } from "../../trainer/answers";
 import { freshQuestions, judgeOpen, withJudgement } from "../coach";
-import { videoSession } from "../../trainer/video";
+import { linesSession } from "../../trainer/video";
 import { openAsk, judge } from "../ask";
 import { CaseChip, Icon, Laurel, toast } from "../components";
 import { LatinText, LatinTokens } from "../latin";
@@ -32,15 +33,12 @@ import { useScreen } from "../screen";
 import { PartDots, partName, PartRecap, rightWords } from "./learn";
 import { NO_CORRECTION } from "../keyboard";
 
-/** What a round practises: a rule (Continue), everything (Continue, all learned), some rules (Ask Claude's "practise this"), the words due (Verba), a lesson's or a story's sentences, or questions to answer in Latin. */
+/** What a round practises: a rule (Continue), everything (Continue, all learned), some rules (Ask Claude's "practise this"), or the words due (Continue, once a day). */
 export type Mode =
   | { kind: "part"; id: string }
   | { kind: "mixed" }
   | { kind: "skills"; skills: string[]; label: string }
-  | { kind: "words" }
-  | { kind: "video"; n?: number }
-  | { kind: "story"; id: string }
-  | { kind: "answers"; story?: string };
+  | { kind: "words" };
 
 interface Attempt {
   ex: Exercise;
@@ -72,10 +70,12 @@ interface Session {
   startRight?: number;
   /** The day's review, mixed into a rule's round every few exercises: mistakes to fix, words that are due. */
   extras?: Exercise[];
+  /** The round's last exercise, still to come: a question answered in the learner's own Latin. */
+  finale?: Exercise;
 }
 
 /** Exercises in the round: those made, and those a part's round will still make. */
-const roundSize = (s: Session) => s.items.length + Math.max(0, (s.plan ?? 0) - (s.made ?? 0));
+const roundSize = (s: Session) => s.items.length + Math.max(0, (s.plan ?? 0) - (s.made ?? 0)) + (s.finale ? 1 : 0);
 /** Exercises of a round on one part. */
 const PART_ROUND = 12;
 
@@ -87,6 +87,8 @@ const setSession = (s: Session | null) => {
 };
 
 const SIZE = 15;
+/** Sentences of the videos and stories in a round of everything. */
+const LINES_IN_MIX = 5;
 
 export function modeLabel(m: Mode): string {
   switch (m.kind) {
@@ -100,12 +102,6 @@ export function modeLabel(m: Mode): string {
       return m.label;
     case "words":
       return "Your words";
-    case "video":
-      return m.n ? `Lesson ${roman(m.n)}: sentences from the video` : "Sentences from the videos";
-    case "story":
-      return `Story: ${STORY_BY_ID.get(m.id)?.title ?? ""}`;
-    case "answers":
-      return m.story ? `Answer in Latin: ${STORY_BY_ID.get(m.story)?.title ?? ""}` : "Answer in Latin";
   }
 }
 
@@ -146,7 +142,9 @@ export function startSession(mode: Mode): boolean {
       const first = partExercise(p, c, part, lines, STEPWISE, new Set());
       if (!first) return unseen(part.skills);
       const extras = dayReview(p, c, vocab, first, part);
-      setSession({ mode, items: [first], index: 0, attempts: [], size: PART_ROUND + extras.length, part: part.id, showRecap: recapDue(p, part.id), learned: [], plan: PART_ROUND, made: 1, lines, startRight: partRight(p, part), extras });
+      const finale = closingQuestion(p, c, part.skills);
+      setSession({ mode, items: [first], index: 0, attempts: [], size: PART_ROUND + extras.length, part: part.id, showRecap: recapDue(p, part.id), learned: [], plan: PART_ROUND, made: 1, lines, startRight: partRight(p, part), extras, finale });
+      if (finale) void freshFinale(session!);
       return true;
     }
     case "skills": {
@@ -155,23 +153,18 @@ export function startSession(mode: Mode): boolean {
       items = buildSession(p, c, { size: 10, ...adaptive, skills: open });
       break;
     }
-    case "video":
-      items = videoSession(p, c, mode.n ? [mode.n] : p.lessonsDone);
-      break;
-    case "story": {
-      const story = STORY_BY_ID.get(mode.id);
-      items = story ? storySession(p, c, [story]) : [];
+    case "words": {
+      // the words that are due, when there are enough of them for a round
+      const due = new Set(dueWords(p, vocab.map((w) => w.id)));
+      const pool = due.size >= WORD_ROUND ? vocab.filter((w) => due.has(w.id)) : vocab;
+      items = buildSession(p, c, { size: WORD_ROUND, kinds: ["vocab"], vocab: pool });
       break;
     }
-    case "answers":
-      items = answersSession(p, c, { story: mode.story });
-      break;
-    case "words":
-      items = buildSession(p, c, { size: 20, kinds: ["vocab"], vocab });
-      break;
     default: {
-      // everything learned: a mix of all the rules, with the day's mistakes and words between
-      items = buildSession(p, c, { size: SIZE, ...adaptive, vocab });
+      // everything learned: a mix of all the rules, the videos' and stories' own sentences among them, with the day's mistakes and words between
+      items = buildSession(p, c, { size: SIZE - LINES_IN_MIX, ...adaptive, vocab });
+      const lines = linesSession(p, c, practiceLines(c.lex, c.k), LINES_IN_MIX).filter((e) => !items.some((x) => x.context === e.context));
+      lines.forEach((e, i) => items.splice(Math.min(items.length, 1 + i * 3), 0, e));
       const review = items.length ? dayReview(p, c, vocab, items[0]) : [];
       review.forEach((e, i) => items.splice(Math.min(items.length, 3 + i * 4), 0, e));
     }
@@ -180,9 +173,10 @@ export function startSession(mode: Mode): boolean {
     toast(seen.size ? "Nothing to practise there yet: its sentences need rules you haven't learned." : "Learn the first rule first: it takes two minutes.");
     return false;
   }
-  setSession({ mode, items, index: 0, attempts: [], size: items.length, learned: [] });
-  // Answer in Latin: Claude writes fresh questions for this round; they take the places of the ones not reached yet
-  if (mode.kind === "answers" && !mode.story) void freshen(session!);
+  // a round of everything ends, like a rule's, with a question to answer in one's own Latin
+  const finale = mode.kind === "mixed" ? closingQuestion(p, c) : undefined;
+  setSession({ mode, items, index: 0, attempts: [], size: items.length, learned: [], finale });
+  if (finale) void freshFinale(session!);
   return true;
 }
 
@@ -194,17 +188,15 @@ function dayReview(p: Progress, c: ReturnType<typeof ctx>, vocab: Entry[], first
   return [...mistakes, ...words].filter((e) => e.context !== first.context).map((e) => ({ ...e, aside: true }));
 }
 
-/** Puts Claude's fresh questions into a round of Answer in Latin, after the exercise on screen. */
-async function freshen(started: Session) {
-  const fresh = await freshQuestions(started.items.length);
-  if ("error" in fresh || !fresh.length || !session || session.mode !== started.mode) return;
-  const s = session;
-  const c = ctx();
-  const keep = s.items.slice(0, s.index + 1);
-  const made = fresh.map((q) => openExercise(c, q)).filter((e) => !keep.some((k) => k.context === e.context));
-  const rest = s.items.slice(s.index + 1);
-  const items = [...keep, ...made, ...rest].slice(0, s.items.length);
-  setSession({ ...s, items });
+/**
+ * Claude writes the round's last question, fresh (never one asked lately) and
+ * on the round's rule; it takes the place of the ready-made one if it comes in time.
+ */
+async function freshFinale(started: Session) {
+  const part = started.part ? PART_BY_ID.get(started.part) : undefined;
+  const fresh = await freshQuestions(1, undefined, part ? `"${part.title}" (${partName(part).toLowerCase()})` : undefined);
+  if ("error" in fresh || !fresh.length || !session || session.mode !== started.mode || !session.finale) return;
+  setSession({ ...session, finale: { ...openExercise(ctx(), fresh[0]), last: true } });
 }
 
 /** A part learned on an earlier day is recalled once a day before its exercises. */
@@ -228,18 +220,33 @@ function NoRound() {
   return null;
 }
 
+/** The words practised and reviewed: all but the fixed ones (names, little words). */
+export const vocabIds = () => derived().words.filter((w) => w.kind !== "fixed").map((w) => w.id);
+
 /**
- * Continue: the one button for the next step. A new rule opens its page (read
- * it, answer two questions); a rule in practice starts its round, with the
- * day's mistakes and words mixed in; with everything learned, a round of
- * everything.
+ * Continue: the one button for everything (todayStep). A new rule opens its
+ * page (read it, answer two questions); a rule in practice starts its round,
+ * with the day's mistakes and words mixed in; between rounds a story that has
+ * opened, and once a day the words that are due; with everything learned, a
+ * round of everything.
  */
 export function continueLearning() {
-  const step = nextStep(getProgress());
-  if (step.kind === "learn") go({ page: "learn", id: step.part.id });
-  else if (step.kind === "practise") startSession({ kind: "part", id: step.part.id }) && go({ page: "train" });
-  else if (step.kind === "review") startSession({ kind: "mixed" }) && go({ page: "train" });
-  else toast("Tick the lessons you have watched under Settings, and the first rule opens.");
+  const step = todayStep(getProgress(), vocabIds());
+  switch (step.kind) {
+    case "learn":
+      return go({ page: "learn", id: step.part.id });
+    case "story":
+      return go({ page: "story", id: step.story.id });
+    case "words":
+      update((p) => wordsGiven(p));
+      return void (startSession({ kind: "words" }) && go({ page: "train" }));
+    case "practise":
+      return void (startSession({ kind: "part", id: step.part.id }) && go({ page: "train" }));
+    case "review":
+      return void (startSession({ kind: "mixed" }) && go({ page: "train" }));
+    default:
+      toast("Tick the lessons you have watched under Settings, and the first rule opens.");
+  }
 }
 
 export function Train() {
@@ -367,7 +374,7 @@ function taskOf(ex: Exercise): { how: How; text: string; dir?: string } {
     case "derive":
       return { how: "write", text: "Write the Latin word inside this English word" };
     case "answer":
-      return { how: "write", text: ex.instruction, dir: "your own words" };
+      return { how: "write", text: ex.instruction, dir: ex.last ? "your turn" : "your own words" };
   }
 }
 
@@ -387,6 +394,8 @@ function Runner({ s }: { s: Session }) {
   const [showEnglish, setShowEnglish] = useState(false);
   const [judging, setJudging] = useState(false);
   const [judgement, setJudgement] = useState<string | null>(null);
+  // after an answer: the details (the rule, every slip, Claude) only on Why?
+  const [why, setWhy] = useState(false);
   // word tiles placed so far (indices into ex.tiles); the answer is their words
   const [picked, setPicked] = useState<number[]>([]);
   const pickTiles = (next: number[]) => {
@@ -402,7 +411,7 @@ function Runner({ s }: { s: Session }) {
   );
 
   // the exercise always fits the window: shrink it (never below a readable size) when it would scroll
-  useLayoutEffect(() => fitToWindow(panelRef.current, !!res), [ex.id, res, showHints, showRule, showEnglish, judgement, judging]);
+  useLayoutEffect(() => fitToWindow(panelRef.current, !!res), [ex.id, res, showHints, showRule, showEnglish, judgement, judging, why]);
 
   useEffect(() => {
     if (!res) inputRef.current?.focus();
@@ -516,7 +525,13 @@ function Runner({ s }: { s: Session }) {
         made = (made ?? 0) + 1;
       } else made = s.plan;
     }
-    setSession({ ...s, items, attempts, index: s.index + 1, learned: done, made, extras });
+    // the round's last: the question in the learner's own Latin, once nothing else is left
+    let finale = s.finale;
+    if (finale && (s.plan === undefined || (made ?? 0) >= s.plan) && s.index + 1 >= items.length) {
+      items = [...items, finale];
+      finale = undefined;
+    }
+    setSession({ ...s, items, attempts, index: s.index + 1, learned: done, made, extras, finale });
   }
 
   async function dispute() {
@@ -666,30 +681,31 @@ function Runner({ s }: { s: Session }) {
 
         {res && (
           <div class="ex-side" ref={sideRef}>
-            <Feedback ex={ex} res={res} answer={answer} />
-            {counted.map((x) => (
-              <p key={x.id} class="part-plus" role="status">
-                <strong>+1</strong> {partName(x)}: {partRight(pp, x) + 1} of {PART_GOAL} right answers
-              </p>
-            ))}
-            {roundPart && !counted.some((x) => x.id === roundPart.id) && partState(pp, roundPart) === "practising" && (
-              <p class="part-plus none">{partName(roundPart)} stays at {partRight(pp, roundPart)} of {PART_GOAL}: only a right answer adds one.</p>
+            <Feedback ex={ex} res={res} answer={answer}>
+              {counted.map((x) => (
+                <p key={x.id} class="part-plus" role="status">
+                  <strong>+1</strong> {partName(x)}: {partRight(pp, x) + 1} of {PART_GOAL}
+                </p>
+              ))}
+              {roundPart && !counted.some((x) => x.id === roundPart.id) && partState(pp, roundPart) === "practising" && (
+                <p class="part-plus none">{partName(roundPart)} stays at {partRight(pp, roundPart)} of {PART_GOAL}</p>
+              )}
+            </Feedback>
+            {why && (
+              <WhyBox
+                ex={ex}
+                res={res}
+                answer={answer}
+                judgement={judgement}
+                onAsk={askWhy}
+                onDispute={res.verdict !== "correct" && ex.answer !== "choice" && ex.kind !== "answer" && answer.trim() && answer !== "—" ? dispute : undefined}
+                judging={judging}
+              />
             )}
-            {judgement && <div class="well"><Markup text={judgement} /></div>}
             <div class="spread ex-next">
-              <div class="row">
-                <button class="btn ghost" onClick={askWhy}><Icon.quill /> Why?</button>
-                {res.verdict !== "correct" && ex.answer !== "choice" && ex.kind !== "answer" && answer.trim() && answer !== "—" && (
-                  <button class="btn ghost" onClick={dispute} disabled={judging} title="Ask Claude to check whether your answer is also correct">
-                    {judging ? "Asking…" : (
-                      <>
-                        <span class="wide-only">I think mine is right</span>
-                        <span class="narrow-only">I'm right?</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
+              <button id="ex-why" class="btn ghost" aria-expanded={why} onClick={() => setWhy(!why)}>
+                {why ? "Less" : "Why?"}
+              </button>
               <button class="btn big" ref={nextRef} onClick={next}>
                 Next <Icon.arrow />
               </button>
@@ -936,20 +952,87 @@ function Prompt(props: {
   }
 }
 
-function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: string }) {
+/** Answers of one word, where the slip shows as "«deus», not «deum»". */
+const ONE_WORD = new Set<ExerciseKind>(["choose", "form", "identify", "vocab"]);
+
+/** The word to fix, when the answer was one word: deus, not deum. */
+function oneFix(ex: Exercise, res: Result, answer: string): { want: string; given: string } | null {
+  if (res.verdict === "correct" || !ONE_WORD.has(ex.kind) || !answer.trim() || answer === "—") return null;
+  const given = givenAnswer(ex, answer).trim();
+  const want = res.expected.trim();
+  if (!given || !want || /\s/.test(want) || given.toLowerCase() === want.toLowerCase()) return null;
+  return { want, given };
+}
+
+/**
+ * After an answer, short: the verdict (with the word to fix), the right
+ * sentence and its English, one line why, and whether the rule's count went
+ * up (children). The rest waits under Why? (WhyBox).
+ */
+function Feedback({ ex, res, answer, children }: { ex: Exercise; res: Result; answer: string; children?: ComponentChildren }) {
   const v = VERDICT[res.verdict];
-  const latinAnswer = (ex.answer === "la" || ex.answer === "tiles") && res.tokens;
+  const fix = oneFix(ex, res, answer);
   const meaning = ex.kind === "transform" || ex.kind === "derive" ? ex.answerEnglish : ex.kind === "ending" || ex.kind === "choose" ? ex.english : undefined;
-  // after a mistake: the one-line rule for each skill it was about
-  const blamed = res.verdict === "correct" ? [] : [...new Set(res.issues.filter((i) => i.kind !== "tip" && i.kind !== "typo").map((i) => i.skill).filter(Boolean) as string[])];
-  const ruleHints = blamed.map((id) => SKILL_BY_ID.get(id)?.hint).filter(Boolean).slice(0, 2) as string[];
+  const first = res.issues.find((i) => i.message)?.message;
+  // one line why, unless it only says the answer again (a meaning: "… means …")
+  const why = first && !(res.expected && first.includes(res.expected)) ? first : undefined;
   return (
-    <div class="stack" style={{ gap: "12px" }}>
+    <div class="stack feedback">
       <div class={`verdict ansata ${res.verdict}`} role="status">
         <span class="la">{v.la}</span>
-        <span class="en">{v.en}</span>
+        <span class="en">
+          {fix ? (
+            <>
+              <b>{fix.want}</b>, not {fix.given}
+            </>
+          ) : (
+            v.en
+          )}
+        </span>
       </div>
-      {latinAnswer && res.verdict !== "correct" && answer !== "—" && (
+      <div class="stack answer" style={{ gap: "2px" }}>
+        {ex.kind === "answer" && <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{res.coached ? "Your idea, corrected" : "For example"}</span>}
+        {ex.kind === "meaning" ? (
+          <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }}>{res.expected}</p>
+        ) : ex.answer === "en" ? (
+          <>
+            <p class="latin-lg">{res.expected}</p>
+            {res.expectedTokens && (
+              <p>
+                <LatinTokens tokens={res.expectedTokens} />
+                <Speak text={latinText(res.expectedTokens)} id={`answer-${ex.id}`} />
+              </p>
+            )}
+          </>
+        ) : res.expectedTokens && ex.kind !== "identify" ? (
+          <p class="latin-lg">
+            <LatinTokens tokens={res.expectedTokens} period={ex.kind !== "form"} cap={ex.kind !== "form"} />
+            <Speak text={latinText(res.expectedTokens)} id={`answer-${ex.id}`} />
+          </p>
+        ) : (
+          <p class="latin-lg"><Inline text={`«${res.expected}»`} /></p>
+        )}
+        {meaning && <p class="muted small">{meaning}</p>}
+      </div>
+      {why && <p class="why-line"><Inline text={why} /></p>}
+      {children}
+    </div>
+  );
+}
+
+/** Why?: what was written, every slip, the rule behind the exercise, and Claude for more. */
+function WhyBox(props: { ex: Exercise; res: Result; answer: string; judgement: string | null; judging: boolean; onAsk: () => void; onDispute?: () => void }) {
+  const { ex, res, answer } = props;
+  const latinAnswer = (ex.answer === "la" || ex.answer === "tiles") && res.tokens && res.verdict !== "correct" && answer !== "—";
+  const all = res.issues.filter((i) => i.message);
+  const shown = all[0] && !(res.expected && all[0].message.includes(res.expected));
+  const more = shown ? all.slice(1) : all;
+  // the rules behind it: those the slips were about, or, when right, the exercise's own
+  const blamed = [...new Set(res.issues.filter((i) => i.kind !== "tip" && i.kind !== "typo").map((i) => i.skill).filter(Boolean) as string[])];
+  const rules = (res.verdict === "correct" || !blamed.length ? ex.skills : blamed).map((id) => SKILL_BY_ID.get(id)?.hint).filter(Boolean).slice(0, 2) as string[];
+  return (
+    <div class="well stack why-box">
+      {latinAnswer && (
         <div class="ui you-wrote">
           <span class="muted">You wrote: </span>
           <span class="mine latin">
@@ -962,41 +1045,26 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
           </span>
         </div>
       )}
-      <div class="stack answer" style={{ gap: "4px" }}>
-        <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{ex.kind === "answer" ? (res.coached ? "Your idea, corrected" : "For example") : res.verdict === "correct" ? "Model answer" : "Correct answer"}</span>
-        {ex.kind === "meaning" ? (
-          <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }}>{res.expected}</p>
-        ) : ex.answer === "en" ? (
-          <div class="stack" style={{ gap: "4px" }}>
-            <p class="latin-lg">{res.expected}</p>
-            {res.expectedTokens && (
-              <p>
-                <LatinTokens tokens={res.expectedTokens} />
-                <Speak text={latinText(res.expectedTokens)} id={`answer-${ex.id}`} />
-              </p>
-            )}
-          </div>
-        ) : res.expectedTokens && ex.kind !== "identify" ? (
-          <p class="latin-lg">
-            <LatinTokens tokens={res.expectedTokens} period={ex.kind !== "form"} cap={ex.kind !== "form"} />
-            <Speak text={latinText(res.expectedTokens)} id={`answer-${ex.id}`} />
-          </p>
-        ) : (
-          <p class="latin-lg"><Inline text={`«${res.expected}»`} /></p>
-        )}
-        {meaning && <p class="muted small">{meaning}</p>}
-      </div>
-      {res.issues.some((i) => i.message) && (
+      {more.length > 0 && (
         <ul class="issues">
-          {res.issues.filter((i) => i.message).map((i, k) => <li key={k}><Inline text={i.message} /></li>)}
+          {more.map((i, k) => <li key={k}><Inline text={i.message} /></li>)}
         </ul>
       )}
-      {ruleHints.length > 0 && (
+      {rules.length > 0 && (
         <div class="rule-hint">
           <span class="eyebrow">Rule</span>
-          {ruleHints.map((h, i) => <p key={i}><Inline text={h} /></p>)}
+          {rules.map((h, i) => <p key={i}><Inline text={h} /></p>)}
         </div>
       )}
+      {props.judgement && <Markup text={props.judgement} />}
+      <div class="row">
+        <button class="btn ghost small" onClick={props.onAsk}><Icon.quill /> Ask Claude</button>
+        {props.onDispute && (
+          <button class="btn ghost small" onClick={props.onDispute} disabled={props.judging} title="Ask Claude to check whether your answer is also correct">
+            {props.judging ? "Asking…" : "I think mine is right"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1121,10 +1189,6 @@ function Summary({ s }: { s: Session }) {
       </div>
     </div>
   );
-}
-
-export function endSession() {
-  setSession(null);
 }
 
 export type { ExerciseKind };

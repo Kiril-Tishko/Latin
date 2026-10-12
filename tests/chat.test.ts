@@ -9,11 +9,12 @@ import { literalReading } from "../src/latin/facts";
 import { languageBlock, PromptCtx, replyPrompt } from "../src/chat/prompts";
 import { LINKS, rollStranger } from "../src/chat/strangers";
 import { vetMessage, withMacrons } from "../src/chat/vet";
-import { allowedWords, calendarEntry, CHAT_WORDS, chatEntries, chatLexicon, formsFor, nameEntry, vocativeOf } from "../src/chat/words";
+import { allowedWords, calendarEntry, CHAT_WORDS, chatEntries, chatLexicon, formsFor, nameEntry, notLatin, vocativeOf } from "../src/chat/words";
 import { LESSONS } from "../src/content/lessons";
 import { PARTS } from "../src/content/parts";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../src/content/people";
 import { PORTRAIT_BY_ID } from "../src/content/portraits";
+import { ENGRAVINGS } from "../src/content/engravings";
 import { seeded } from "../src/latin/generate";
 
 const lessonWords = LESSONS.flatMap((l) => l.words);
@@ -383,6 +384,11 @@ describe("mistakes taken literally, voice messages and photos", () => {
       if (p.who !== "any") for (const w of p.who) expect(PERSON_BY_ID.has(w), `${p.id}: ${w}`).toBe(true);
     }
     for (const person of PEOPLE) expect(photosFor(person.id, false).length, person.id).toBeGreaterThan(3);
+    // the portraits and the engravings are files beside the page too
+    const portraits = Object.keys(import.meta.glob("../src/content/portraits/*.webp")).map((f) => f.split("/").pop());
+    for (const x of PORTRAIT_BY_ID.values()) expect(portraits, x.id).toContain(x.src.replace("portraits/", ""));
+    const engravings = Object.keys(import.meta.glob("../src/content/engravings/*.webp")).map((f) => `engravings/${f.split("/").pop()}`);
+    for (const x of Object.values(ENGRAVINGS)) expect(engravings).toContain(x.src);
     expect(photosFor("s123", true).every((p) => p.who === "any")).toBe(true);
   });
 
@@ -398,5 +404,12 @@ describe("mistakes taken literally, voice messages and photos", () => {
     expect(brief.calendar[0].text).toContain("THE DAY IN ROME");
     expect(brief.forms).toContain("traianus");
     expect(brief.photos.length).toBe(PHOTOS.length);
+  });
+});
+
+describe("Check on English: how do I say it in Latin", () => {
+  it("tells English, Russian and Ukrainian from Latin", () => {
+    for (const t of ["I love you", "Salve Iulia, how are you?", "how to say because I love", "я тебе люблю", "Як справи?"]) expect(notLatin(t), t).toBe(true);
+    for (const t of ["Ego amo te", "Puella est pulchra", "Salvē, Marce! Quid agis?", "In silvā ambulō.", "Ego volo tu"]) expect(notLatin(t), t).toBe(false);
   });
 });

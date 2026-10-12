@@ -116,3 +116,18 @@ describe("sensible sentences (from the learner's own questions)", () => {
     console.log(lines.join("\n"));
   });
 });
+
+describe("an 'of' phrase only when the genitive is practised", () => {
+  it("leaves it out of sensible sentences aimed at other rules, and makes it when aimed at it", () => {
+    const k = { ...ALL, silly: 0 };
+    let gen = 0;
+    for (let i = 1; i <= 300; i++) {
+      const c = generate(k, seeded(i), [i % 2 ? "n2.acc.sg" : "v.3sg"]);
+      if (c?.skills.includes("s.gen")) gen++;
+    }
+    expect(gen).toBe(0);
+    let aimed = 0;
+    for (let i = 1; i <= 60; i++) if (generate(k, seeded(i), ["n1.gen.sg"])?.skills.includes("s.gen")) aimed++;
+    expect(aimed).toBeGreaterThan(40);
+  });
+});

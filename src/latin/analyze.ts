@@ -1,7 +1,7 @@
 // Reverse lookup: which word and which form is this? Used to color endings in
 // any Latin text and to explain a learner's wrong answer.
 import { conjugate, declineAdj, declineNoun } from "./morph";
-import { latinKey, plain, words } from "./text";
+import { latinKey, plain } from "./text";
 import { Case, Entry, Form, full, Gender, NounKey, Num, VerbKey } from "./types";
 
 export interface Analysis {
@@ -159,14 +159,4 @@ function rank(a: Analysis): number {
   if (a.entry.kind !== "noun" && a.entry.kind !== "adj") return 0;
   const i = PREF.indexOf(a.key as NounKey);
   return i < 0 ? 99 : i;
-}
-
-/** Plain words of a Latin sentence (for checking), without hints or punctuation. */
-export function latinWords(text: string): string[] {
-  return words(text.replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, ""));
-}
-
-/** Removes #hints so text can be shown or compared. */
-export function stripHints(text: string): string {
-  return text.replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "");
 }

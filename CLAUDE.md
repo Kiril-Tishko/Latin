@@ -50,8 +50,9 @@ node scripts/build.mjs --dev   # unminified build for debugging
 
 The page is `dist/tabula-latina.html`: no doctype/head/body of its own (the
 artifact publisher adds the skeleton), `<title>` and `<style>` first, then
-`<script src="tabula-<hash>.js">`. The code and the messenger's photos are
-files beside the page: `dist/publish.json` is the `files` map for them (the
+`<script src="tabula-<hash>.js">`. The code and the messenger's pictures
+(photos, portraits, engravings: src/content/<dir>/*.webp, `MEDIA` in the build)
+are files beside the page: `dist/publish.json` is the `files` map for them (the
 script is named by its content, so a browser never runs an old copy). Publish
 with the Artifact tool:
 
@@ -163,23 +164,29 @@ The learner asked for a site "for a stupid person - obvious and no thinking
 required": as few places as possible, one obvious next step. Four tabs, with
 Latin names (English in the tooltip; `TABS` in src/ui/app.tsx, routes in nav.ts):
 
-- **Domus** (`src/ui/pages/home.tsx`): one big Continue (`continueLearning` in
-  train.tsx, `nextStep` in path.ts: a new rule opens its page, the rule in
-  practice starts its round, everything learned starts a mixed round), the day's
-  goal and streak, and three small cards: Answer in Latin, the next story, the
-  newest unread message. Nothing else (the sentence of the day and the practice
-  chooser are gone; `#train` without a round goes home).
+- **Domus** (`src/ui/pages/home.tsx`): one card, one button. Continue
+  (`continueLearning` in train.tsx) leads through everything, so the learner
+  never chooses an activity (they asked for it): `todayStep` in
+  src/trainer/today.ts starts the day with the rule (`nextStep` in path.ts: a new
+  rule opens its page, the rule in practice starts its round, everything learned
+  starts a round of everything); once something is done that day, a story that
+  has opened and is not read comes first (one between two rounds: `Day.story`),
+  then, once a day and with ten or more due, a round of twelve words (`Day.words`).
+  The card says what Continue will do (`StepCard`), with the day's goal and
+  streak. Nothing else (no cards for Answer in Latin, stories or messages, no
+  practice chooser; `#train` without a round goes home).
 - **Lectiōnēs** (`src/ui/pages/lessons.tsx`): the whole path. Each lesson
-  watched with its rules one line each (`RuleList`); a lesson fully learned folds
-  into its title line. Then the stories (the ones not open yet folded into one
-  line), the Latin in English card, and the endings at a glance (closed). A lesson's
-  own page (`#lesson-n`: sentences, phrases, words, story, "Practise them") is
-  reached from the line under its rules. `#rules` and `#stories` land here.
+  watched with its rules one line each (`RuleList`) and its three stories under
+  them; a lesson fully learned folds into its title line. Then the Latin in
+  English card, and the endings at a glance (closed). A lesson's own page
+  (`#lesson-n`: the video's sentences with Listen & repeat, its story, phrases,
+  differences from the video) is reached from the line under its stories; its
+  rules are on Lectiōnēs and its words on Verba. `#rules` and `#stories` land here.
 - **Verba** (`src/ui/pages/words.tsx`): search (any form, or English), Add a
   word, the five mystery cards (`CardStrip` in src/ui/cards.tsx: opened cards turn
   face up in place; five more come when all five are open), the filters All /
-  lessons / Cards / Yours / Chat on one sideways-scrolling line, Review, and the
-  word grid. `#discover` lands here.
+  lessons / Cards / Yours / Chat on one sideways-scrolling line, and the word
+  grid (reviews come through Continue). `#discover` lands here.
 - **Nūntiī**: the messenger (below).
 
 Typing on a phone (src/ui/keyboard.ts), as the learner asked: while a text
@@ -271,8 +278,10 @@ right answers must learn it, and the round must come in blocks.
 How rich a sentence is follows the same phases (`sentenceStyle`: bare while
 simple, colors on). Elsewhere (videos, stories, weak spots) the kinds follow the
 mastery of the skills (`phaseOf`); a fixed sentence is as hard as its newest
-rule. The generator makes an "of" phrase whenever s.gen or one of the genitive
-endings is the focus (`GEN_SKILLS`, the owner of the ending practised), and a
+rule. The generator makes an "of" phrase only when s.gen or one of the genitive
+endings is the focus (`GEN_SKILLS`, the owner of the ending practised; anywhere
+else it read two ways to the learner: «Dea amīcam discipulae nōn habet» as "the
+student's goddess has no friends"), and a
 describing word can be the gap or the choice (`tokenRules`; `wrongForms` offers
 its other cases and its other gender: magna for agricola's magnus).
 
@@ -290,14 +299,16 @@ examples ego. `judgeAnswer` checks with the engine: unknown words, grammar
 question's own verb, what the question asks for (a thing with -m, in + -ā / -ō,
 ad / in + -m, who, to …, quod …), and a correct but odd pair ("I read the water")
 is "almost" (`sensibleObject`). A right answer adds one to the rules it used;
-open answers are not logged as mistakes. Mode `answers`: a card on Domus, and
-"Answer questions in Latin" on a story.
-Version 2, as the learner asked ("really open ended… so AI should check it"): a
-round starts with the fixed questions and Claude writes fresh ones for it
-(`freshQuestions` in src/ui/coach.ts: about the learner, the five friends of the
-messenger, imagined scenes; only their words, each vetted by `vetMessage`; the
-last 60 asked are kept so they do not repeat), which take the places of the
-questions not reached yet (`freshen` in train.tsx; `openExercise`, slot `free`).
+open answers are not logged as mistakes. Every round (a rule's, or everything)
+ends with one of them, "your turn" (`Exercise.last`, `Session.finale`): a
+ready-made question on the round's rule when one fits (`closingQuestion`), which
+a fresh one from Claude replaces when it comes in time (`freshFinale` in
+train.tsx). A round that learns its rule ends at once, without it.
+Fresh questions, as the learner asked ("really open ended… so AI should check
+it"): `freshQuestions` in src/ui/coach.ts (about the learner, the five friends of
+the messenger, imagined scenes; on the round's rule when given one; only their
+words, each vetted by `vetMessage`; the last 60 asked are kept so they do not
+repeat; `openExercise`, slot `free`).
 Every answer goes to the coach (`judgeOpen`): the engine's findings go along as
 facts, any correct, sensible answer counts, inventive ones most of all, and the
 coach's note and corrected version ("Your idea, corrected") are shown; without
@@ -311,9 +322,10 @@ of each word; a neuter with I / you acting is the object), `lineSkills` lists
 every rule it needs (its endings and its constructions: an object, "of", nōn,
 ego / tū left out, an infinitive after a verb, X est Y, in / ad + a place,
 plurals, an adjective that follows gender), and `lineExercise` builds the
-exercises. "Sentences from the videos" (`src/trainer/video.ts`) keeps the
-lesson sentences whose rules have all been seen; a lesson page's "Practise
-them" runs one lesson.
+exercises. The videos' and stories' own sentences whose rules have all been
+seen (`practiceLines`, `videoLines` in src/trainer/video.ts) show a rule's
+constructions in its round (et between two verbs), and five of them are mixed
+into every round of everything (`linesSession`, `LINES_IN_MIX`).
 
 Every exercise shows one plain task line with a sign for how to answer (write,
 tap, type in the gap, listen, change: `taskOf` in `src/ui/pages/train.tsx`).
@@ -321,7 +333,11 @@ Endings and forms are typed into the sentence itself (`GapInput`), a sentence to
 change starts in the answer box, and the infinitive is asked from the tū form
 (its vowel decides it: from discō alone it cannot be known). Only an exercise
 between the rule's own says where it is from ("an earlier mistake, once more",
-"a word to review", "an earlier rule").
+"a word to review", "an earlier rule"). After an answer the card is short, as
+the learner chose (`Feedback`): the verdict (with "deus, not deum" when the
+answer was one word), the right sentence and its English, one line why, and +1
+or "stays". The rest waits under Why? (`WhyBox`): what was written, every slip,
+the rule, Ask Claude, and "I think mine is right".
 
 Stories (`src/content/stories.ts`, listed on Lectiōnēs, each on `#story-<id>` in
 `src/ui/pages/stories.tsx`): three per lesson (`step`), each with a small plot,
@@ -331,8 +347,9 @@ need (`partsBefore`). `en` is the reader's English,
 `prompt` the exercise English when it must say more ("the friend (f)"), `who`
 the speaker of a dialogue line; two questions each, the right answer first.
 A tap on a line shows its English, a tap on a word its meaning; answering the
-questions marks the story read (`Progress.stories`). "Practise this story"
-builds a round from its lines; Domus offers the next unread open story. `tests/stories.test.ts` checks every word, long mark
+questions marks the story read (`Progress.stories`), and the story ends with
+Continue (`#story-continue`), which goes on with the day; Continue brings each
+open story in turn. `tests/stories.test.ts` checks every word, long mark
 and rule, and that each exercise on each line accepts its own answer: write a
 new story, then run the tests.
 
@@ -486,6 +503,10 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   opening the messenger (at most every 3 hours, `writeOwn`: what they write on
   their own in the next three hours, each at its time), Someone new, Check
   (the coach: verdict, corrected Latin, a note), and a question to the coach.
+  Check on English, Russian or Ukrainian gives the Latin to send (verdict
+  "say", shown as "In Latin" with Use this), since the learner kept asking "how
+  do I say…"; a hint under the box says so when it holds no Latin (`notLatin` in
+  src/chat/words.ts).
   The coach's window (`CoachPanel` above the message box) collects the checks
   and the learner's questions about them (`askCoach`, `coachPrompt`: short,
   «Latin», a word's origin and story when asked about a word); it stays open

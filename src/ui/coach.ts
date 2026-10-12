@@ -37,7 +37,7 @@ function languageNow(): string {
 }
 
 /** Questions Claude writes for this round; only those the learner can read and answer pass. */
-export async function freshQuestions(n: number, signal?: AbortSignal): Promise<FreshQuestion[] | { error: string }> {
+export async function freshQuestions(n: number, signal?: AbortSignal, focus?: string): Promise<FreshQuestion[] | { error: string }> {
   const sample = await sampler();
   if (!sample) return { error: "Fresh questions come from Claude when this page is open on claude.ai." };
   const p = getProgress();
@@ -46,6 +46,7 @@ export async function freshQuestions(n: number, signal?: AbortSignal): Promise<F
   const prompt = `Write ${n + 4} fresh questions in Latin for a beginner, who answers each in Latin with their own words. Make them different every time and fun to answer: some about the learner's own life, habits, likes and wishes; some about the five friends from their messenger (${PEOPLE.map((x) => `${x.name}: ${x.job}`).join("; ")}); some little imaginary situations or scenes to describe ("you are in a forest: what do you see?"), opinions, a small story to continue. Vary the form too: what, who, where, where to, why, yes or no, "tell me two things"…
 ${me ? `The learner is ${me.name}, a ${me.g === "m" ? "man" : "woman"}.` : ""}
 Every question must be answerable with the learner's words below, and must itself use only those words (the question words quid, quis, ubi, quō, cūr and the chat words are fine: the page shows their meanings). Never ask about something they have no words for. A question about the learner uses the "you" forms (-s), so the answer uses "I" (-ō).
+${focus ? `These questions end a round of practice on one rule, ${focus}: a good answer to each uses that rule.` : ""}
 ${before.length ? `Asked recently, so not these again: ${before.join(" | ")}` : ""}
 
 ${languageNow()}

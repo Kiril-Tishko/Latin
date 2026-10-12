@@ -1,77 +1,68 @@
-// Domus: one button. Continue always does the right next thing (a new rule to
-// read, the rule in hand to practise with the day's review mixed in, or, with
-// everything learned, everything at once); the day's goal beside it; and below,
-// the few other things worth a tap: Answer in Latin, the next story, the friends'
-// messages.
-import { GROUP } from "../../content/people";
-import { arrived, preview, unreadCount, whoOf } from "../../chat/model";
-import { showEmoji } from "../../chat/emoji";
+// Domus: one button. Continue always does the right next thing (todayStep: a
+// new rule to read, the rule in hand to practise with the day's review mixed
+// in, a story that has opened, the words that are due, or, with everything
+// learned, everything at once), and the card says which; the day's goal beside it.
 import { roman } from "../../latin/text";
-import { nextStep, PART_GOAL, partRight } from "../../trainer/path";
-import { streak, todayDone } from "../../trainer/progress";
-import { nextStory } from "../../trainer/stories";
+import { PART_GOAL, partRight } from "../../trainer/path";
+import { Progress, streak, todayDone } from "../../trainer/progress";
+import { todayStep, TodayStep } from "../../trainer/today";
 import { Icon, Laurel, Mosaic } from "../components";
 import { LatinText } from "../latin";
-import { allThreads, getMeta, useMessenger } from "../messenger";
-import { go } from "../nav";
 import { useScreen } from "../screen";
 import { useProgress } from "../store";
 import { PartDots, partName } from "./learn";
-import { continueLearning, startSession } from "./train";
+import { continueLearning, vocabIds } from "./train";
+
+/** What Continue does next, in a few words: "rule 3.2 (new)", "a new story", "your words". */
+export function stepLabel(step: TodayStep): string {
+  switch (step.kind) {
+    case "learn":
+      return `${partName(step.part).toLowerCase()} (new)`;
+    case "practise":
+      return partName(step.part).toLowerCase();
+    case "story":
+      return "a new story";
+    case "words":
+      return "your words";
+    case "review":
+      return "everything you know";
+    default:
+      return "";
+  }
+}
+
+/** What Continue will do, in a line for Claude. */
+function stepText(p: Progress, step: TodayStep): string {
+  switch (step.kind) {
+    case "learn":
+      return `Continue opens the next rule to learn: ${partName(step.part)} of Lesson ${step.part.lesson}, "${step.part.title}" (read it, answer two questions, then practise).`;
+    case "practise":
+      return `Continue practises ${partName(step.part)}, "${step.part.title}": ${partRight(p, step.part)} of ${PART_GOAL} right answers so far, ten make it learned; the day's mistakes and due words come mixed in.`;
+    case "story":
+      return `Continue opens a story that has just opened: "${step.story.title}" (${step.story.en}).`;
+    case "words":
+      return `Continue gives a short round of the words that are due (${step.due} due).`;
+    case "review":
+      return "Every rule of the lessons watched is learned: Continue mixes everything, with the mistakes and words that are due.";
+    default:
+      return "No lesson is ticked as watched yet.";
+  }
+}
 
 export function Home() {
   const p = useProgress();
   const done = todayDone(p);
   const goal = p.settings.dailyGoal;
   const days = streak(p);
-  const step = nextStep(p);
+  const step = todayStep(p, vocabIds());
   const name = p.settings.me?.name;
-  useScreen(
-    "page",
-    "Home (Domus)",
-    () =>
-      [
-        `The home page (Domus). Today: ${done} of ${goal} exercises done; ${days > 0 ? `a ${days}-day streak` : "no streak yet"}.`,
-        step.kind === "learn"
-          ? `Continue opens the next rule to learn: ${partName(step.part)} of Lesson ${step.part.lesson}, "${step.part.title}" (read it, answer two questions, then practise).`
-          : step.kind === "practise"
-            ? `Continue practises ${partName(step.part)}, "${step.part.title}": ${partRight(p, step.part)} of ${PART_GOAL} right answers so far, ten make it learned; the day's mistakes and due words come mixed in.`
-            : step.kind === "review"
-              ? "Every rule of the lessons watched is learned: Continue mixes everything, with the mistakes and words that are due."
-              : "No lesson is ticked as watched yet.",
-        "Below: Answer in Latin, the next story, and the messages from the friends in Nūntiī.",
-      ].join("\n"),
-    { share: false },
-  );
+  useScreen("page", "Home (Domus)", () => `The home page (Domus): one Continue button. Today: ${done} of ${goal} exercises done; ${days > 0 ? `a ${days}-day streak` : "no streak yet"}.\n${stepText(p, step)}`, { share: false });
 
   return (
     <div class="stack-lg home">
       <section class="panel frame home-hero" data-ask="Continue">
         <span class="eyebrow">Salvē{name ? `, ${name}` : ""}!</span>
-        {step.kind === "learn" || step.kind === "practise" ? (
-          <>
-            <span class="home-step ui">
-              Lesson {roman(step.part.lesson)} · {partName(step.part)}
-              {step.kind === "learn" && <span class="chip home-new">new</span>}
-            </span>
-            <h1 class="home-title">{step.part.title}</h1>
-            {step.kind === "practise" ? (
-              <div class="row home-dots">
-                <PartDots part={step.part} big />
-                <span class="ui small">
-                  <strong>{partRight(p, step.part)}</strong> of {PART_GOAL} right
-                </span>
-              </div>
-            ) : (
-              <p class="muted">Read it, answer two short questions, then practise.</p>
-            )}
-          </>
-        ) : (
-          <>
-            <h1 class="home-title">{step.kind === "review" ? "Every rule you watched is learned." : "Tick the lessons you have watched."}</h1>
-            <p class="muted">{step.kind === "review" ? "Continue mixes everything you know, with your mistakes and words." : "Open the settings (the gear, top right) and tick them; the first rule then opens."}</p>
-          </>
-        )}
+        <StepCard step={step} />
         <div class="home-go">
           <button id="continue" class="btn big home-continue" onClick={continueLearning} disabled={step.kind === "none"}>
             <Icon.play /> Continue
@@ -90,76 +81,66 @@ export function Home() {
           </div>
         </div>
       </section>
-
-      <section class="home-also" aria-label="Also">
-        <AnswerCard />
-        <StoryCard />
-        <MessagesCard />
-      </section>
     </div>
   );
 }
 
-/** Questions in Latin, answered in the learner's own words (Claude reads them). */
-function AnswerCard() {
-  return (
-    <button class="panel also-card" onClick={() => startSession({ kind: "answers" }) && go({ page: "train" })}>
-      <span class="also-icon"><Icon.quill /></span>
-      <span class="stack also-text">
-        <strong>Answer in Latin</strong>
-        <span class="small muted">Questions about you and your friends, answered in your own words.</span>
-      </span>
-    </button>
-  );
-}
-
-/** The next story of the step to read, or the shelf of stories. */
-function StoryCard() {
+/** What Continue will do next, as the card's title. */
+function StepCard({ step }: { step: TodayStep }) {
   const p = useProgress();
-  const story = nextStory(p);
-  return (
-    <button class="panel also-card" onClick={() => go(story ? { page: "story", id: story.id } : { page: "stories" })}>
-      <span class="also-icon"><Icon.scroll /></span>
-      <span class="stack also-text">
-        <strong>{story ? "A story to read" : "Stories"}</strong>
-        {story ? (
-          <span class="small">
-            <LatinText text={story.title} /> <span class="muted">· {story.en}</span>
+  switch (step.kind) {
+    case "learn":
+    case "practise":
+      return (
+        <>
+          <span class="home-step ui">
+            Lesson {roman(step.part.lesson)} · {partName(step.part)}
+            {step.kind === "learn" && <span class="chip home-new">new</span>}
           </span>
-        ) : (
-          <span class="small muted">Read one again, or wait for the next: they open as you learn.</span>
-        )}
-      </span>
-    </button>
-  );
-}
-
-/** The friends in Nūntiī: who wrote last, unread. */
-function MessagesCard() {
-  const now = useMessenger();
-  const p = useProgress();
-  const unread = allThreads()
-    .map((t) => ({ t, n: unreadCount(t, now), last: arrived(t, now).at(-1) }))
-    .filter((x) => x.n > 0 && x.last)
-    .sort((a, b) => b.last!.at - a.last!.at);
-  const total = unread.reduce((n, x) => n + x.n, 0);
-  const top = unread[0];
-  const from = top ? whoOf(top.last!.from, getMeta())?.name ?? "" : "";
-  const where = top && top.t.id === GROUP.id ? ` in ${GROUP.name}` : "";
-  return (
-    <button class="panel also-card" onClick={() => go(top ? { page: "messenger", thread: top.t.id } : { page: "messenger" })}>
-      <span class="also-icon"><Icon.letter /></span>
-      <span class="stack also-text">
-        <strong>
-          {top ? `${from}${where} wrote` : "Nūntiī"}
-          {total > 0 && <span class="tab-badge">{roman(total)}</span>}
-        </strong>
-        {top ? (
-          <span class="small also-quote" lang="la">{showEmoji(preview(top.last!))}</span>
-        ) : (
-          <span class="small muted">{p.settings.me ? "Write to your Roman friends." : "Five Roman friends who text you in Latin."}</span>
-        )}
-      </span>
-    </button>
-  );
+          <h1 class="home-title">{step.part.title}</h1>
+          {step.kind === "practise" ? (
+            <div class="row home-dots">
+              <PartDots part={step.part} big />
+              <span class="ui small">
+                <strong>{partRight(p, step.part)}</strong> of {PART_GOAL} right
+              </span>
+            </div>
+          ) : (
+            <p class="muted">Read it, answer two short questions, then practise.</p>
+          )}
+        </>
+      );
+    case "story":
+      return (
+        <>
+          <span class="home-step ui">
+            Fābula · a story <span class="chip home-new">new</span>
+          </span>
+          <h1 class="home-title"><LatinText text={step.story.title} /></h1>
+          <p class="muted">{step.story.en}. Only words and rules you know.</p>
+        </>
+      );
+    case "words":
+      return (
+        <>
+          <span class="home-step ui">Verba</span>
+          <h1 class="home-title">Your words</h1>
+          <p class="muted">{step.due} to review: a short round, then back to the rule.</p>
+        </>
+      );
+    case "review":
+      return (
+        <>
+          <h1 class="home-title">Every rule you watched is learned.</h1>
+          <p class="muted">Continue mixes everything you know, with your mistakes and words.</p>
+        </>
+      );
+    default:
+      return (
+        <>
+          <h1 class="home-title">Tick the lessons you have watched.</h1>
+          <p class="muted">Open the settings (the gear, top right) and tick them; the first rule then opens.</p>
+        </>
+      );
+  }
 }

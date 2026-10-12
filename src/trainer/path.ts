@@ -48,12 +48,6 @@ export function countsFor(part: Part, res: { verdict: string; credit: Record<str
   return res.verdict !== "wrong" && part.skills.some((s) => (res.credit[s] ?? 0) >= 0.85);
 }
 
-/** 0..1: how far a lesson's rules are learned (each part counts as far as it has come). */
-export function lessonProgress(p: Progress, lesson: number): number {
-  const parts = PARTS.filter((part) => part.lesson === lesson);
-  return parts.length ? parts.reduce((sum, part) => sum + partProgress(p, part), 0) / parts.length : 0;
-}
-
 /** The part to work on now: the first one, in lesson order, not learned yet. */
 export function currentPart(p: Progress): Part | undefined {
   return PARTS.find((part) => watched(p, part) && !p.parts[part.id]?.learned);

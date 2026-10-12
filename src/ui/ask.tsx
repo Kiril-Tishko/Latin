@@ -14,7 +14,7 @@ import { SKILL_BY_ID, SKILLS } from "../latin/skills";
 import { Exercise, Result } from "../trainer/exercises";
 import { PART_GOAL, partRight, partState } from "../trainer/path";
 import { mastery } from "../trainer/progress";
-import { Chat, ChatTurn, deleteChat, getChat, getChats, newChatId, saveChat, useChats } from "./chats";
+import { Chat, ChatTurn, deleteChat, getChat, newChatId, saveChat, useChats } from "./chats";
 import { enterSends, Icon, toast } from "./components";
 import { Inline, Markup } from "./markup";
 import { SampleFn, sampleErrorText, sampler, storage } from "./platform";
@@ -885,6 +885,3 @@ function AddFromAnswer({ question, answer }: { question: string; answer: string 
 function motion(): ScrollBehavior {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
-
-/** The last conversations, for anything else that wants them. */
-export const recentChats = () => getChats().slice(0, 5);

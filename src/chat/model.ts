@@ -19,7 +19,8 @@ export interface Msg {
   /** The learner's message: when it was read (in a chat with one person). */
   readAt?: number;
   /** The learner's message: the coach's check, when asked. */
-  check?: { verdict: "good" | "almost" | "wrong"; better?: string; note: string };
+  /** The coach on this message: its Latin judged, or ("say") English the learner wanted in Latin, with the Latin. */
+  check?: { verdict: "good" | "almost" | "wrong" | "say"; better?: string; note: string };
   /** Words outside the learner's words that slipped through (shown dotted). */
   newWords?: string[];
   /** How it came: an answer, written on their own, by the phone routine, the first words of a stranger. */

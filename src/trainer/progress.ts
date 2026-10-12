@@ -84,6 +84,14 @@ export interface Settings {
   tz?: string;
 }
 
+/** One day: exercises done and right, and where Continue's day stands (exercises done when it last gave a story, when it gave the words). */
+export interface Day {
+  done: number;
+  right: number;
+  story?: number;
+  words?: number;
+}
+
 export interface Progress {
   version: 5;
   updatedAt: number;
@@ -103,8 +111,8 @@ export interface Progress {
   added: string[];
   /** Words the learner added to their dictionary themselves (Claude filled them in). */
   own: OwnWord[];
-  /** Exercises done per day, keyed YYYY-MM-DD (local time). */
-  days: Record<string, { done: number; right: number }>;
+  /** Exercises done per day, keyed YYYY-MM-DD (local time), and Continue's marks for the day. */
+  days: Record<string, Day>;
   mistakes: Mistake[];
   /** Stories read to the end, keyed by id: when. */
   stories: Record<string, number>;
@@ -235,9 +243,15 @@ export function recordSkill(p: Progress, id: string, correct: number, now = Date
 }
 
 export function recordDay(p: Progress, correct: boolean, now = Date.now()) {
+  const d = today(p, now);
+  d.done += 1;
+  if (correct) d.right += 1;
+}
+
+/** Today's record, made if it isn't there yet. */
+export function today(p: Progress, now = Date.now()): Day {
   const k = dayKey(now);
-  const d = p.days[k] ?? { done: 0, right: 0 };
-  p.days[k] = { done: d.done + 1, right: d.right + (correct ? 1 : 0) };
+  return (p.days[k] ??= { done: 0, right: 0 });
 }
 
 export function recordMistake(p: Progress, m: Mistake) {

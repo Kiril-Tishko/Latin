@@ -78,7 +78,6 @@ export function allThreads(): T[] {
   return ids.map(getThread).filter((t) => !t.gone);
 }
 
-export const isWriting = (id: string) => writing.has(id);
 export const errorOf = (id: string) => errors.get(id);
 
 export function unreadTotal(now = Date.now()): number {

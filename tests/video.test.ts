@@ -4,7 +4,7 @@ import { LESSONS } from "../src/content/lessons";
 import { seeded } from "../src/latin/generate";
 import { buildKnowledge, fullLexicon, skillsUpTo } from "../src/trainer/knowledge";
 import { newProgress } from "../src/trainer/progress";
-import { videoExercise, videoLines, videoSession } from "../src/trainer/video";
+import { linesSession, videoExercise, videoLines } from "../src/trainer/video";
 
 const lex = fullLexicon(DECK_CARDS.map((c) => c.entry));
 const all = buildKnowledge([1, 2, 3, 4]);
@@ -91,7 +91,7 @@ describe("sentences from the videos", () => {
 
   it("builds a round, gentle kinds first", () => {
     const p = newProgress();
-    const items = videoSession(p, { k: step1, lex, r: seeded(9) }, [1]);
+    const items = linesSession(p, { k: step1, lex, r: seeded(9) }, videoLines([1], lex, step1));
     expect(items.length).toBe(12);
     expect(items.every((ex) => ex.video === 1)).toBe(true);
     expect(items.filter((ex) => ex.kind === "en2la").length).toBeLessThan(3);

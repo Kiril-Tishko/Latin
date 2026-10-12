@@ -309,8 +309,11 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
   // whose: people own things and places, and are friends, students or teachers of someone (not "the poet's farmer", "the bull's student")
   const ownable = isPlace(noun) || noun.id === "vita" || noun.tags.some((t) => OWNED.has(t));
   const owned = k.silly > 0 || (!noun.proper && (isHuman(noun) ? RELATIONS.has(noun.id) : ownable));
-  // (an "of" phrase is what is practised when its rule or one of its endings is the focus)
-  if (owned && np.adj?.id !== "meus" && k.skills.has("s.gen") && takeExtra(k, r, GEN_SKILLS, o.possChance ?? 0.2)) {
+  // An "of" phrase only when its rule or one of its endings is what is practised: anywhere else it
+  // reads two ways to a beginner (the learner took «Dea amīcam discipulae nōn habet» for "the
+  // student's goddess has no friends").
+  const ofPractised = k.silly > 0 || GEN_SKILLS.some((s) => k.focus?.includes(s));
+  if (owned && ofPractised && np.adj?.id !== "meus" && k.skills.has("s.gen") && takeExtra(k, r, GEN_SKILLS, o.possChance ?? 0.2)) {
     const owner = OWNERS[noun.id];
     const allowed = k.silly === 0 && owner ? (n: NounEntry) => owner.includes(n.id) : undefined;
     const someone = k.silly === 0 ? isHuman : isPerson;

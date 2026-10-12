@@ -168,6 +168,17 @@ export interface AllowedWord {
 }
 
 /** The dictionary headword: labōrō for a verb, the nominative for the rest. */
+/** Common English words that are no Latin word (a, in, is, an, do are left out: they are Latin too). */
+const ENGLISH = new Set("i you he she we they the am are was to how what why does my your and of for with love want say this that be not can have know like".split(" "));
+
+/** Text written in English, Russian or Ukrainian rather than Latin: Check then gives it in Latin. */
+export function notLatin(text: string): boolean {
+  if (/[а-яёіїєґ]/i.test(text)) return true;
+  const words = text.toLowerCase().match(/[a-z']+/g) ?? [];
+  const english = words.filter((w) => ENGLISH.has(w)).length;
+  return english > 0 && english / words.length >= 0.25;
+}
+
 export const headword = (e: Entry) => (e.kind === "verb" ? e.pp[0] : e.lemma);
 
 export function allowedWords(entries: Entry[], seen: Set<string>): AllowedWord[] {

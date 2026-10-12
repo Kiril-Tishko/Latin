@@ -7,7 +7,8 @@ import { full } from "../src/latin/types";
 import { buildKnowledge, fullLexicon, skillsUpTo } from "../src/trainer/knowledge";
 import { lineExercise, lineSkills, readLine } from "../src/trainer/lines";
 import { newProgress } from "../src/trainer/progress";
-import { nextStory, partsBefore, storyLines, storyOpen, storySession } from "../src/trainer/stories";
+import { nextStory, partsBefore, storyLines, storyOpen } from "../src/trainer/stories";
+import { linesSession } from "../src/trainer/video";
 import { PARTS } from "../src/content/parts";
 import { markSeen } from "../src/trainer/path";
 import { videoLines } from "../src/trainer/video";
@@ -92,10 +93,10 @@ describe("stories", () => {
     expect(made).toBeGreaterThan(150);
   });
 
-  it("build a round on one story, and offer the next unread story the learner's rules open", () => {
+  it("make a round of one story's lines, and offer the next unread story the learner's rules open", () => {
     const p = newProgress();
     const story = STORIES.find((s) => s.id === "epistula-poetae")!;
-    const round = storySession(p, { k: buildKnowledge([1, 2, 3, 4]), lex, r: seeded(4) }, [story]);
+    const round = linesSession(p, { k: buildKnowledge([1, 2, 3, 4]), lex, r: seeded(4) }, storyLines(story, lex));
     expect(round.length).toBe(12);
     expect(round.every((ex) => ex.story === story.title)).toBe(true);
     // nothing is open before the first part is seen

@@ -95,14 +95,6 @@ export async function sampler(): Promise<SampleFn | null> {
   return (await use("sample")) as SampleFn | null;
 }
 
-export const isFramed = () => {
-  try {
-    return window.self !== window.top;
-  } catch {
-    return true;
-  }
-};
-
 /** Viewer-facing text for a failed Claude call. */
 export function sampleErrorText(code?: string): string {
   switch (code) {

@@ -21,7 +21,6 @@ import { derived, update, useProgress } from "../store";
 import { openAddWord } from "../addword";
 import { CardModal, CardStrip, deck } from "../cards";
 import { Card } from "../../content/deck";
-import { startSession } from "./train";
 import { Speak } from "../speak";
 import { Sayings } from "../saying";
 import { wordInEnglish } from "../../content/english";
@@ -314,9 +313,6 @@ export function Words() {
             <button key={String(f)} aria-pressed={filter === f} title={title} onClick={() => setFilter(f)}>{label}</button>
           ))}
         </div>
-        <button id="review-words" class="btn" disabled={!due} onClick={() => startSession({ kind: "words" }) && go({ page: "train" })}>
-          {due > 0 ? `Review ${due} word${due === 1 ? "" : "s"}` : "No words to review"}
-        </button>
       </div>
       {filter === "chat" && <p class="small muted">Words for chatting with your friends in Nūntiī. The lessons have not taught them yet, so the messenger shows their meanings.</p>}
       <div class="word-grid">

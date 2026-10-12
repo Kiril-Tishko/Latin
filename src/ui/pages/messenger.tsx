@@ -16,7 +16,7 @@ import { arrived, Check, CoachTurn, membersOf, Msg, preview, Thread, unreadCount
 import { romanDate, romeDay, todayLine } from "../../chat/calendar";
 import { PHOTO_BY_ID, photoSrc } from "../../content/photos";
 import { speak, stopSpeaking, useSpeaking, useVoices } from "../../audio/speech";
-import { allowedWords, CHAT_WORD_LIST, headword } from "../../chat/words";
+import { allowedWords, CHAT_WORD_LIST, headword, notLatin } from "../../chat/words";
 import { Analysis, annotate } from "../../latin/analyze";
 import { plain, roman } from "../../latin/text";
 import { CASE_NAMES, Entry, PN, PN_NAMES } from "../../latin/types";
@@ -797,7 +797,7 @@ function CheckNote({ c, onUse, onAsk }: { c: Check; onUse?: (s: string) => void;
   const lex = chatWords().lex;
   return (
     <div class={`check-note ${c.verdict}`} role="note">
-      <span class="check-verdict">{c.verdict === "good" ? "✓ Good Latin" : c.verdict === "almost" ? "Almost" : "Not quite"}</span>
+      <span class="check-verdict">{c.verdict === "good" ? "✓ Good Latin" : c.verdict === "almost" ? "Almost" : c.verdict === "say" ? "In Latin" : "Not quite"}</span>
       {c.better && (
         <span class="check-better">
           <LatinText text={showEmoji(c.better)} lex={lex} />
@@ -1059,6 +1059,7 @@ function Composer({ id }: { id: string }) {
     <div class="composer">
       <CoachPanel id={id} draft={text} checking={checking} onUse={(s) => change(s)} />
       {err && <p class="small bad">{err}</p>}
+      {!checking && notLatin(text) && <p class="composer-hint small ui">English? Tap ✓ and the coach writes it in Latin.</p>}
       <div class="composer-row">
         {emoji && <EmojiPicker onPick={(e) => put(e, true)} onClose={() => setEmoji(false)} />}
         <button class="plus-btn" aria-label="Emoji" aria-expanded={emoji} onClick={() => setEmoji(!emoji)}>
@@ -1084,7 +1085,7 @@ function Composer({ id }: { id: string }) {
             if (e.key === "Escape") setEmoji(false);
           }}
         />
-        <button id="composer-check" class="check-btn" onClick={() => void doCheck()} disabled={!text.trim() || checking} title="Ask the coach whether it is right">
+        <button id="composer-check" class="check-btn" onClick={() => void doCheck()} disabled={!text.trim() || checking} title="Ask the coach whether it is right, or how to say it in Latin">
           {checking ? "…" : <><Icon.check /><span class="check-label"> Check</span></>}
         </button>
         <button id="composer-send" class="send-btn" onClick={doSend} disabled={!text.trim()} aria-label="Send">

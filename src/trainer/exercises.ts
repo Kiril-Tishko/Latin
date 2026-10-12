@@ -86,6 +86,8 @@ export interface Exercise {
   aside?: boolean;
   /** An earlier rule, reviewed in a rule's round (one in five past its simple exercises). */
   earlier?: boolean;
+  /** The round's last: a question the learner answers in their own Latin, with the rule just practised. */
+  last?: boolean;
   /** For "tiles": the words to build the answer from (the right ones and a wrong form or two). */
   tiles?: string[];
   /** A sentence from the video of this lesson. */

@@ -4,7 +4,7 @@
 // skeleton, so the published page starts with <title> and <style> and holds no
 // document tags of its own. The code is a file beside it (tabula-<hash>.js,
 // named by its content so a browser never runs an old copy with a new page),
-// and so are the messenger's photos: dist/publish.json lists them all for the
+// and so are the messenger's photos, portraits and engravings: dist/publish.json lists them all for the
 // Artifact tool's `files`. dist/preview.html wraps the same page in an
 // equivalent skeleton for local testing in a browser.
 import * as esbuild from "esbuild";
@@ -56,6 +56,9 @@ function previewPage(content) {
   );
 }
 
+/** The messenger's pictures, files beside the page (src/content/<dir>/*.webp). */
+const MEDIA = ["photos", "portraits", "engravings"];
+
 const kb = (text) => `${(Buffer.byteLength(text) / 1024).toFixed(1)} KB`;
 
 async function emit(result) {
@@ -70,9 +73,12 @@ async function emit(result) {
   await writeFile(resolve(outDir, script), js);
   await writeFile(resolve(outDir, "tabula-latina.html"), page);
   await writeFile(resolve(outDir, "preview.html"), previewPage(page));
-  await cp(resolve(root, "src/content/photos"), resolve(outDir, "photos"), { recursive: true });
   const publish = { [script]: `dist/${script}` };
-  for (const f of (await readdir(resolve(outDir, "photos"))).sort()) publish[`photos/${f}`] = `dist/photos/${f}`;
+  for (const dir of MEDIA) {
+    await rm(resolve(outDir, dir), { recursive: true, force: true });
+    await cp(resolve(root, "src/content", dir), resolve(outDir, dir), { recursive: true });
+    for (const f of (await readdir(resolve(outDir, dir))).sort()) publish[`${dir}/${f}`] = `dist/${dir}/${f}`;
+  }
   await writeFile(resolve(outDir, "publish.json"), JSON.stringify(publish, null, 1) + "\n");
   console.log(`built dist/tabula-latina.html (${kb(page)}) and dist/${script} (${kb(js)})`);
 }

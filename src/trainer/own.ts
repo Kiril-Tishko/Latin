@@ -5,7 +5,7 @@
 // in the Words page, Ask Claude, the messenger, and practice once its endings
 // are learned. A word typed in by hand (without Claude) is only for reading and
 // word reviews: nothing says what it goes with, so made-up sentences leave it out.
-import { adj, adj3, dictionaryForm, fixed, headword, noun, verb } from "../latin/morph";
+import { adj, adj3, fixed, headword, noun, verb } from "../latin/morph";
 import { Case, Entry, FixedEntry, Gender, WordStory } from "../latin/types";
 
 export interface OwnWord {
@@ -238,6 +238,3 @@ function withId(word: OwnWord, taken: Set<string>): { word: OwnWord; entry: Entr
   if ("error" in entry) return entry;
   return { word, entry };
 }
-
-/** "gladius, gladiī, m." for showing. */
-export const ownDictionary = (e: Entry) => dictionaryForm(e);

@@ -472,13 +472,16 @@ export function conjugate(e: VerbEntry): Partial<Record<VerbKey, Form>> {
   const base = cut(inf, 3); // am-āre, vid-ēre, dūc-ere, cap-ere, aud-īre
   const perfStem = e.pp[2] ? cut(e.pp[2], 1) : null;
   switch (e.conj) {
-    case "1":
-      sixFrom([[base, "ō"], [base + "ā", "s"], [base + "a", "t"], [base + "ā", "mus"], [base + "ā", "tis"], [base + "a", "nt"]], "pres", out);
-      sixFrom(imperfect(base + "ā"), "impf", out);
-      sixFrom(futureB(base + "ā"), "fut", out);
+    case "1": {
+      // dō, dare has a short a everywhere but dās and dā (damus, datis, dabam): its infinitive shows it
+      const a = endsPlain(inf, "are") && !inf.endsWith("āre") ? "a" : "ā";
+      sixFrom([[base, "ō"], [base + "ā", "s"], [base + "a", "t"], [base + a, "mus"], [base + a, "tis"], [base + "a", "nt"]], "pres", out);
+      sixFrom(imperfect(base + a), "impf", out);
+      sixFrom(futureB(base + a), "fut", out);
       out["imp.2sg"] = { stem: base, ending: "ā" };
-      out["imp.2pl"] = { stem: base + "ā", ending: "te" };
+      out["imp.2pl"] = { stem: base + a, ending: "te" };
       break;
+    }
     case "2":
       sixFrom([[base + "e", "ō"], [base + "ē", "s"], [base + "e", "t"], [base + "ē", "mus"], [base + "ē", "tis"], [base + "e", "nt"]], "pres", out);
       sixFrom(imperfect(base + "ē"), "impf", out);

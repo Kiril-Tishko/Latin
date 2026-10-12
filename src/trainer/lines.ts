@@ -27,7 +27,7 @@ export interface Line {
 /** The ending a word shows, as the skill that teaches it. */
 export function skillOf(a: Analysis): string | undefined {
   const e = a.entry;
-  if (e.kind === "verb") return a.key === "inf" ? "v.inf" : e.irregular === "sum" ? "v.sum" : e.irregular === "possum" ? "v.possum" : `v.${a.key.split(".")[1]}`;
+  if (e.kind === "verb") return a.key === "inf" ? "v.inf" : e.irregular === "sum" ? (a.key === "pres.3pl" ? "v.sunt" : "v.sum") : e.irregular === "possum" ? "v.possum" : `v.${a.key.split(".")[1]}`;
   const c = caseOf(a);
   const n = numOf(a);
   if (!c || !n) return undefined;
@@ -46,7 +46,7 @@ function rolesOf(words: Analysis[]): Role[] {
     const e = a.entry;
     if (e.kind === "verb") return a.key === "inf" ? "inf" : "verb";
     if (e.kind === "fixed") {
-      if (e.role === "pron" && (e.id === "ego" || e.id === "tu")) {
+      if (e.role === "pron" && (e.id === "ego" || e.id === "tu" || e.id === "nos")) {
         subject = true;
         return "pron";
       }
@@ -58,7 +58,10 @@ function rolesOf(words: Analysis[]): Role[] {
     const afterPrep = (before[0]?.kind === "fixed" && before[0].role === "prep") || (adj === false && before[1]?.kind === "fixed" && before[1].role === "prep" && before[0]?.kind === "adj");
     const c = caseOf(a);
     if (afterPrep && (c === "abl" || c === "acc")) return adj ? "pp-adj" : "pp";
+    // a city as the goal takes no preposition: Via Rōmam dūcit
+    if (c === "acc" && e.kind === "noun" && e.tags.includes("city")) return "pp";
     if (c === "acc") return adj ? "obj-adj" : "obj";
+    if (c === "dat") return adj ? "dat-adj" : "dat";
     if (c === "gen") return "subj-poss";
     if (c === "abl") return adj ? "pp-adj" : "pp";
     // after est, or a second noun with est: the predicate
@@ -77,6 +80,14 @@ export function readLine(la: string, lex: Lexicon): LToken[] | null {
   // already there, it is the object (Vīnum bibis: you drink wine)
   const verb = analyses.find((a) => a.entry.kind === "verb" && a.key.startsWith("pres."));
   const person = verb?.key.split(".")[1] ?? "";
+  // -ō without a preposition before it is the dative (to whom), not the ablative (in which)
+  analyses.forEach((a, i) => {
+    if (caseOf(a) !== "abl" || words[i].analysis) return;
+    const prev = analyses[i - 1]?.entry;
+    if (prev?.kind === "fixed" && prev.role === "prep") return;
+    const asDative = (words[i].readings ?? []).find((r) => r.entry.id === a.entry.id && caseOf(r) === "dat");
+    if (asDative) analyses[i] = asDative;
+  });
   analyses.forEach((a, i) => {
     if (caseOf(a) !== "nom") return;
     const asObject = (words[i].readings ?? []).find((r) => r.entry.id === a.entry.id && caseOf(r) === "acc" && numOf(r) === numOf(a));
@@ -114,7 +125,9 @@ export function lineSkills(tokens: LToken[]): string[] {
   if (has((t) => t.role === "pred" || t.role === "pred-adj")) out.add("s.est");
   if (has((t) => t.role === "inf") && has((t) => t.role === "verb")) out.add("s.inf");
   const pron = has((t) => t.role === "pron");
-  if (!pron && has((t) => t.role === "verb" && /\.(1|2)sg$/.test(t.analysis?.key ?? ""))) out.add("s.drop");
+  if (!pron && has((t) => t.role === "verb" && /\.(1sg|2sg|1pl)$/.test(t.analysis?.key ?? ""))) out.add("s.drop");
+  if (has((t) => t.role === "dat")) out.add("s.dat");
+  if (has((t) => t.role === "pp" && t.analysis?.entry.kind === "noun" && t.analysis.entry.tags.includes("city"))) out.add("s.city");
   if (has((t) => t.role === "verb" && t.analysis?.key === "pres.3pl")) out.add("s.pl");
   tokens.forEach((t, i) => {
     const e = t.analysis?.entry;

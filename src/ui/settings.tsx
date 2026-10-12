@@ -34,7 +34,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
                   onChange={(e) =>
                     update((x) => {
                       const on = (e.target as HTMLInputElement).checked;
-                      x.lessonsDone = on ? [...new Set([...x.lessonsDone, l.n])].sort() : x.lessonsDone.filter((n) => n !== l.n);
+                      x.lessonsDone = on ? [...new Set([...x.lessonsDone, l.n])].sort((a, b) => a - b) : x.lessonsDone.filter((n) => n !== l.n);
                       // the rules of a lesson not watched leave practice; the path goes on from the first rule not learned
                       updatePath(x);
                     })

@@ -142,7 +142,9 @@ let derivedCache: Derived | null = null;
 export function derived(): Derived {
   if (derivedCache) return derivedCache;
   const p = progress;
-  const added = p.added.map((id) => CARD_BY_ID.get(id)?.entry).filter(Boolean) as Entry[];
+  // a card the learner added that a watched lesson now teaches (via, dūcō) is the lesson's word
+  const taught = new Set(lessonWords(p.lessonsDone).map((w) => w.id));
+  const added = p.added.filter((id) => !taught.has(id)).map((id) => CARD_BY_ID.get(id)?.entry).filter(Boolean) as Entry[];
   // the learner's own words (one the engine cannot read any more is left out, not lost)
   const ownWords = p.own.map((w) => ({ w, e: ownEntry(w) })).filter((x): x is { w: OwnWord; e: Entry } => !("error" in x.e));
   const own = ownWords.map((x) => x.e);

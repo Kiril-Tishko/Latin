@@ -13,7 +13,10 @@ small script beside the page, src/content/audio/<pack>-<hash>.js, that sets
 window.__tabulaAudio[pack] to the MP3 in base64 (a script loads beside the page
 the way the code does; the page plays it with Web Audio). The index,
 src/audio/recorded-index.json, says where each clip is: key -> [pack, start ms,
-length ms]. Run it again after adding texts (a new lesson).
+length ms]. Run it again after adding texts (a new lesson): a pack whose texts
+and respellings are unchanged is kept as it is (the voice reads a little
+differently every time, so re-recording it would only make a new file to
+publish); --fresh records every pack again.
 """
 
 import argparse
@@ -84,6 +87,11 @@ def speak(voice, say, cfg):
     return array("h", (int(a / peak * 0.9 * 32767) for a in parts))
 
 
+def pack_hash(xs):
+    """What a pack holds: its texts, their respellings and their order."""
+    return hashlib.sha256("\n".join(f"{x['key']}\t{x['say']}" for x in xs).encode("utf-8")).hexdigest()[:12]
+
+
 def trim(samples, rate, threshold=350):
     """Cuts the silence at both ends, keeping a little padding."""
     n = len(samples)
@@ -98,6 +106,7 @@ def main():
     ap.add_argument("--voice", required=True, help="a Piper model (.onnx, with its .onnx.json beside it)")
     ap.add_argument("--length-scale", type=float, default=1.12, help="above 1 is slower (a learner's pace)")
     ap.add_argument("--only", help="record only this pack (to try a voice)")
+    ap.add_argument("--fresh", action="store_true", help="record every pack again, also the unchanged ones")
     args = ap.parse_args()
 
     from piper import PiperVoice, SynthesisConfig
@@ -114,12 +123,31 @@ def main():
             packs.setdefault(x["pack"], []).append(x)
         clips = {}
         names = {}
+        hashes = {}
         os.makedirs(OUT_DIR, exist_ok=True)
+        # the packs recorded before, kept when their texts are the same
+        old = {}
+        if os.path.exists(INDEX) and not args.fresh and not args.only:
+            with open(INDEX, encoding="utf-8") as f:
+                old = json.load(f)
+        if old.get("voice") != os.path.basename(args.voice).replace(".onnx", ""):
+            old = {}
+        kept = set()
+        for pack, xs in packs.items():
+            name = old.get("packs", {}).get(pack)
+            if name and old.get("hashes", {}).get(pack) == pack_hash(xs) and os.path.exists(os.path.join(OUT_DIR, name)):
+                kept.add(pack)
+                names[pack] = name
+                hashes[pack] = pack_hash(xs)
+                clips.update({k: v for k, v in old["clips"].items() if v[0] == pack})
+                print(f"{pack}: unchanged, kept audio/{name}", flush=True)
         if not args.only:
             for f in os.listdir(OUT_DIR):
-                if f.endswith(".js"):
+                if f.endswith(".js") and f not in {names[p] for p in kept}:
                     os.remove(os.path.join(OUT_DIR, f))
         for pack, xs in sorted(packs.items()):
+            if pack in kept:
+                continue
             pcm = array("h")
             gap = array("h", [0] * int(GAP * rate))
             for i, x in enumerate(xs):
@@ -145,11 +173,12 @@ def main():
             with open(os.path.join(OUT_DIR, name), "w", encoding="ascii") as f:
                 f.write(f'(window.__tabulaAudio=window.__tabulaAudio||{{}})["{pack}"]="{base64.b64encode(data).decode()}";\n')
             names[pack] = name
+            hashes[pack] = pack_hash(xs)
             print(f"{pack}: {len(xs)} clips, {len(pcm) / rate:.0f} s, {len(data) / 1024:.0f} KB → audio/{name}", flush=True)
         if args.only:
             print("(a trial: the index is left as it was)")
             return
-        index = {"voice": os.path.basename(args.voice).replace(".onnx", ""), "fingerprint": fp, "packs": names, "clips": dict(sorted(clips.items()))}
+        index = {"voice": os.path.basename(args.voice).replace(".onnx", ""), "fingerprint": fp, "packs": dict(sorted(names.items())), "hashes": dict(sorted(hashes.items())), "clips": dict(sorted(clips.items()))}
         with open(INDEX, "w", encoding="utf-8") as f:
             json.dump(index, f, ensure_ascii=False, separators=(",", ":"))
             f.write("\n")

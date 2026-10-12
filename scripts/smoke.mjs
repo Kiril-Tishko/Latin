@@ -215,6 +215,17 @@ async function run(name, viewport, colorScheme) {
   await p.locator(".ask-btn").click();
   await p.waitForTimeout(300);
   await p.screenshot({ path: `${out}/${name}-ask.png` });
+  await p.keyboard.press("Escape");
+  // the next video on Lectiōnēs, ticked as watched with one tap: its rules join the path
+  await hash("#lessons");
+  if (!((await p.locator("#next-lesson").textContent()) ?? "").includes("Lesson V")) errors.push(`${name}: Lectiōnēs does not offer the next video (Lesson V)`);
+  await p.locator("#next-lesson").screenshot({ path: `${out}/${name}-next-lesson.png` });
+  await p.click("#watched-next");
+  await p.waitForTimeout(300);
+  if ((await p.locator("#lesson-block-5 .rule-row:not(.story-row)").count()) !== 4) errors.push(`${name}: after "I have watched it", Lesson V's four rules are not on Lectiōnēs`);
+  if ((await p.locator("#lesson-block-5 .story-row").count()) !== 3) errors.push(`${name}: Lesson V's three stories are not under its rules`);
+  if (await p.locator("#next-lesson").count()) errors.push(`${name}: the next video is still offered after the last lesson was ticked`);
+  await p.screenshot({ path: `${out}/${name}-lesson5.png`, fullPage: true });
   await ctx.close();
 }
 

@@ -38,10 +38,12 @@ describe("sentence generator", () => {
     }
   });
 
-  it("can build every template once all four lessons are known", () => {
+  it("can build every template once its lessons are known", () => {
+    // the dative needs Lesson V's dō
+    const FIVE = buildKnowledge([1, 2, 3, 4, 5]);
     for (const t of TEMPLATE_NAMES) {
       let built = 0;
-      for (let seed = 1; seed <= 60; seed++) if (generate(ALL, seeded(seed), [], [t])) built++;
+      for (let seed = 1; seed <= 60; seed++) if (generate(t === "dat" ? FIVE : ALL, seeded(seed), [], [t])) built++;
       expect(built, t).toBeGreaterThan(20);
     }
   });

@@ -92,6 +92,7 @@ const WORD_RULES: Record<string, string[]> = {
   "ad-prep": ["s.ad"],
   ego: ["v.1sg"],
   tu: ["v.2sg"],
+  nos: ["v.1pl"],
 };
 
 /**

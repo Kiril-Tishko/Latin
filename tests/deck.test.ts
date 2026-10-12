@@ -12,10 +12,17 @@ const k = buildKnowledge([1, 2, 3, 4]);
 
 describe("discover deck", () => {
   it("has unique ids that do not clash with lesson words", () => {
-    const lessonIds = new Set(LESSONS.flatMap((l) => l.words.map((w) => w.id)));
     const ids = DECK_CARDS.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const id of ids) expect(lessonIds.has(id), id).toBe(false);
+    // the deck was made with Lessons I-IV: a card a later lesson teaches (via, dūcō) is that same word,
+    // a card until the lesson is watched and the lesson's word after (the deck leaves it out then)
+    for (const c of DECK_CARDS) {
+      const lesson = LESSONS.find((l) => l.words.some((w) => w.id === c.id));
+      if (!lesson) continue;
+      const w = lesson.words.find((x) => x.id === c.id)!;
+      expect(lesson.n, c.id).toBeGreaterThan(4);
+      expect(w.kind, c.id).toBe(c.entry.kind);
+    }
   });
 
   it("every card has relatives and a memory hook", () => {

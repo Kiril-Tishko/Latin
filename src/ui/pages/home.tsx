@@ -8,6 +8,7 @@ import { Progress, streak, todayDone } from "../../trainer/progress";
 import { todayStep, TodayStep } from "../../trainer/today";
 import { Icon, Laurel, Mosaic } from "../components";
 import { LatinText } from "../latin";
+import { NextLesson } from "../next-lesson";
 import { useScreen } from "../screen";
 import { useProgress } from "../store";
 import { PartDots, partName } from "./learn";
@@ -81,6 +82,8 @@ export function Home() {
           </div>
         </div>
       </section>
+      {step.kind === "review" && <NextLesson note="Every rule you watched is learned. Watch the next video, tick it, and Continue opens its first rule." />}
+      {step.kind === "none" && <NextLesson />}
     </div>
   );
 }

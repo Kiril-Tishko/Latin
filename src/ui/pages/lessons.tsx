@@ -15,6 +15,7 @@ import { go } from "../nav";
 import { derived, useProgress } from "../store";
 import { useScreen } from "../screen";
 import { NounTable, VerbTable } from "../tables";
+import { NextLesson } from "../next-lesson";
 import { RuleList } from "./learn";
 import { continueLearning, vocabIds } from "./train";
 import { stepLabel } from "./home";
@@ -86,9 +87,10 @@ export function Lessons({ focus }: { focus?: "stories" }) {
           </details>
         );
       })}
-      {later.length > 0 && (
+      <NextLesson />
+      {later.length > 1 && (
         <p class="small muted">
-          Not watched yet: {later.map((l) => `${roman(l.n)} ${l.title}`).join(" · ")}. Tick a lesson under Settings when you have watched it.
+          After it: {later.slice(1).map((l) => `${roman(l.n)} ${l.title}`).join(" · ")}.
         </p>
       )}
 

@@ -10,7 +10,10 @@ published as a private claude.ai artifact.
   comparisons with Russian / Ukrainian cases are welcome.
 - Finished Lessons 1-4 (October 2026). Remembers the words but forgot most of
   the rules, so practice restarted step by step from Lesson I and should feel
-  very simple at first ("I want to think little"). Now learns the rules in small
+  very simple at first ("I want to think little"). Lesson V is on the site,
+  waiting to be watched: the "Next video" card (`NextLesson` in
+  src/ui/next-lesson.tsx, on Lectiōnēs, and on Domus once every rule watched is
+  learned) links the video and ticks it with "I have watched it". Now learns the rules in small
   parts: a very simple explanation, open questions, then a bunch of simple
   exercises before harder ones, and never an exercise on a rule not seen yet.
 - Wants: only words and constructions from the videos (plus words they open
@@ -231,8 +234,8 @@ scrolling (`fitToWindow` zooms down a little at most), the place kept in
 
 The learner asked for each video's rules in small parts, explained very simply,
 with open questions to check understanding before any exercise, and never an
-exercise on a rule they have not seen. `src/content/parts.ts` splits Lessons I-IV
-into 22 parts (`Part`: `explain` lines, `examples`, a `slavic` comparison, two
+exercise on a rule they have not seen. `src/content/parts.ts` splits Lessons I-V
+into 26 parts (`Part`: `explain` lines, `examples`, a `slavic` comparison, two
 open `questions` with a good `answer` and `keys`, and the `skills` it opens;
 `practised` when not all of them can show up in exercises, as vīnum is never a
 sensible subject). Every lesson skill belongs to exactly one part.
@@ -629,7 +632,11 @@ its end never comes). `speak()` uses it whenever a text has a recording
 and a speaker shows for a recorded text even on a device with no Spanish voice.
 `tests/recorded.test.ts` fails when a fixed text has no recording or the texts
 or their respelling changed since (`fingerprint`): run the script again (after
-adding a lesson too). The smoke test's `recorded` part plays one.
+adding a lesson too). Piper reads a little differently on every run, so the
+script keeps a pack whose texts and respellings are unchanged (`hashes` in the
+index) and records only the others (`--fresh` records all); publish the packs
+whose names changed and set the old names to `null`. The smoke test's
+`recorded` part plays one.
 
 **The device's voice** reads everything else (new sentences, messages). Settings
 lists only Spanish and Italian voices, picks the best by name (Premium, then
@@ -697,10 +704,26 @@ Italian and a Spanish voice to exercise the audio paths.
 5. **Mystery cards**: cards in `src/content/deck.ts` unlock by grammar; nouns of a
    new declension become usable once its skills exist. Every relative must be
    correct: `from` = borrowed from Latin, `kin` = same ancient root.
-6. Run `npm test` (the content test fails on any misspelled form or missing
-   long mark), `npm run build`, `npm run smoke`, then republish to the same URL.
-   The learner ticks the new lesson under Settings > Lessons watched (their
-   saved progress keeps its own list).
+6. **Stories**: three for the new step in `src/content/stories.ts`, only words
+   and rules up to it (`tests/stories.test.ts`).
+7. Run `npm test` (the content test fails on any misspelled form or missing
+   long mark), record the audio again (`scripts/audio/record.py`: only the packs
+   whose texts changed), `npm run build`, `npm run smoke`, then republish to the
+   same URL. The learner ticks the new lesson with "I have watched it" (the Next
+   video card) or under Settings > Lessons watched (their saved progress keeps
+   its own list).
+
+Lesson V, as built: -mus with nōs (`v.1pl`; "Poēta et ego legimus" is 1pl),
+sunt with a plural describing word (`v.sunt`; while it is practised the `est`
+template takes a plural subject, `onlyPlural`, and a predicate adjective
+follows the subject's number), the dative -ae / -ō with dō, dare (short a but
+dās) in the `dat` template (`GIVING`: someone gives a portable thing to a
+person; `s.dat`), and a city without in / ad (`s.city`: «Rōmam ambulat»; the
+locative «Rōmae» is not a case the engine reads, so it is marked `Rōmae#x`).
+volō, omnis, clārus, rēctus, splendidus and arma are story-only. A mystery
+card a later lesson teaches (via, dūcō, clārus) stays in the deck and is left
+out once that lesson is watched (`deck()`, `derived()`, `fullLexicon` count it
+once).
 
 ## Conventions
 

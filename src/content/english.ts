@@ -248,6 +248,79 @@ export const LESSON_WORDS_IN_ENGLISH: Record<string, WordInEnglish> = {
     kin: { en: ["at"] },
   },
   nunc: { from: {} },
+  // ------------------------------------------------------------ Lesson V
+  via: {
+    from: { en: ["via", "viaduct", "trivia", "trivial", "deviate", "obvious", "previous", "convey", "voyage", "envoy"], ru: ["виадук", "тривиальный"], uk: ["віадук", "тривіальний"] },
+    kin: { en: ["way"], ru: ["везти", "воз"], uk: ["везти", "віз"] },
+    note: "Trivia is tri-via, the place where three roads met and people stopped to chat; obvious is ob viam, 'lying in your way'; a voyage was first viāticum, the food for the road.",
+  },
+  roma: {
+    from: { en: ["Rome", "Roman", "romance", "romantic", "Romania"], ru: ["Рим", "роман", "романтика", "Румыния"], uk: ["Рим", "роман", "романтика", "Румунія"] },
+    note: "A romance was first a story told in the everyday 'Roman' speech (rōmānicē) instead of in Latin: that is why a novel is a роман.",
+  },
+  italia: {
+    from: { en: ["Italy", "Italian", "italics"], ru: ["Италия", "итальянский"], uk: ["Італія", "італійський"] },
+    note: "Italics are 'Italian letters': the slanted type Aldus Manutius printed in Venice in 1501. An old explanation, told already by the ancients, makes Italia 'the land of calves' (vitulus).",
+  },
+  magister: {
+    from: { en: ["master", "mister", "magistrate", "magisterial", "maestro"], ru: ["магистр", "маэстро", "магистраль"], uk: ["магістр", "маестро", "магістраль"] },
+    note: "magis 'more' + -ter: the master is 'the greater one', and his opposite is minister, from minus, 'the lesser one', the servant. A minister is still, by name, a servant.",
+  },
+  tunica: {
+    from: { en: ["tunic", "tunicate"], ru: ["туника"], uk: ["туніка"] },
+    note: "Probably a word from the east, like Greek chitōn and Hebrew kuttōnet. The tunic was what every Roman wore every day; the toga went over it for formal, public days.",
+  },
+  duco: {
+    from: { en: ["duke", "duct", "conduct", "produce", "reduce", "introduce", "deduce", "aqueduct", "ducat"], ru: ["продукт", "кондуктор", "акведук", "дукат"], uk: ["продукт", "кондуктор", "акведук", "дукат"] },
+    kin: { en: ["tow", "tug", "team"] },
+    note: "A dux was 'a leader', the duke; an aqueduct 'leads water'; a conductor 'leads together'. The ducat, a gold coin, is named for a duchy (ducātus), the land of a dux.",
+  },
+  do: {
+    from: { en: ["data", "date", "donate", "donor", "tradition", "traitor", "edition", "render"], ru: ["дата", "традиция", "донор"], uk: ["дата", "традиція", "донор"] },
+    kin: { ru: ["дать", "дар"], uk: ["дати", "дар"] },
+    note: "Roman letters ended with where and when they were handed to the messenger: data Rōmae, 'given at Rome': that data became our date. A tradition and a traitor both 'hand over' (trā-dere). And дать, дар are the same ancient word as dare.",
+  },
+  volo: {
+    from: { en: ["voluntary", "volunteer", "volition", "benevolent", "malevolent"], ru: ["волюнтаризм"], uk: ["волюнтаризм"] },
+    kin: { en: ["will"], ru: ["воля", "велеть"], uk: ["воля", "веліти"] },
+    note: "volō, English will and воля are one ancient word for wanting. A volunteer serves of his own will; benevolent is 'well-wishing'.",
+  },
+  optimus: {
+    from: { en: ["optimal", "optimum", "optimism", "optimist", "optimize"], ru: ["оптимизм", "оптимальный", "оптимист"], uk: ["оптимізм", "оптимальний", "оптиміст"] },
+    note: "Jupiter of the Capitol was Iuppiter Optimus Maximus, 'the best and greatest'. In September AD 100 Pliny thanked Trajan in the Senate and called him optimus again and again; in 114 'Optimus' became part of his official name. Optimism (1737) was named for Leibniz's 'best of all possible worlds'.",
+  },
+  omnis: {
+    from: { en: ["omnibus", "bus", "omnipotent", "omniscient", "omnivore", "omnipresent"], ru: ["омнибус", "автобус"], uk: ["омнібус", "автобус"] },
+    note: "omnibus is 'for all', the dative plural: the French coaches of the 1820s that took everybody. Cut short it became bus, and автобус keeps only that Latin ending, -bus.",
+  },
+  clarus: {
+    from: { en: ["clear", "clarify", "clarity", "declare", "clarinet", "Clara"], ru: ["кларнет", "Клара"], uk: ["кларнет", "Клара"] },
+    note: "clārus is 'bright, clear', and of a person 'famous': a name that shines. The clarinet is 'a little clear one', after a high, bright trumpet, the clarino.",
+  },
+  rectus: {
+    from: { en: ["rectangle", "rectify", "correct", "direct", "erect", "rectum"], ru: ["ректор", "корректный", "директор"], uk: ["ректор", "коректний", "директор"] },
+    kin: { en: ["right"] },
+    note: "rēctus and English right are the same ancient word: straight, then correct. A rectangle has 'right angles', and the rectum is the 'straight' gut.",
+  },
+  splendidus: {
+    from: { en: ["splendid", "splendour", "resplendent"] },
+    note: "From splendēre, 'to shine': something splendid shines.",
+  },
+  arma: {
+    from: { en: ["arms", "army", "armour", "armada", "alarm", "armadillo", "disarm"], ru: ["армия", "армада"], uk: ["армія", "армада"] },
+    kin: { en: ["arm (of the body)"] },
+    note: "Alarm is Italian all'arme!, 'to arms!'; an armadillo is 'a little armed one'. Your arm is a cousin: both come from an old root 'to fit together'. Vergil's Aeneid begins Arma virumque canō, 'Of arms and the man I sing'.",
+  },
+  nos: {
+    from: { en: ["nostrum", "Pater Noster", "Cosa Nostra"] },
+    kin: { en: ["us", "our"], ru: ["нас", "нам"], uk: ["нас", "нам"] },
+    note: "A quack's nostrum was 'our own' secret medicine (noster, 'our'). нас and нам are cousins of nōs.",
+    trap: "nostalgia is Greek nostos, 'homecoming' + algos, 'pain': not nōs.",
+  },
+  hic: {
+    from: { en: ["hic jacet"] },
+    note: "Roman gravestones say H.S.E., hīc situs est, 'here he lies'; later ones say hīc iacet, and English took hic jacet as a word for an epitaph. Hīc sunt dracōnēs, 'here be dragons', is written on just two old globes (about 1504 and 1510), off the coast of Asia.",
+  },
 };
 
 // ---------------------------------------------------------------- waves

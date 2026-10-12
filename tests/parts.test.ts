@@ -20,6 +20,8 @@ const STEPWISE: ExerciseKind[] = ["en2la", "la2en", "ending", "choose", "form", 
 
 /** The rules of this part and every part before it. */
 const through = (part: Part) => new Set(PARTS.slice(0, PARTS.indexOf(part) + 1).flatMap((x) => x.skills));
+/** The lessons watched by the time of this part. */
+const watched = (part: Part) => LESSONS.map((l) => l.n).filter((n) => n <= Math.max(4, part.lesson));
 
 /** Every «Latin» piece of a text. */
 const latinIn = (text: string) => [...text.matchAll(/«([^»]+)»/g)].map((m) => m[1]);
@@ -87,7 +89,10 @@ describe("the parts of the lessons' rules", () => {
         ...(part.slavic ? latinIn(part.slavic) : []),
       ];
       for (const text of texts) {
+        // a word marked #x only looks like a known form (Rōmae#x, the locative): it must still look like one
+        const marked = new Set([...text.matchAll(/([\p{L}]+)#x\b/gu)].map((m) => m[1]));
         for (const t of annotate(text, lex).filter((x) => x.isWord)) {
+          if (marked.has(t.text) && lex.analyze(t.text).length) continue;
           const a = t.analysis ?? t.readings?.[0];
           if (!a) problems.push(`${part.id}: unknown "${t.text}" in ${text}`);
           else if (!lessonWords.has(a.entry.id) || STORY_ONLY.has(a.entry.id)) problems.push(`${part.id}: "${t.text}" is not a lesson word`);
@@ -265,7 +270,7 @@ function learner(part: Part, right: number): Progress {
 /** A round on a part as the page plays it: one exercise at a time, each answered right. */
 function playRound(part: Part, seed: number, size = 12, startRight = 0) {
   const p = learner(part, startRight);
-  const k = buildKnowledge([1, 2, 3, 4], [], 0, through(part));
+  const k = buildKnowledge(watched(part), [], 0, through(part));
   const lines = practiceLines(lex, k);
   const ctx = { k, lex, r: seeded(seed), audio: true };
   const seen = new Set<string>();
@@ -356,7 +361,7 @@ describe("practice of each part", () => {
     for (const part of PARTS) {
       for (const seed of [3, 9]) {
         const p = learner(part, 5);
-        const k = buildKnowledge([1, 2, 3, 4], [], 0, through(part));
+        const k = buildKnowledge(watched(part), [], 0, through(part));
         const lines = practiceLines(lex, k);
         const ctx = { k, lex, r: seeded(seed), audio: true };
         const seen = new Set<string>();

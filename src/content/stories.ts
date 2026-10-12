@@ -271,6 +271,67 @@ export const STORIES: Story[] = [
       { q: "How does the bull come back?", options: ["It carries the girl to the farmer", "The farmer pulls it", "It walks back alone"] },
     ],
   },
+  // ------------------------------------------------------------- step V
+  {
+    id: "romam",
+    step: 5,
+    title: "Rōmam!",
+    en: "To Rome!",
+    notice: "We: «ambulāmus», «vidēmus», «damus». To a city with no ad: «Rōmam». They are: «timidī sunt».",
+    lines: [
+      { la: "Amīca et ego Rōmam ambulāmus.", en: "My friend and I walk to Rome.", prompt: "The friend (f) and I walk to Rome." },
+      { la: "Via longa et rēcta est.", en: "The road is long and straight." },
+      { la: "In viā agricolam et taurum vidēmus.", en: "On the road we see a farmer and a bull." },
+      { la: "Agricola et taurus timidī sunt.", en: "The farmer and the bull are timid." },
+      { la: "Agricolae#dat.sg et taurō#dat.sg aquam damus.", en: "We give the farmer and the bull water." },
+      { la: "Nunc agricola et taurus timidī nōn sunt.", en: "Now the farmer and the bull are not timid." },
+      { la: "Nunc agricola, taurus, amīca et ego Rōmam ambulāmus!", en: "Now the farmer, the bull, my friend and I walk to Rome!", prompt: "Now the farmer, the bull, the friend (f) and I walk to Rome!" },
+    ],
+    questions: [
+      { q: "Who is timid on the road?", options: ["The farmer and the bull", "The two friends", "Nobody"] },
+      { q: "What do the friends give them?", options: ["Water", "Wine", "A tunic"] },
+    ],
+  },
+  {
+    id: "tunica",
+    step: 5,
+    title: "Tunica magistrī",
+    en: "The teacher's tunic",
+    notice: "To whom: «magistrō», «agricolae» (-ō and -ae) with «dat» and «damus». The thing given has -m: «tunicam».",
+    lines: [
+      { la: "Discipulae#nom.pl tunicam pulchram habent.", en: "The students have a beautiful tunic.", prompt: "The students (f) have a beautiful tunic." },
+      { who: who("Discipulae", "The students"), la: "Magistrō#dat.sg tunicam damus!", en: "We give the teacher the tunic!", prompt: "We give the tunic to the teacher (m)!" },
+      { la: "Magister tunicam spectat.", en: "The teacher looks at the tunic.", prompt: "The teacher (m) looks at the tunic." },
+      { la: "Sed tunica longa et magna est!", en: "But the tunic is long and big!" },
+      { la: "Magister tunicam agricolae#dat.sg dat.", en: "The teacher gives the tunic to the farmer.", prompt: "The teacher (m) gives the tunic to the farmer." },
+      { la: "Agricola magnus est.", en: "The farmer is big." },
+      { la: "Et agricola magistrō#dat.sg vīnum dat.", en: "And the farmer gives the teacher wine.", prompt: "And the farmer gives wine to the teacher (m)." },
+    ],
+    questions: [
+      { q: "Why does the teacher give the tunic away?", options: ["It is too big for him", "He has a tunic already", "The farmer asks for it"] },
+      { q: "What does the teacher get for it?", options: ["Wine", "Water", "A book"] },
+    ],
+  },
+  {
+    id: "vinum-deo",
+    step: 5,
+    title: "Vīnum deō",
+    en: "Wine for the god",
+    notice: "To whom: «deō», «agricolae». Romans gave to their gods so that the gods would give back: do ut des, 'I give so that you give'.",
+    lines: [
+      { la: "Agricola in terrā labōrat.", en: "The farmer works on the land." },
+      { la: "Sed terra aquam nōn habet.", en: "But the land has no water." },
+      { la: "Agricola deō#dat.sg vīnum dat.", en: "The farmer gives wine to the god." },
+      { la: "Deus vīnum bibit.", en: "The god drinks the wine." },
+      { la: "Nunc deus agricolae#dat.sg aquam dat.", en: "Now the god gives the farmer water." },
+      { la: "Terra aquam habet et agricola bene labōrat.", en: "The land has water and the farmer works well." },
+      { la: "Sed vīnum nōn habet!", en: "But he has no wine!", prompt: "But he has no wine." },
+    ],
+    questions: [
+      { q: "Why does the farmer give the god wine?", options: ["The land has no water", "The god is thirsty", "He has too much wine"] },
+      { q: "What does the farmer not have at the end?", options: ["Wine", "Water", "Land"] },
+    ],
+  },
 ];
 
 export const STORY_BY_ID = new Map(STORIES.map((s) => [s.id, s]));

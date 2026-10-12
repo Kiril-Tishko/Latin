@@ -69,11 +69,11 @@ describe("stories", () => {
       expect(s.lines.length).toBeGreaterThanOrEqual(5);
     }
     // three stories for every step the videos cover
-    for (const step of [1, 2, 3, 4]) expect(STORIES.filter((s) => s.step === step).length).toBeGreaterThanOrEqual(3);
+    for (const step of LESSONS.map((l) => l.n)) expect(STORIES.filter((s) => s.step === step).length).toBeGreaterThanOrEqual(3);
   });
 
   it("turn every line with a verb into practice, and accept each exercise's own answer", () => {
-    const all = buildKnowledge([1, 2, 3, 4]);
+    const all = buildKnowledge(LESSONS.map((l) => l.n));
     let made = 0;
     for (const s of STORIES) {
       const lines = storyLines(s, lex);

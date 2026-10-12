@@ -1,6 +1,6 @@
 // Every word taught in the Easy Latin Lessons, with full grammar so the
 // engine can build any form of it. Grouped by the lesson that introduces it.
-import { adj, fixed, noun, verb } from "../latin/morph";
+import { adj, adj3, fixed, noun, verb } from "../latin/morph";
 import { Entry } from "../latin/types";
 
 const L = (n: number) => ({ lesson: n }) as const;
@@ -79,7 +79,25 @@ export const LESSON_WORDS: Record<number, Entry[]> = {
     fixed("ad", "prep", { en: "to", alt: ["toward", "towards", "at"], governs: "acc", note: "ad + accusative: to, toward (ad silvam: to the forest)." }, L(4)),
     fixed("nunc", "adv", { en: "now" }, L(4)),
   ],
+  5: [
+    noun("via", "viae", "f", { en: "road", alt: ["street", "way"], tags: ["place", "on", "long"] }, L(5)),
+    noun("Rōma", "Rōmae", "f", { en: "Rome", tags: ["place", "name", "city"], only: "sg", note: "A city takes no in / ad: Rōmam (to Rome), Rōmae (in Rome, an old 'where' case, the locative)." }, L(5)),
+    noun("Italia", "Italiae", "f", { en: "Italy", tags: ["place", "name"], only: "sg" }, L(5)),
+    noun("magister", "magistrī", "m", { en: "teacher", alt: ["male teacher", "master"], tags: ["person"], note: "The male teacher (magistra is the female one). Like liber: magister, but magistrum, magistrī, magistrō." }, L(5)),
+    noun("tunica", "tunicae", "f", { en: "tunic", tags: ["thing", "clothing"] }, L(5)),
+    verb("dūcō, dūcere, dūxī, ductum", { en: { base: "lead", past: "led", pp: "led" }, trans: true, intrans: true, shortImp: true }, L(5)),
+    verb("dō, dare, dedī, datum", { en: { base: "give", past: "gave", pp: "given" }, trans: true, note: "A short a in every form but dās and dā: damus, datis, dare (not dāmus, dāre)." }, L(5)),
+    verb("volō, velle, voluī", { en: { base: "want" }, irregular: "volo", note: "Irregular; this lesson needs only volō (I want), with a thing (Amīcum volō) or an infinitive (Legere volō)." }, L(5)),
+    adj("optimus", "optima", "optimum", { en: "best", alt: ["very good", "excellent"], tags: ["person", "place", "thing", "nature"] }, L(5)),
+    adj3(["omnis", "omne"], null, { en: "all", alt: ["every"] }, L(5)),
+    adj("clārus", "clāra", "clārum", { en: "clear", alt: ["bright", "famous"], tags: ["thing", "nature", "light"] }, L(5)),
+    adj("rēctus", "rēcta", "rēctum", { en: "straight", alt: ["right", "direct"], tags: ["long"] }, L(5)),
+    adj("splendidus", "splendida", "splendidum", { en: "splendid", alt: ["shining", "brilliant"], tags: ["thing", "place", "beauty"] }, L(5)),
+    noun("arma", "armī", "n", { en: "weapons", alt: ["arms"], tags: ["thing", "weapon"], only: "pl", note: "Only plural: arma, armōrum (the weapons, arms)." }, L(5)),
+    fixed("nōs", "pron", { id: "nos", en: "we", tags: ["pronoun"], note: "Like ego and tū it is often left out: the -mus of the verb already says 'we'." }, L(5)),
+    fixed("hīc", "adv", { en: "here", note: "With est / sunt also 'there is / there are': Librī hīc sunt (there are books here); Hīc sunt dracōnēs (here be dragons)." }, L(5)),
+  ],
 };
 
 /** Words that appear only in a story or a set phrase: shown on lesson pages, never drilled. */
-export const STORY_ONLY = new Set(["iuppiter", "se", "qui", "transformo"]);
+export const STORY_ONLY = new Set(["iuppiter", "se", "qui", "transformo", "volo", "omnis", "clarus", "rectus", "splendidus", "arma"]);

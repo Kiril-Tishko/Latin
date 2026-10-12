@@ -374,7 +374,7 @@ export function englishMark(englishText: string, t: LToken): [number, number] | 
   if (t.role.endsWith("-poss")) return hits.find(whose) ?? hits[0];
   const plain = hits.filter((h) => !whose(h));
   const pool = plain.length ? plain : hits;
-  return t.role.startsWith("obj") || t.role.startsWith("pp") ? pool[pool.length - 1] : pool[0];
+  return t.role.startsWith("obj") || t.role.startsWith("pp") || t.role.startsWith("dat") ? pool[pool.length - 1] : pool[0];
 }
 
 export function endingOn(ctx: Ctx, tokens: LToken[], englishText: string, focus: string[]): Exercise | null {
@@ -434,8 +434,8 @@ export function endingOn(ctx: Ctx, tokens: LToken[], englishText: string, focus:
 
 // --------------------------------------------------------------- choose
 
-const PERSONS: PN[] = ["1sg", "2sg", "3sg", "3pl"];
-const NOUN_KEYS: NounKey[] = ["nom.sg", "acc.sg", "gen.sg", "abl.sg", "nom.pl"];
+const PERSONS: PN[] = ["1sg", "2sg", "3sg", "1pl", "3pl"];
+const NOUN_KEYS: NounKey[] = ["nom.sg", "acc.sg", "gen.sg", "dat.sg", "abl.sg", "nom.pl"];
 
 /**
  * Other forms of a word that the learner knows, as wrong options. Only forms
@@ -456,7 +456,8 @@ function wrongForms(k: Knowledge, t: LToken): LToken[] {
     for (const key of NOUN_KEYS) {
       const [c, n] = key.split(".") as [Case, Num];
       if (key === a.key || !nounUsable(k, e, c, n)) continue;
-      if (c === "gen" && !a.key.startsWith("gen")) continue;
+      // no "of" or "to whom" form unless it is the answer: either could make another right sentence
+      if ((c === "gen" || c === "dat") && !a.key.startsWith(c)) continue;
       if (t.role === "pp" && (c === "acc" || c === "abl")) continue;
       const form = declineNoun(e)[key];
       if (form) out.push({ text: full(form), role: t.role, analysis: { entry: e, key, gender: e.gender, form }, skill: nounSkill(e.decl, c, n) });
@@ -472,7 +473,7 @@ function wrongForms(k: Knowledge, t: LToken): LToken[] {
     for (const key of NOUN_KEYS) {
       const [c, n] = key.split(".") as [Case, Num];
       if (key === a.key || !k.skills.has(nounSkill(adjDecl(g), c, n))) continue;
-      if (c === "gen" && !a.key.startsWith("gen")) continue;
+      if ((c === "gen" || c === "dat") && !a.key.startsWith(c)) continue;
       if (t.role === "pp-adj" && (c === "acc" || c === "abl")) continue;
       out.push(adjForm(g, key));
     }
@@ -648,6 +649,9 @@ function verbFormExercise(ctx: Ctx, skillId: string): Exercise | null {
     if (skillId === "v.sum" || skillId === "v.possum") {
       verb = ctx.k.verbs.find((v) => v.irregular === (skillId === "v.sum" ? "sum" : "possum"));
       pn = pick(ctx.r, ["1sg", "2sg", "3sg"] as PN[]);
+    } else if (skillId === "v.sunt") {
+      verb = ctx.k.verbs.find((v) => v.irregular === "sum");
+      pn = "3pl";
     } else {
       pn = skillId.slice(2) as PN;
       const pool = ctx.k.verbs.filter((v) => !v.irregular && verbUsable(ctx.k, v, pn));
@@ -656,7 +660,7 @@ function verbFormExercise(ctx: Ctx, skillId: string): Exercise | null {
     }
     if (!verb || !verbUsable(ctx.k, verb, pn)) return null;
     key = `pres.${pn}` as VerbKey;
-    const who = pn === "1sg" ? "ego (I)" : pn === "2sg" ? "tū (you)" : pn === "3sg" ? "he / she / it" : "they";
+    const who = pn === "1sg" ? "ego (I)" : pn === "2sg" ? "tū (you)" : pn === "3sg" ? "he / she / it" : pn === "1pl" ? "nōs (we)" : "they";
     label = who;
   }
   const form = conjugate(verb)[key]!;
@@ -777,6 +781,17 @@ const TRANSFORMS: Transform[] = [
     },
   },
   {
+    name: "nos",
+    instruction: "Say it about yourself and others (we …).",
+    skill: "v.1pl",
+    apply: (c, k) => {
+      if (c.subj.kind !== "np" || c.num !== "sg" || c.pred || c.verb.irregular) return null;
+      if (!verbUsable(k, c.verb, "1pl") || !k.fixed.has("nos")) return null;
+      const shown = !k.skills.has("s.drop");
+      return { ...c, subj: { kind: "pron", person: 1, shown, pl: true }, person: 1, num: "pl", skills: [...c.skills, "v.1pl", ...(shown ? [] : ["s.drop"])] };
+    },
+  },
+  {
     name: "negate",
     instruction: "Make it negative (add nōn, 'not').",
     skill: "s.non",
@@ -836,11 +851,12 @@ const QUESTIONS: { roles: string[]; ask: string }[] = [
   { roles: ["obj"], ask: "Which word is the object (what the action is done to)?" },
   { roles: ["pp"], ask: "Which word says where?" },
   { roles: ["subj-poss", "obj-poss", "pp-poss", "pred-poss"], ask: "Which word says whose?" },
+  { roles: ["dat"], ask: "Which word says to whom (the one who gets it)?" },
 ];
 
 function identify(ctx: Ctx, focus: string[]): Exercise | null {
   for (let attempt = 0; attempt < 10; attempt++) {
-    const c = generate(ctx.k, ctx.r, focus, ["svo", "loc", "motion"]);
+    const c = generate(ctx.k, ctx.r, focus, ["svo", "loc", "motion", "dat"]);
     if (!c) continue;
     const tokens = latinTokens(c, ctx.k);
     const options = QUESTIONS.filter((q) => tokens.filter((t) => q.roles.includes(t.role)).length === 1);

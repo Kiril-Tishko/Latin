@@ -668,6 +668,125 @@ export const PARTS: Part[] = [
     skills: ["n1.nom.pl", "n2.nom.pl"],
     more: ["l4-table"],
   },
+
+  // ------------------------------------------------------------ Lesson V
+  {
+    id: "5.1",
+    lesson: 5,
+    title: "-mus: we",
+    explain: [
+      "When we do something, the verb ends in **-mus**: «ambulāmus» = we walk.",
+      "Keep the vowel of the tū form: «ambulās» → «ambulāmus», «bibis» → «bibimus», «vidēs» → «vidēmus».",
+      "The word for we is «nōs»; like ego and tū, it is often left out.",
+    ],
+    examples: [
+      { la: "Ambulāmus.", en: "We walk." },
+      { la: "Nōs in silvā bibimus.", en: "We drink in the forest." },
+      { la: "Epistulam legimus.", en: "We read the letter." },
+    ],
+    slavic: "Ukrainian -мо is the same ancient ending: ми читаємо, ми ходимо. Russian: мы читаем.",
+    questions: [
+      {
+        q: "What does «Bibimus» mean, and which part of the word tells you who is drinking?",
+        answer: "We drink. The ending -mus says 'we'.",
+        keys: [["we"], ["mus"]],
+      },
+      {
+        q: "You know «labōrās» (you work). How do you say 'we work'?",
+        answer: "«Labōrāmus»: the a of labōrās stays, and -s becomes -mus.",
+        keys: [["laboramus"]],
+      },
+    ],
+    skills: ["v.1pl"],
+  },
+  {
+    id: "5.2",
+    lesson: 5,
+    title: "sunt: they are",
+    explain: [
+      "One thing «est», several things **«sunt»**: «Via longa est» → «Viae#nom.pl longae#nom.pl sunt».",
+      "The describing word goes plural too: -a becomes -ae, -us becomes -ī.",
+      "«sunt» also means 'there are': «Librī#nom.pl hīc sunt» = there are books here.",
+    ],
+    examples: [
+      { la: "Viae#nom.pl longae#nom.pl sunt.", en: "The roads are long." },
+      { la: "Puellae#nom.pl timidae#nom.pl sunt.", en: "The girls are timid." },
+      { la: "Gladiī#nom.pl longī#nom.pl sunt.", en: "The swords are long." },
+    ],
+    slavic: "Russian and Ukrainian leave 'are' out: дороги длинные / дороги довгі. Latin needs sunt.",
+    questions: [
+      {
+        q: "What is the difference between «Via longa est» and «Viae#nom.pl longae#nom.pl sunt»?",
+        answer: "The first is one road (est), the second several roads (sunt): every word went plural.",
+        keys: [["sunt", "plural", "several", "roads", "many", "more", "two"]],
+      },
+      {
+        q: "How do you say 'the girls are beautiful'?",
+        answer: "«Puellae pulchrae sunt.»",
+        keys: [["puellae"], ["pulchrae"], ["sunt"]],
+      },
+    ],
+    skills: ["v.sunt"],
+  },
+  {
+    id: "5.3",
+    lesson: 5,
+    title: "The dative: to whom",
+    explain: [
+      "The one who gets something is in the **dative**: -a words take **-ae**, -us words take **-ō**.",
+      "«Discipula discipulō#dat.sg gladium dat» = the student gives the student a sword: «discipulō» gets it, «gladium» is what is given.",
+      "To give is «dō, dare»: «dō», «dās», «dat», «damus», «dant».",
+    ],
+    examples: [
+      { la: "Discipula discipulō#dat.sg gladium dat.", en: "The (female) student gives the (male) student a sword." },
+      { la: "Puellae#dat.sg aquam damus.", en: "We give the girl water." },
+      { la: "Magistrō#dat.sg librum dō.", en: "I give the teacher a book." },
+    ],
+    slavic: "Like the дательный / давальний: даю книгу другу / другові. 'Dative' even comes from dare, to give.",
+    questions: [
+      {
+        q: "In «Discipula discipulō#dat.sg gladium dat», who gets the sword, and what tells you?",
+        answer: "The (male) student: «discipulō» ends in -ō, the dative, the one who gets something.",
+        keys: [["student", "discipulo", "discipulus", "boy", "him", "male"], ["o", "dative", "dat"]],
+      },
+      {
+        q: "How do you say 'I give the girl a letter'?",
+        answer: "«Puellae epistulam dō.»",
+        keys: [["puellae"], ["epistulam"], ["do"]],
+      },
+    ],
+    skills: ["n1.dat.sg", "n2.dat.sg", "s.dat"],
+    more: ["l5-words"],
+  },
+  {
+    id: "5.4",
+    lesson: 5,
+    title: "Rōmam: a city needs no in",
+    explain: [
+      "With a city there is no in or ad: «Rōmam ambulō» = I walk to Rome.",
+      "'In Rome' is «Rōmae#x», an old 'where' case that only cities keep: «Rōmae#x habitō» = I live in Rome.",
+      "A country keeps its in: «Rōma in Italiā est».",
+    ],
+    examples: [
+      { la: "Via Rōmam dūcit.", en: "The road leads to Rome." },
+      { la: "Rōmam ambulāmus.", en: "We walk to Rome." },
+      { la: "Rōma in Italiā est.", en: "Rome is in Italy." },
+    ],
+    slavic: "Russian and Ukrainian always say в / у: в Рим, у Рим. Latin drops it before a city.",
+    questions: [
+      {
+        q: "Why is there no «ad» in «Via Rōmam dūcit»?",
+        answer: "Because Rome is a city: with a city, Latin says 'to' with the accusative alone.",
+        keys: [["city", "rome", "roma", "town", "name"]],
+      },
+      {
+        q: "How do you say 'we walk to Rome'?",
+        answer: "«Rōmam ambulāmus.»",
+        keys: [["romam"], ["ambulamus"]],
+      },
+    ],
+    skills: ["s.city"],
+  },
 ];
 
 export const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));

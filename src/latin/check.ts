@@ -53,6 +53,9 @@ const ROLE_TEXT: Partial<Record<Role, string>> = {
   "subj-adj": "describing the subject",
   obj: "the object (what the action is done to)",
   "obj-adj": "describing the object",
+  dat: "the one it is given to (to whom)",
+  "dat-adj": "describing the one it is given to",
+  "dat-poss": "the owner (whose)",
   pred: "after est (same case as the subject)",
   "pred-adj": "after est (agreeing with the subject)",
   pp: "the place after the preposition",
@@ -99,8 +102,8 @@ export function slotsFor(tokens: LToken[], k: Knowledge): Slot[] {
   const verb = tokens.find((t) => t.role === "verb");
   const pn = verb?.analysis?.key.split(".")[1];
   const subjectShown = tokens.some((t) => t.role === "pron" || t.role === "subj");
-  if (!subjectShown && (pn === "1sg" || pn === "2sg")) {
-    const pron = k.fixed.get(pn === "1sg" ? "ego" : "tu");
+  if (!subjectShown && (pn === "1sg" || pn === "2sg" || pn === "1pl")) {
+    const pron = k.fixed.get(pn === "1sg" ? "ego" : pn === "1pl" ? "nos" : "tu");
     if (pron) slots.push({ accept: [latinKey(pron.lemma)], show: pron.lemma, role: "pron", optional: true, added: true });
   }
   // "I am timid": English doesn't say whether the speaker is a man or a woman.

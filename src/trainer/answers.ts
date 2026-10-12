@@ -115,7 +115,9 @@ function slotIssues(tokens: LToken[], want: Want): Issue[] {
   const named = (t?: LToken) => !w || t?.analysis?.entry.id === w.id;
   switch (want.slot) {
     case "obj": {
-      const o = has("obj", "acc");
+      // a neuter's object form is the same as its subject form: «Vīnum.» answers «Quid bibit?»
+      const alone = !tokens.some((t) => t.role === "verb") ? tokens.find((t) => t.analysis?.entry.kind === "noun" && t.analysis.entry.gender === "n" && caseOf(t.analysis) === "nom") : undefined;
+      const o = has("obj", "acc") ?? alone;
       if (!o) return [{ kind: "missing", message: w ? `Say what: «${w.text}» (as in the story).` : "Say what: the thing gets -m, as the object («epistulam», «librum»)." }];
       return named(o) ? [] : [{ kind: "word", message: `In the story it is «${w!.text}».` }];
     }

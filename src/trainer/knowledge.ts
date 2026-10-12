@@ -15,9 +15,11 @@ export function lessonWords(lessonsUnlocked: number[]): Entry[] {
   return LESSONS.filter((l) => lessonsUnlocked.includes(l.n)).flatMap((l) => l.words);
 }
 
-/** Every word the site knows about, for coloring any Latin text. */
+/** Every word the site knows about, for coloring any Latin text (a card that became a lesson word counts once). */
 export function fullLexicon(extra: Entry[] = []): Lexicon {
-  return new Lexicon([...LESSONS.flatMap((l) => l.words), ...extra]);
+  const lesson = LESSONS.flatMap((l) => l.words);
+  const ids = new Set(lesson.map((w) => w.id));
+  return new Lexicon([...lesson, ...extra.filter((e) => !ids.has(e.id))]);
 }
 
 /**

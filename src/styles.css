@@ -1928,3 +1928,8 @@ main.page.msgr-page { padding-block: 14px; }
 }
 .better-voice summary { cursor: pointer; color: var(--ink); }
 .better-voice ul { margin: 6px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+
+/* The next video, with one tap to tick it as watched */
+.next-lesson { gap: 8px; }
+.next-lesson h2 { font-size: 1.2rem; }
+.next-lesson .row { gap: 10px; flex-wrap: wrap; }

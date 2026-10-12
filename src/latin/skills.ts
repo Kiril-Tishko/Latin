@@ -31,6 +31,8 @@ export const SKILLS: Skill[] = [
   S({ id: "v.inf", group: "verbs", title: "infinitive: -re (to …)", ending: "-re", verb: true, hint: "The infinitive means 'to …' and ends in -re: labōrāre, docēre, scrībere, dormīre." }),
   S({ id: "v.sum", group: "verbs", title: "sum, es, est (to be)", verb: true, hint: "To be is irregular: sum (I am), es (you are), est (he / she / it is)." }),
   S({ id: "v.possum", group: "verbs", title: "possum, potes, potest (can)", verb: true, hint: "Can = pot- + sum: possum, potes, potest, followed by an infinitive (legere potest: he can read)." }),
+  S({ id: "v.1pl", group: "verbs", title: "nōs: -mus (we)", ending: "-mus", verb: true, hint: "With nōs (we), the verb ends in -mus, after the vowel of the tū form: ambulās → ambulāmus, vidēs → vidēmus, bibis → bibimus, dormīs → dormīmus." }),
+  S({ id: "v.sunt", group: "verbs", title: "sunt (they are)", verb: true, hint: "The plural of est is sunt, and what is said of the subject goes plural too: Via longa est → Viae longae sunt." }),
 
   // nouns, first declension
   S({ id: "n1.nom.sg", group: "nouns", title: "-a: the subject", ending: "-a", case: "nom", num: "sg", hint: "First-declension subject (nominative): puella, magistra, agricola." }),
@@ -38,6 +40,7 @@ export const SKILLS: Skill[] = [
   S({ id: "n1.gen.sg", group: "nouns", title: "-ae: of / 's", ending: "-ae", case: "gen", num: "sg", hint: "First-declension 'of' (genitive) ends in -ae: epistula poētae (the poet's letter)." }),
   S({ id: "n1.abl.sg", group: "nouns", title: "-ā: in / at (place)", ending: "-ā", case: "abl", num: "sg", hint: "First-declension ablative ends in long -ā: in silvā (in the forest)." }),
   S({ id: "n1.nom.pl", group: "nouns", title: "-ae: subjects (plural)", ending: "-ae", case: "nom", num: "pl", hint: "Plural subject of the first declension ends in -ae, the same as 'of': puellae (girls)." }),
+  S({ id: "n1.dat.sg", group: "nouns", title: "-ae: to / for (dative)", ending: "-ae", case: "dat", num: "sg", hint: "First-declension dative, the one something is given or told to, ends in -ae: puellae aquam dō (I give water to the girl)." }),
 
   // nouns, second declension masculine
   S({ id: "n2.nom.sg", group: "nouns", title: "-us / -er: the subject", ending: "-us", case: "nom", num: "sg", hint: "Second-declension subject: discipulus, amīcus; a few end in -er: liber." }),
@@ -45,6 +48,7 @@ export const SKILLS: Skill[] = [
   S({ id: "n2.gen.sg", group: "nouns", title: "-ī: of / 's", ending: "-ī", case: "gen", num: "sg", hint: "Second-declension 'of' ends in -ī: liber discipulī (the student's book)." }),
   S({ id: "n2.abl.sg", group: "nouns", title: "-ō: in / at (place)", ending: "-ō", case: "abl", num: "sg", hint: "Second-declension ablative ends in long -ō: in Olympō, in librō." }),
   S({ id: "n2.nom.pl", group: "nouns", title: "-ī: subjects (plural)", ending: "-ī", case: "nom", num: "pl", hint: "Plural subject of the second declension ends in -ī, the same as 'of': discipulī (students)." }),
+  S({ id: "n2.dat.sg", group: "nouns", title: "-ō: to / for (dative)", ending: "-ō", case: "dat", num: "sg", hint: "Second-declension dative ends in long -ō, like the ablative: discipulō librum dō (I give the student a book)." }),
 
   // nouns, second declension neuter
   S({ id: "n2n.nom.sg", group: "nouns", title: "neuter -um: the subject", ending: "-um", case: "nom", num: "sg", hint: "Neuter nouns end in -um as the subject: vīnum." }),
@@ -70,6 +74,8 @@ export const SKILLS: Skill[] = [
   S({ id: "s.into", group: "sentences", title: "in + accusative: into", hint: "in + accusative says where to: in silvam ambulō (I walk into the forest)." }),
   S({ id: "s.ad", group: "sentences", title: "ad + accusative: to", hint: "ad + accusative means to / toward: ad scholam ambulō (I walk to school)." }),
   S({ id: "s.pl", group: "sentences", title: "plural subjects", hint: "Several subjects take a plural verb in -nt: Puellae fugitant; Discipulus et discipula student." }),
+  S({ id: "s.dat", group: "sentences", title: "the dative: to whom", hint: "The one something is given, sent or read to takes the dative: Discipula discipulō gladium dat (the student gives the student a sword)." }),
+  S({ id: "s.city", group: "sentences", title: "Rōmam, Rōmae: a city needs no in", hint: "With the name of a city there is no in / ad: Rōmam ambulō (I walk to Rome); Rōmae habitō (I live in Rome, the locative)." }),
 ];
 
 export const SKILL_BY_ID = new Map(SKILLS.map((s) => [s.id, s]));

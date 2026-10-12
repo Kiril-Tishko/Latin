@@ -5,7 +5,8 @@ import { SKILL_BY_ID } from "../src/latin/skills";
 
 const lex = new Lexicon(LESSONS.flatMap((l) => l.words));
 // Words that appear in the videos but are not taught as vocabulary.
-const OUTSIDE = new Set(["vēnī", "vīdī", "vīcī", "brūte", "vēritās", "nauseam", "iuppiter", "olympum"]);
+// Rōmae in «Rōmae habitō» is the locative, a case the engine does not read (marked #x).
+const OUTSIDE = new Set(["vēnī", "vīdī", "vīcī", "brūte", "vēritās", "nauseam", "iuppiter", "olympum", "rōmae"]);
 
 function unknownWords(text: string): string[] {
   return annotate(text, lex)

@@ -139,17 +139,23 @@ function ClaudeSettings() {
     return (
       <div class="stack" style={{ gap: "6px" }}>
         <span class="ui small"><b>{title}</b> <span class="muted">· {what}</span></span>
-        <div class="row" style={{ gap: "8px" }}>
-          <div class="seg" role="group" aria-label={`${title}: model`}>
-            {TIERS.map((t) => (
-              <button key={t.tier} id={`${key}-tier-${t.tier}`} title={t.note} aria-pressed={m.tier === t.tier} onClick={() => update((x) => void (x.settings[key] = { ...x.settings[key], tier: t.tier }))}>{t.label}</button>
-            ))}
-          </div>
-          <div class="seg" role="group" aria-label={`${title}: thinking`}>
-            {EFFORTS.map((e) => (
-              <button key={e.effort} id={`${key}-effort-${e.effort}`} aria-pressed={m.effort === e.effort} onClick={() => update((x) => void (x.settings[key] = { ...x.settings[key], effort: e.effort }))}>{e.label}</button>
-            ))}
-          </div>
+        <div class="row" style={{ gap: "8px 14px" }}>
+          <span class="row" style={{ gap: "6px", flexWrap: "nowrap" }}>
+            <span class="small muted">Model</span>
+            <div class="seg" role="group" aria-label={`${title}: model`}>
+              {TIERS.map((t) => (
+                <button key={t.tier} id={`${key}-tier-${t.tier}`} title={t.note} aria-pressed={m.tier === t.tier} onClick={() => update((x) => void (x.settings[key] = { ...x.settings[key], tier: t.tier }))}>{t.label}</button>
+              ))}
+            </div>
+          </span>
+          <span class="row" style={{ gap: "6px", flexWrap: "nowrap" }}>
+            <span class="small muted">Thinking</span>
+            <div class="seg" role="group" aria-label={`${title}: thinking`}>
+              {EFFORTS.map((e) => (
+                <button key={e.effort} id={`${key}-effort-${e.effort}`} aria-pressed={m.effort === e.effort} onClick={() => update((x) => void (x.settings[key] = { ...x.settings[key], effort: e.effort }))}>{e.label}</button>
+              ))}
+            </div>
+          </span>
         </div>
       </div>
     );

@@ -29,7 +29,7 @@ const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.El
   { route: { page: "words" }, label: "Verba", en: "Words", icon: Icon.book },
   { route: { page: "discover" }, label: "Inventiō", en: "Discover", icon: Icon.card },
   { route: { page: "rules" }, label: "Rēgulae", en: "Rules", icon: Icon.column },
-  { route: { page: "messenger" }, label: "Nūntiī", en: "Messages", icon: Icon.tablet },
+  { route: { page: "messenger" }, label: "Nūntiī", en: "Messages", icon: Icon.letter },
 ];
 
 // a lesson page, a rule to learn, the stories and Latin in English belong to Lectiōnēs
@@ -104,7 +104,7 @@ export function App() {
   }
 
   return (
-    <div class="app">
+    <div class={`app${route.page === "messenger" ? " scene-on" : ""}`}>
       <header class="topbar">
         <div class="topbar-inner">
           <button class="brand" onClick={() => go({ page: "home" })}>

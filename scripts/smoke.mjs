@@ -810,12 +810,25 @@ async function messenger() {
   if (!(await p.locator(".bubble.mine .ticks.read").count())) errors.push("messenger: the learner's message never shows as read");
   const prompts = await p.evaluate(() => window.__prompts.join("\n---\n"));
   if (!prompts.includes("You write as Iūlia") || !prompts.includes("THE LEARNER: Kiril")) errors.push("messenger: the reply prompt lacks the person or the learner");
-  // a tap on a word shows its meaning; a tap elsewhere on the message, its English
+  // a tap on a word shows a card under the message (what the word is); a tap elsewhere on the message, its English
   await p.locator(".bubble:not(.mine) .w").first().click();
-  if (!(await p.locator(".bubble-gloss", { hasText: "great!" }).count())) errors.push("messenger: a tap on a word does not show its meaning");
+  if (!(await p.locator(".word-card", { hasText: "great" }).count())) errors.push("messenger: a tap on a word shows no word card");
   await p.locator(".bubble:not(.mine) .bubble-meta").first().click();
   if (!(await p.locator(".bubble-en", { hasText: "Great!" }).count())) errors.push("messenger: a tap does not show the English");
   await p.screenshot({ path: `${out}/messenger-chat.png` });
+  // find in this chat, find a chat, an emoji from the ＋
+  await p.click("button[aria-label='Find in this chat']");
+  await p.fill("#chat-find", "dormio");
+  if ((await p.locator(".bubble.hit").count()) !== 1) errors.push("messenger: Find in this chat does not find «Nōn dormiō»");
+  await p.keyboard.press("Escape");
+  await p.fill("#chat-search", "dormio");
+  const found = await p.locator(".chat-row").evaluateAll((rows) => rows.map((r) => r.id));
+  if (found.join() !== "chat-iulia") errors.push(`messenger: the chat search found ${JSON.stringify(found)}`);
+  await p.fill("#chat-search", "");
+  await p.click(".plus-btn");
+  await p.locator(".emoji-pop button", { hasText: "🍷" }).click();
+  if (!(await p.inputValue("#composer")).includes("🍷")) errors.push("messenger: the ＋ does not add an emoji");
+  await p.fill("#composer", "");
   await p.click("button[aria-label='Your words']");
   if (!(await p.locator(".words-sheet .word-chip", { hasText: "salvē" }).count())) errors.push("messenger: the words sheet lacks the chat words");
   await p.keyboard.press("Escape");

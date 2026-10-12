@@ -1,17 +1,23 @@
 // Nūntiī: the messenger. Five friends in and around Rome, their group chat, and
 // strangers met at random write to the learner in Latin, only with the words
 // and rules the learner knows. Tap a message for its English, a word for its
-// meaning; Check asks the coach about the learner's own Latin.
+// meaning; Check asks the coach about the learner's own Latin. The look follows
+// the learner's own picture: parchment panels in a scene of old engravings
+// (Piranesi's Forum, Corinthian capitals, Livy's bust), big faces, laurels.
 import { Fragment } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { ENGRAVINGS } from "../../content/engravings";
 import { GROUP, PEOPLE } from "../../content/people";
 import { PORTRAIT_BY_ID } from "../../content/portraits";
 import { localTime, moodText, statusAt } from "../../chat/life";
 import { arrived, membersOf, Msg, Thread, unreadCount, Who, whoOf } from "../../chat/model";
-import { allowedWords, CHAT_WORD_LIST } from "../../chat/words";
-import { roman } from "../../latin/text";
+import { allowedWords, CHAT_WORD_LIST, headword } from "../../chat/words";
+import { Analysis, annotate } from "../../latin/analyze";
+import { plain, roman } from "../../latin/text";
+import { CASE_NAMES, Entry, PN, PN_NAMES } from "../../latin/types";
 import { Icon, Modal } from "../components";
 import { LatinText } from "../latin";
+import { Inline } from "../markup";
 import { go } from "../nav";
 import { useScreen } from "../screen";
 import {
@@ -36,15 +42,19 @@ import {
 } from "../messenger";
 import { derived, update, useProgress } from "../store";
 import { storage } from "../platform";
+import { WordModal } from "./words";
 
 // ---------------------------------------------------------------- pieces
 
-/** A round portrait (mirrored for a stranger who shares one). */
-export function Avatar({ who, size = 44 }: { who: Pick<Who, "portrait" | "name"> & { flip?: boolean }; size?: number }) {
+/** A round portrait (mirrored for a stranger who shares one), with a dot when they are online or not. */
+export function Avatar({ who, size = 44, dot }: { who: Pick<Who, "portrait" | "name"> & { flip?: boolean }; size?: number; dot?: "on" | "off" }) {
   const p = PORTRAIT_BY_ID.get(who.portrait);
   return (
-    <span class="avatar" style={{ width: `${size}px`, height: `${size}px` }}>
-      {p ? <img src={p.src} alt={who.name} style={who.flip ? { transform: "scaleX(-1)" } : undefined} /> : <span class="avatar-letter">{who.name[0]}</span>}
+    <span class="avatar-wrap" style={{ "--av-size": `${size}px` }}>
+      <span class="avatar">
+        {p ? <img src={p.src} alt={who.name} style={who.flip ? { transform: "scaleX(-1)" } : undefined} /> : <span class="avatar-letter">{who.name[0]}</span>}
+      </span>
+      {dot && <i class={`presence-dot ${dot}`} aria-label={dot === "on" ? "online" : "offline"} />}
     </span>
   );
 }
@@ -52,11 +62,48 @@ export function Avatar({ who, size = 44 }: { who: Pick<Who, "portrait" | "name">
 /** The group's picture: four of its faces. */
 function GroupAvatar({ size = 44 }: { size?: number }) {
   return (
-    <span class="avatar group-avatar" style={{ width: `${size}px`, height: `${size}px` }} aria-label={GROUP.name}>
+    <span class="avatar group-avatar" style={{ "--av-size": `${size}px` }} aria-label={GROUP.name}>
       {PEOPLE.slice(0, 4).map((p) => (
         <img key={p.id} src={PORTRAIT_BY_ID.get(p.portrait)?.src} alt="" />
       ))}
     </span>
+  );
+}
+
+/** A laurel sprig: a curved stem with paired leaves, in gold. */
+export function Sprig({ flip, cls = "" }: { flip?: boolean; cls?: string }) {
+  const leaves: [number, number, number][] = [];
+  for (let i = 0; i < 6; i++) {
+    const t = i / 5;
+    const x = 6 + t * 44;
+    const y = 54 - t * 44 + Math.sin(t * Math.PI) * -6;
+    leaves.push([x, y, -40 - t * 10]);
+  }
+  return (
+    <svg class={`sprig ${cls}`} viewBox="0 0 64 64" aria-hidden="true" style={flip ? { transform: "scaleX(-1)" } : undefined}>
+      <path d="M4 60 C 20 44, 34 28, 54 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+      {leaves.map(([x, y, rot], i) => (
+        <g key={i}>
+          <ellipse cx={x - 4} cy={y - 5} rx="7" ry="2.7" transform={`rotate(${rot - 35} ${x - 4} ${y - 5})`} fill="currentColor" />
+          <ellipse cx={x + 5} cy={y + 3} rx="7" ry="2.7" transform={`rotate(${rot + 35} ${x + 5} ${y + 3})`} fill="currentColor" />
+        </g>
+      ))}
+      <ellipse cx="56" cy="6" rx="6.5" ry="2.6" transform="rotate(-48 56 6)" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** The scene behind the messenger: Piranesi's Forum behind the top bar, Corinthian capitals at the page sides. */
+function Scene() {
+  return (
+    <div
+      class="msgr-scene"
+      aria-hidden="true"
+      style={{ "--rome": `url(${ENGRAVINGS.rome.src})`, "--capital": `url(${ENGRAVINGS.capital.src})` } as Record<string, string>}
+    >
+      <i class="scene-col left" />
+      <i class="scene-col right" />
+    </div>
   );
 }
 
@@ -65,24 +112,35 @@ const clock = (t: number) => {
   const d = new Date(t);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
+const daysAgo = (t: number, now: number) => Math.round((new Date(new Date(now).toDateString()).getTime() - new Date(new Date(t).toDateString()).getTime()) / 86400000);
 
-/** "21:40", "Yesterday", "Monday", "12 Oct" for the chat list. */
+/** "21:40", "Yesterday", "Mon", "12 Oct" for the chat list. */
 function when(t: number, now: number): string {
+  const days = daysAgo(t, now);
   const d = new Date(t);
-  const today = new Date(now);
-  const days = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86400000);
   if (days === 0) return clock(t);
   if (days === 1) return "Yesterday";
-  if (days < 7) return d.toLocaleDateString("en-GB", { weekday: "long" });
+  if (days < 7) return d.toLocaleDateString("en-GB", { weekday: "short" });
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-function dayLabel(t: number, now: number): string {
-  const w = when(t, now);
-  return /:/.test(w) ? "Today" : w;
+/** The day line in a chat, in Latin for today and yesterday: Hodiē, Heri. */
+function dayLabel(t: number, now: number): { la: string; en: string } {
+  const days = daysAgo(t, now);
+  if (days === 0) return { la: "Hodiē", en: "Today" };
+  if (days === 1) return { la: "Heri", en: "Yesterday" };
+  const d = new Date(t);
+  const en = days < 7 ? d.toLocaleDateString("en-GB", { weekday: "long" }) : d.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+  return { la: en, en };
 }
 
 const nameOf = (id: string) => (id === "me" ? "You" : whoOf(id, getMeta())?.name ?? id);
+
+/** Online (a green dot) or not, for a person's chat. */
+function dotOf(who: Who, t: Thread, now: number): "on" | "off" {
+  const p = presence(who, t, now, statusAt(who.day, who.tz, now));
+  return p === "online" || p === "typing…" ? "on" : "off";
+}
 
 // ------------------------------------------------------------------ page
 
@@ -97,12 +155,18 @@ export function Messenger({ thread }: { thread?: string }) {
   const t = thread ? getThread(thread) : null;
   const known = t && (thread === GROUP.id || PEOPLE.some((x) => x.id === thread) || getMeta().strangers[thread!]) && !t.gone;
   useScreen("page", known ? `Messenger: chat with ${thread === GROUP.id ? `the group ${GROUP.name}` : nameOf(thread!)}` : "Messenger", () => (known ? screenText(t!, now) : "The list of chats in the messenger."));
-  if (!me) return <Setup />;
   return (
-    <div class={`msgr${known ? " in-chat" : ""}`}>
-      <ChatList active={known ? thread! : null} now={now} />
-      {known ? <ChatView key={thread} id={thread!} now={now} /> : <EmptyChat />}
-    </div>
+    <>
+      <Scene />
+      {!me ? (
+        <Setup />
+      ) : (
+        <div class={`msgr${known ? " in-chat" : ""}`}>
+          <ChatList active={known ? thread! : null} now={now} />
+          {known ? <ChatView key={thread} id={thread!} now={now} /> : <EmptyChat />}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -114,7 +178,8 @@ function screenText(t: Thread, now: number): string {
 
 function EmptyChat() {
   return (
-    <section class="chat chat-empty panel">
+    <section class="chat chat-empty msgr-panel">
+      <Sprig cls="empty-sprig" />
       <p class="muted ui">Choose a chat, or find someone new.</p>
     </section>
   );
@@ -127,12 +192,14 @@ function Setup() {
   const [g, setG] = useState<"m" | "f" | null>(null);
   const ok = name.trim().length > 0 && g;
   return (
-    <section class="panel frame msgr-setup stack">
-      <span class="eyebrow">Nūntiī · Messages</span>
-      <h1>Your friends in Rome</h1>
+    <section class="msgr-panel msgr-setup stack">
+      <div class="row" style={{ gap: "10px" }}>
+        <h1 class="msgr-title">Nūntiī</h1>
+        <Sprig cls="title-sprig" />
+      </div>
       <div class="setup-faces">
         {PEOPLE.map((x) => (
-          <Avatar key={x.id} who={x} size={56} />
+          <Avatar key={x.id} who={x} size={64} />
         ))}
       </div>
       <p>
@@ -164,12 +231,22 @@ function lastOf(t: Thread, now: number): Msg | undefined {
   return arrived(t, now).at(-1);
 }
 
+/** Does a chat match a search: a name, or any message, Latin or English (long marks never needed)? */
+function matches(t: Thread, who: Who | null, q: string, now: number): boolean {
+  if (!q) return true;
+  const hay = [who?.name ?? GROUP.name, ...(who ? [] : PEOPLE.map((p) => p.name)), ...arrived(t, now).flatMap((m) => [m.la, m.en ?? ""])];
+  return hay.some((s) => plain(s).includes(q));
+}
+
 function ChatList({ active, now }: { active: string | null; now: number }) {
   const meta = getMeta();
   const [finding, setFinding] = useState<{ ctl: AbortController } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const q = plain(query.trim());
   const rows = allThreads()
-    .map((t) => ({ t, last: lastOf(t, now) }))
+    .map((t) => ({ t, last: lastOf(t, now), who: t.kind === "group" ? null : whoOf(t.id, meta) }))
+    .filter((r) => matches(r.t, r.who, q, now))
     .sort((a, b) => (b.last?.at ?? 0) - (a.last?.at ?? 0));
   const find = async () => {
     const ctl = new AbortController();
@@ -181,23 +258,29 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
     else if (res.error && res.error !== "Stopped.") setError(res.error);
   };
   return (
-    <aside class="chat-list panel" aria-label="Chats">
+    <aside class="chat-list msgr-panel" aria-label="Chats">
       <div class="chat-list-head">
-        <h1 class="msgr-title">Nūntiī</h1>
-        <button id="find-someone" class="btn gold small" onClick={() => void find()} disabled={!!finding} title="Meet someone new from anywhere in the Roman world">
-          <Icon.sparkle /> Someone new
+        <div class="row" style={{ gap: "8px", flexWrap: "nowrap" }}>
+          <h1 class="msgr-title">Nūntiī</h1>
+          <Sprig cls="title-sprig" />
+        </div>
+        <button id="find-someone" class="btn gold find-btn" onClick={() => void find()} disabled={!!finding} title="Meet someone new from anywhere in the Roman world">
+          <Icon.plus /> Someone new
         </button>
       </div>
+      <label class="list-search">
+        <Icon.search />
+        <input id="chat-search" type="search" value={query} placeholder="Quaere nūntiōs…" aria-label="Search chats and messages" autocomplete="off" spellcheck={false} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
+      </label>
       {finding && <Finding onStop={() => finding.ctl.abort()} />}
-      {error && <p class="small well">{error}</p>}
+      {error && <p class="small well list-note">{error}</p>}
       <div class="chat-rows" role="list">
-        {rows.map(({ t, last }) => {
-          const who = t.kind === "group" ? null : whoOf(t.id, meta);
+        {rows.map(({ t, last, who }) => {
           const unread = unreadCount(t, now);
           const typing = typingIn(t, now);
           return (
             <button key={t.id} role="listitem" class={`chat-row${active === t.id ? " active" : ""}${unread ? " unread" : ""}`} onClick={() => go({ page: "messenger", thread: t.id })} id={`chat-${t.id}`}>
-              {who ? <Avatar who={who} /> : <GroupAvatar />}
+              {who ? <Avatar who={who} size={64} dot={dotOf(who, t, now)} /> : <GroupAvatar size={64} />}
               <span class="chat-row-main">
                 <span class="chat-row-top">
                   <span class="chat-row-name" lang="la">{who?.name ?? GROUP.name}</span>
@@ -209,21 +292,37 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
                       <i class="typing-text">{t.kind === "group" ? `${nameOf(typing)} is typing…` : "typing…"}</i>
                     ) : last ? (
                       <>
-                        {(t.kind === "group" || last.from === "me") && <span class="muted">{nameOf(last.from)}: </span>}
+                        {(t.kind === "group" || last.from === "me") && <span>{nameOf(last.from)}: </span>}
                         <span lang="la">{last.la}</span>
                       </>
                     ) : (
-                      <span class="muted">{who ? `${who.job}, ${who.city}` : PEOPLE.map((x) => x.name).join(", ")}</span>
+                      <span>{who ? `${who.job}, ${who.city}` : PEOPLE.map((x) => x.name).join(", ")}</span>
                     )}
                   </span>
                   {unread > 0 && <span class="unread-badge" aria-label={`${unread} unread`}>{roman(unread)}</span>}
                 </span>
               </span>
+              <span class="chat-row-go" aria-hidden="true"><Icon.chevron /></span>
             </button>
           );
         })}
+        {!rows.length && <p class="muted small list-note">Nothing found for "{query.trim()}".</p>}
+        <ListFoot />
       </div>
     </aside>
+  );
+}
+
+/** Under the chats: a laurel, a motto, and Livy's bust (B. Beatrizet, 1582). */
+function ListFoot() {
+  return (
+    <div class="list-foot" aria-hidden="true">
+      <Sprig cls="foot-sprig" />
+      <span class="list-motto" lang="la" title="Learning by speaking opens the world">
+        DISCERE<br />LOQVENDO<br />MVNDVM APERIT.
+      </span>
+      <img class="list-bust" src={ENGRAVINGS.bust.src} alt="" />
+    </div>
   );
 }
 
@@ -237,7 +336,7 @@ function Finding({ onStop }: { onStop: () => void }) {
   }, []);
   return (
     <div class="finding well row" role="status">
-      <span class="avatar" style={{ width: "40px", height: "40px" }}>
+      <span class="avatar" style={{ width: "44px", height: "44px" }}>
         <img src={faces[(i * 7) % faces.length]} alt="" />
       </span>
       <span class="ui small" style={{ flex: 1 }}>Looking for someone somewhere in the Roman world…</span>
@@ -248,6 +347,25 @@ function Finding({ onStop }: { onStop: () => void }) {
 
 // ------------------------------------------------------------------ chat
 
+/** What a tapped word is: "librum — accusative singular of liber (book)". */
+function wordNote(a: Analysis, text: string): { text: string; entry?: Entry } {
+  const e = a.entry;
+  const name = e.tags.includes("name");
+  const openable = !("chat" in e.source) && !name ? e : undefined;
+  if (e.kind === "noun" || e.kind === "adj") {
+    const [c, n] = a.key.split(".");
+    const caseName = c === "voc" ? "calling form" : `${CASE_NAMES[c as keyof typeof CASE_NAMES]} ${n === "pl" ? "plural" : "singular"}`;
+    return { text: `${text} — ${caseName} of ${headword(e)}${name ? " (a name)" : ` (${e.en})`}`, entry: openable };
+  }
+  if (e.kind === "verb") {
+    const head = headword(e);
+    if (a.key === "inf") return { text: `${text} — infinitive of ${head} (to ${e.env.base})`, entry: openable };
+    const pn = a.key.split(".")[1] as PN;
+    return { text: `${text} — the "${PN_NAMES[pn] ?? pn}" form of ${head} (${e.env.base})`, entry: openable };
+  }
+  return { text: `${text} — ${name ? "a name" : e.en}`, entry: openable };
+}
+
 function ChatView({ id, now }: { id: string; now: number }) {
   const meta = getMeta();
   const t = getThread(id);
@@ -256,7 +374,13 @@ function ChatView({ id, now }: { id: string; now: number }) {
   const who = group ? null : members[0];
   const [profile, setProfile] = useState<Who | null>(null);
   const [openEn, setOpenEn] = useState<string[]>([]);
-  const [gloss, setGloss] = useState<{ msg: string; word: string; text: string } | null>(null);
+  const [allEn, setAllEn] = useState(false);
+  const [card, setCard] = useState<{ msg: string; index: number } | null>(null);
+  const [wordOpen, setWordOpen] = useState<Entry | null>(null);
+  const [words, setWords] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [search, setSearch] = useState<string | null>(null);
+  const [hit, setHit] = useState(0);
   const list = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const shown = arrived(t, now);
@@ -277,37 +401,82 @@ function ChatView({ id, now }: { id: string; now: number }) {
   const comp = composing(id);
   const typingWho = typing ?? (comp && comp.at <= now ? comp.who : null);
 
-  // stay at the newest message unless the learner scrolled up to read
+  // stay at the newest message unless the learner scrolled up to read, also when
+  // something below grows (a font that loads late, a word card, the typing dots)
+  const flow = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = list.current;
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
   }, [count, typingWho, id]);
+  useEffect(() => {
+    const el = list.current;
+    if (!el || !flow.current || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (atBottom.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(flow.current);
+    ro.observe(el); // the box itself: a note in the composer, a phone keyboard
+    return () => ro.disconnect();
+  }, []);
+  // the menu closes on a tap anywhere else
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: PointerEvent) => !(e.target as HTMLElement).closest?.(".menu-wrap") && setMenu(false);
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [menu]);
+  // a word card that opens below the screen comes into view
+  useEffect(() => {
+    if (card) list.current?.querySelector(".word-card")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [card?.msg, card?.index]);
   const onScroll = () => {
     const el = list.current;
     if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
+  // find in this chat: the messages that match, the current one in view
+  const q = plain((search ?? "").trim());
+  const hits = q ? shown.filter((m) => plain(m.la).includes(q) || plain(m.en ?? "").includes(q)).map((m) => m.id) : [];
+  const current = hits.length ? hits[((hit % hits.length) + hits.length) % hits.length] : null;
+  useEffect(() => {
+    if (current) document.getElementById(`msg-${current}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [current]);
+
   const status = who ? statusAt(who.day, who.tz, now) : null;
   const sub = who ? presence(who, t, now, status!) : typingWho ? `${nameOf(typingWho)} is typing…` : members.map((w) => w.name).join(", ");
   const error = errorOf(id);
 
+  /** A tap on a word shows what it is under the message; elsewhere on the message, its English. */
   const onBubble = (m: Msg, e: MouseEvent) => {
     const w = (e.target as HTMLElement).closest<HTMLElement>(".w");
-    if (w?.title) {
-      setGloss(gloss?.msg === m.id && gloss.word === w.textContent ? null : { msg: m.id, word: w.textContent ?? "", text: w.title });
-      return;
+    const bubble = (e.currentTarget as HTMLElement) ?? null;
+    if (w && bubble) {
+      const index = [...bubble.querySelectorAll(".bubble-text .w")].indexOf(w);
+      if (index >= 0) {
+        setCard(card?.msg === m.id && card.index === index ? null : { msg: m.id, index });
+        return;
+      }
     }
     setOpenEn(openEn.includes(m.id) ? openEn.filter((x) => x !== m.id) : [...openEn, m.id]);
+  };
+
+  /** The word card for a message, if one of its words was tapped. */
+  const cardOf = (m: Msg) => {
+    if (card?.msg !== m.id) return null;
+    const tok = annotate(m.la, lex).filter((x) => x.isWord)[card.index];
+    const a = tok?.analysis ?? tok?.readings?.[0];
+    if (!tok) return null;
+    return a ? wordNote(a, tok.text) : { text: `${tok.text} — a word you have not learned yet` };
   };
 
   let lastDay = "";
   const lastMine = shown.filter((m) => m.from === "me").at(-1)?.id;
   return (
-    <section class="chat panel" aria-label={`Chat with ${who?.name ?? GROUP.name}`}>
+    <section class="chat msgr-panel" aria-label={`Chat with ${who?.name ?? GROUP.name}`}>
       <header class="chat-head">
         <button class="btn ghost small chat-back" onClick={() => go({ page: "messenger" })} aria-label="Back to the chats">←</button>
         <button class="chat-head-who" onClick={() => who && setProfile(who)} disabled={!who} id="chat-profile">
-          {who ? <Avatar who={who} size={40} /> : <GroupAvatar size={40} />}
+          {who ? <Avatar who={who} size={72} dot={dotOf(who, t, now)} /> : <GroupAvatar size={72} />}
           <span class="stack" style={{ gap: 0, minWidth: 0 }}>
             <span class="chat-head-name" lang="la">{who?.name ?? GROUP.name}</span>
             <span class={`chat-head-sub${typingWho ? " typing-text" : ""}`}>{who && typingWho ? "typing…" : sub}</span>
@@ -317,68 +486,133 @@ function ChatView({ id, now }: { id: string; now: number }) {
           <div class="group-faces">
             {members.map((w) => (
               <button key={w.id} class="linkish" onClick={() => setProfile(w)} title={w.name} aria-label={`${w.name}'s profile`}>
-                <Avatar who={w} size={28} />
+                <Avatar who={w} size={30} />
               </button>
             ))}
           </div>
         )}
+        <div class="chat-tools">
+          <button class="round-btn" aria-label="Find in this chat" aria-pressed={search !== null} onClick={() => { setSearch(search === null ? "" : null); setHit(0); }}>
+            <Icon.search />
+          </button>
+          <button class="round-btn" aria-label="Your words" onClick={() => setWords(true)}>
+            <Icon.book />
+          </button>
+          <div class="menu-wrap">
+            <button class="round-btn" aria-label="More" aria-expanded={menu} onClick={() => setMenu(!menu)}>
+              <Icon.more />
+            </button>
+            {menu && (
+              <div class="menu-pop" role="menu" onClick={() => setMenu(false)}>
+                {who && <button role="menuitem" onClick={() => setProfile(who)}>Profile</button>}
+                <button role="menuitem" onClick={() => setAllEn(!allEn)}>{allEn ? "Hide the English" : "Show the English of all"}</button>
+                {who?.stranger && <button role="menuitem" onClick={() => setProfile(who)}>Say goodbye…</button>}
+              </div>
+            )}
+          </div>
+        </div>
+        <Sprig cls="head-sprig" flip />
       </header>
 
+      {search !== null && (
+        <div class="chat-find">
+          <Icon.search />
+          <input
+            id="chat-find"
+            type="search"
+            value={search}
+            placeholder="Find in this chat (Latin or English)…"
+            autoFocus
+            onInput={(e) => { setSearch((e.target as HTMLInputElement).value); setHit(0); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setHit(hit + (e.shiftKey ? -1 : 1));
+              if (e.key === "Escape") setSearch(null);
+            }}
+          />
+          <span class="small muted">{q ? (hits.length ? `${(((hit % hits.length) + hits.length) % hits.length) + 1} of ${hits.length}` : "none") : ""}</span>
+          <button class="btn ghost small" disabled={hits.length < 2} onClick={() => setHit(hit - 1)} aria-label="Previous">↑</button>
+          <button class="btn ghost small" disabled={hits.length < 2} onClick={() => setHit(hit + 1)} aria-label="Next">↓</button>
+        </div>
+      )}
+
       <div class="chat-msgs" ref={list} onScroll={onScroll} data-ask="Messages">
-        {who && shown.length === 0 && <Intro who={who} />}
-        {shown.map((m, i) => {
-          const day = dayLabel(m.at, now);
-          const newDay = day !== lastDay;
-          lastDay = day;
-          const mine = m.from === "me";
-          const sender = !mine && group ? whoOf(m.from, meta) : null;
-          const prev = shown[i - 1];
-          const firstOfRun = !prev || prev.from !== m.from || newDay;
-          return (
-            <Fragment key={m.id}>
-              {newDay && <div class="chat-day"><span>{day}</span></div>}
-              {m.id === firstUnread.current && <div class="chat-new"><span>New</span></div>}
-              <div class={`bubble-row${mine ? " mine" : ""}${firstOfRun ? " first" : ""}`}>
-                {sender && (firstOfRun ? <button class="linkish bubble-face" onClick={() => setProfile(sender)}><Avatar who={sender} size={30} /></button> : <span class="bubble-face" />)}
-                <div class={`bubble${mine ? " mine" : ""}`} onClick={(e) => onBubble(m, e as unknown as MouseEvent)}>
-                  {sender && firstOfRun && <span class="bubble-name" lang="la">{sender.name}</span>}
-                  <span class="bubble-text">
-                    <LatinText text={m.la} lex={lex} />
-                  </span>
-                  {gloss?.msg === m.id && (
-                    <span class="bubble-gloss small ui" role="note">
-                      <strong lang="la">{gloss.word}</strong> = {gloss.text}
+        <div class="chat-flow" ref={flow}>
+          {who && shown.length === 0 && <Intro who={who} />}
+          {shown.map((m, i) => {
+            const day = dayLabel(m.at, now);
+            const newDay = day.la !== lastDay;
+            lastDay = day.la;
+            const mine = m.from === "me";
+            const sender = mine ? null : whoOf(m.from, meta);
+            const prev = shown[i - 1];
+            // a new run (face, tail, name) after someone else, a new day, the "New" line or a pause of ten minutes
+          const firstOfRun = !prev || prev.from !== m.from || newDay || m.id === firstUnread.current || m.at - prev.at > 10 * 60_000;
+            const note = cardOf(m);
+            return (
+              <Fragment key={m.id}>
+                {newDay && (
+                  <div class="chat-day" title={day.en}>
+                    <Sprig cls="day-sprig" />
+                    <span lang={day.la === day.en ? "en" : "la"}>{day.la}</span>
+                    <Sprig cls="day-sprig" flip />
+                  </div>
+                )}
+                {m.id === firstUnread.current && <div class="chat-new"><span>New</span></div>}
+                <div class={`bubble-row${mine ? " mine" : ""}${firstOfRun ? " first" : ""}`} id={`msg-${m.id}`}>
+                  {!mine &&
+                    (firstOfRun && sender ? (
+                      <button class="linkish bubble-face" onClick={() => setProfile(sender)} aria-label={`${sender.name}'s profile`}>
+                        <Avatar who={sender} size={56} />
+                      </button>
+                    ) : (
+                      <span class="bubble-face" />
+                    ))}
+                  <div class={`bubble${mine ? " mine" : ""}${firstOfRun ? " tail" : ""}${current === m.id ? " hit" : hits.includes(m.id) ? " found" : ""}`} onClick={(e) => onBubble(m, e as unknown as MouseEvent)}>
+                    {group && sender && firstOfRun && <span class="bubble-name" lang="la">{sender.name}</span>}
+                    <span class="bubble-text">
+                      <LatinText text={m.la} lex={lex} />
                     </span>
-                  )}
-                  {openEn.includes(m.id) && m.en && <span class="bubble-en">{m.en}</span>}
-                  {m.newWords && openEn.includes(m.id) && <span class="bubble-en small">New to you: {m.newWords.join(", ")}</span>}
-                  <span class="bubble-meta">
-                    {clock(m.at)}
-                    {mine && t.kind !== "group" && <Ticks m={m} now={now} />}
-                  </span>
+                    {(allEn || openEn.includes(m.id)) && m.en && <span class="bubble-en">{m.en}</span>}
+                    {m.newWords && (allEn || openEn.includes(m.id)) && <span class="bubble-en small">New to you: {m.newWords.join(", ")}</span>}
+                    <span class="bubble-meta">
+                      {clock(m.at)}
+                      {mine && t.kind !== "group" && <Ticks m={m} now={now} />}
+                    </span>
+                  </div>
                 </div>
+                {note && (
+                  <div class={`word-card-row${mine ? " mine" : ""}`}>
+                    <button class="word-card" onClick={() => note.entry && setWordOpen(note.entry)} disabled={!note.entry} aria-label={note.entry ? `${note.text}: open the word` : note.text}>
+                      <Icon.book />
+                      <span class="word-card-text">{note.text}</span>
+                      {note.entry && <span class="word-card-go"><Icon.chevron /></span>}
+                    </button>
+                  </div>
+                )}
+                {mine && (m.check || m.id === lastMine || openEn.includes(m.id)) && <Checked m={m} id={id} />}
+              </Fragment>
+            );
+          })}
+          {typingWho && (
+            <div class="bubble-row first">
+              <span class="bubble-face"><Avatar who={whoOf(typingWho, meta)!} size={56} /></span>
+              <div class="bubble typing tail" aria-label={`${nameOf(typingWho)} is typing`}>
+                <i /><i /><i />
               </div>
-              {mine && (m.check || m.id === lastMine || openEn.includes(m.id)) && <Checked m={m} id={id} />}
-            </Fragment>
-          );
-        })}
-        {typingWho && (
-          <div class="bubble-row">
-            {group && <span class="bubble-face"><Avatar who={whoOf(typingWho, meta)!} size={30} /></span>}
-            <div class="bubble typing" aria-label={`${nameOf(typingWho)} is typing`}>
-              <i /><i /><i />
             </div>
-          </div>
-        )}
-        {error && (
-          <div class="chat-error well small">
-            {error} <button class="linkish" onClick={() => void answer(id)}>Try again</button>
-          </div>
-        )}
+          )}
+          {error && (
+            <div class="chat-error well small">
+              {error} <button class="linkish" onClick={() => void answer(id)}>Try again</button>
+            </div>
+          )}
+        </div>
       </div>
 
       <Composer id={id} />
       {profile && <Profile who={profile} t={getThread(profile.id)} now={now} onClose={() => setProfile(null)} />}
+      {words && <WordsSheet onClose={() => setWords(false)} onPick={(f) => insertIntoComposer(id, f)} />}
+      {wordOpen && <WordModal e={wordOpen} onClose={() => setWordOpen(null)} />}
     </section>
   );
 }
@@ -393,11 +627,11 @@ function Ticks({ m, now }: { m: Msg; now: number }) {
   );
 }
 
-/** A stranger's first page: who they are, before anyone has written. */
+/** Someone's first page: who they are, before anyone has written. */
 function Intro({ who }: { who: Who }) {
   return (
     <div class="chat-intro stack">
-      <Avatar who={who} size={88} />
+      <Avatar who={who} size={96} />
       <p class="ui">
         <b lang="la">{who.name}</b>, {who.age} · {who.job} · {who.city}
       </p>
@@ -443,7 +677,7 @@ function CheckNote({ c, onUse }: { c: NonNullable<Msg["check"]>; onUse?: (s: str
           {onUse && <button class="linkish small" onClick={() => onUse(c.better!)}>Use this</button>}
         </span>
       )}
-      {c.note && <span class="check-text small">{c.note.replace(/«|»/g, "")}</span>}
+      {c.note && <span class="check-text small"><Inline text={c.note} /></span>}
     </div>
   );
 }
@@ -452,22 +686,51 @@ function CheckNote({ c, onUse }: { c: NonNullable<Msg["check"]>; onUse?: (s: str
 
 const DRAFT_KEY = (id: string) => `tabula-latina-draft-${id}`;
 
+/** Something to add to a chat's box from elsewhere (the words sheet): the composer listens. */
+const inserts = new Map<string, (s: string) => void>();
+const insertIntoComposer = (id: string, s: string) => inserts.get(id)?.(s);
+
+const EMOJI = [
+  "😊", "😂", "🙂", "😉", "😍", "🥰", "😘", "😎", "🤔", "😴", "😩", "😢", "😭", "😡", "😱", "🤗",
+  "👍", "👋", "🙏", "💪", "❤️", "💔", "🔥", "✨", "⭐", "🌙", "☀️", "🌧️", "🍷", "🍇", "🍞", "🧀",
+  "🐐", "🐂", "🐈", "🦉", "🏛️", "📜", "✍️", "📚", "⚔️", "🛡️", "🏺", "🌿", "🌹", "🎶", "🎭", "🏇",
+];
+
 function Composer({ id }: { id: string }) {
   const [text, setText] = useState(() => storage.get(DRAFT_KEY(id)) ?? "");
   const [result, setResult] = useState<NonNullable<Msg["check"]> | null>(null);
   const [checking, setChecking] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [words, setWords] = useState(false);
+  const [emoji, setEmoji] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
   const change = (v: string) => {
     setText(v);
     storage.set(DRAFT_KEY(id), v);
     setResult(null);
   };
+  /** Puts something in at the cursor (an emoji), or after what is written (a word). */
+  const put = (s: string, atCursor: boolean) => {
+    const el = box.current;
+    const cur = el?.value ?? text;
+    if (atCursor && el) {
+      const a = el.selectionStart ?? cur.length;
+      const b = el.selectionEnd ?? cur.length;
+      change(cur.slice(0, a) + s + cur.slice(b));
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(a + s.length, a + s.length);
+      });
+    } else change(`${cur.trimEnd()}${cur.trim() ? " " : ""}${s}`);
+  };
+  useEffect(() => {
+    inserts.set(id, (s) => put(s, false));
+    return () => void inserts.delete(id);
+  });
   const doSend = () => {
     if (!text.trim()) return;
     send(id, text);
     change("");
+    setEmoji(false);
     box.current?.focus();
   };
   const doCheck = async () => {
@@ -483,9 +746,16 @@ function Composer({ id }: { id: string }) {
     <div class="composer">
       {result && <CheckNote c={result} onUse={(s) => change(s)} />}
       {err && <p class="small bad">{err}</p>}
+      {emoji && (
+        <div class="emoji-pop" role="dialog" aria-label="Emoji">
+          {EMOJI.map((e) => (
+            <button key={e} class="emoji-btn" onClick={() => put(e, true)} aria-label={`Add ${e}`}>{e}</button>
+          ))}
+        </div>
+      )}
       <div class="composer-row">
-        <button class="btn ghost small" onClick={() => setWords(true)} title="Your words" aria-label="Your words">
-          <Icon.book />
+        <button class="plus-btn" aria-label="Emoji" aria-expanded={emoji} onClick={() => setEmoji(!emoji)}>
+          <Icon.plus />
         </button>
         <textarea
           ref={box}
@@ -501,16 +771,16 @@ function Composer({ id }: { id: string }) {
               e.preventDefault();
               doSend();
             }
+            if (e.key === "Escape") setEmoji(false);
           }}
         />
-        <button id="composer-check" class="btn ghost small" onClick={() => void doCheck()} disabled={!text.trim() || checking} title="Ask the coach whether it is right">
-          {checking ? "…" : <><Icon.check /> Check</>}
+        <button id="composer-check" class="check-btn" onClick={() => void doCheck()} disabled={!text.trim() || checking} title="Ask the coach whether it is right">
+          {checking ? "…" : <><Icon.check /><span class="check-label"> Check</span></>}
         </button>
-        <button id="composer-send" class="btn gold small" onClick={doSend} disabled={!text.trim()} aria-label="Send">
-          <Icon.arrow />
+        <button id="composer-send" class="send-btn" onClick={doSend} disabled={!text.trim()} aria-label="Send">
+          <Icon.send />
         </button>
       </div>
-      {words && <WordsSheet onPick={(w) => change(`${text.trimEnd()}${text.trim() ? " " : ""}${w}`)} onClose={() => setWords(false)} />}
     </div>
   );
 }
@@ -568,11 +838,11 @@ function Profile({ who, t, now, onClose }: { who: Who; t: Thread; now: number; o
     <Modal onClose={onClose} label={`${who.name}'s profile`}>
       <div class="stack profile">
         <div class="spread">
-          <span class="eyebrow">{who.stranger ? "Met by chance" : "Amīcus"}</span>
+          <span class="eyebrow">{who.stranger ? "Met by chance" : who.g === "f" ? "Amīca" : "Amīcus"}</span>
           <button class="btn ghost small" onClick={onClose} aria-label="Close"><Icon.close /></button>
         </div>
         <div class="profile-top">
-          <Avatar who={who} size={132} />
+          <Avatar who={who} size={132} dot={dotOf(who, t, now)} />
           <div class="stack" style={{ gap: "4px" }}>
             <h2 lang="la">{who.name}</h2>
             <span class="ui">{who.age} · {who.job}</span>
@@ -616,6 +886,15 @@ function Profile({ who, t, now, onClose }: { who: Who; t: Thread; now: number; o
               <button class="btn ghost small" onClick={() => setBye(false)}>Keep</button>
             </div>
           ))}
+        <p class="small muted">
+          Engravings here: {[ENGRAVINGS.rome, ENGRAVINGS.capital, ENGRAVINGS.bust].map((x, i) => (
+            <Fragment key={x.url}>
+              {i > 0 && "; "}
+              <a href={x.url} target="_blank" rel="noreferrer">{x.title}</a>
+            </Fragment>
+          ))}{" "}
+          (The Met, CC0).
+        </p>
       </div>
     </Modal>
   );

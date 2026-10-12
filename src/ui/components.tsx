@@ -33,8 +33,22 @@ export const Icon = {
   tap: () => P("M9 11V5.5a1.5 1.5 0 0 1 3 0V11m0-1.5a1.5 1.5 0 0 1 3 0V11m0-.5a1.5 1.5 0 0 1 3 0v4.5a6 6 0 0 1-6 6h-.6a6 6 0 0 1-4.6-2.2L4.3 15a1.5 1.5 0 0 1 2.3-1.9L9 15.5"),
   // a box with a text cursor: type it in the gap
   gap: () => P("M3 7h18v10H3zM9 9.5v5M7.5 9.5h3M7.5 14.5h3"),
-  // a wax tablet with lines of writing: the messenger
+  // a wax tablet with lines of writing
   tablet: () => P("M4 5h16v14H4zM7 9h10M7 12h10M7 15h6"),
+  // a sealed letter: the messenger
+  letter: () => P("M3.5 6.5h17v11h-17zM3.5 6.5l8.5 6.5 8.5-6.5M3.5 17.5l6.3-5.3m10.7 5.3-6.3-5.3"),
+  search: () => P("M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Zm4.7-1.8L20 20"),
+  plus: () => P("M12 5v14M5 12h14"),
+  // a paper plane: send
+  send: () => P("M21 3 3 10.5l7 2.5 2.5 7L21 3Zm-11 10 5.5-5.5"),
+  chevron: () => P("M9.5 6l6 6-6 6"),
+  more: () => (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="12" cy="5.5" r="1.7" />
+      <circle cx="12" cy="12" r="1.7" />
+      <circle cx="12" cy="18.5" r="1.7" />
+    </svg>
+  ),
   gear: () => P("M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.7 1.7 1l.4 2.5h4l.4-2.5c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6Z"),
 };
 

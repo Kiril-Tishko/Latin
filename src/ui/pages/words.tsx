@@ -114,7 +114,7 @@ function Forms({ e }: { e: Entry }) {
 /** A stable number for a word, to seed its examples. */
 const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 2147483647, 7);
 
-function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
+export function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
   const card = CARD_BY_ID.get(e.id);
   // two short, sensible sentences with words and grammar the learner knows; "Other examples" draws new ones
   const [round, setRound] = useState(0);

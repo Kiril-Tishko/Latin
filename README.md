@@ -48,7 +48,9 @@ published as a private claude.ai artifact.
   hours, moods and happenings that change at random, text first now and then,
   type, read and answer when awake; a scheduled routine lets them write while
   the page is closed and notifies your phone. Tap a message for its English, a
-  word for its meaning; Check asks the coach about your Latin.
+  word for what it is; Check asks the coach about your Latin. It looks like an
+  old Roman letter desk: parchment panels among real engravings (Piranesi's
+  Forum, Corinthian columns, Livy's bust), laurels and big faces.
 - **Claude settings**: the model (Haiku, Sonnet, Opus) and how hard it thinks,
   chosen separately for the coach and for the people in the messenger.
 - **Fix my mistakes**: your mistakes come back later as new exercises on the

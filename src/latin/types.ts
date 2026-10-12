@@ -90,8 +90,8 @@ interface EntryBase {
   alt?: string[];
   /** Semantic tags: person, animal, place, thing, food, building, nature, abstract… */
   tags: string[];
-  /** Where the word came from: a lesson number or the Discover deck. */
-  source: { lesson: number } | { deck: true };
+  /** Where the word came from: a lesson number, the Discover deck, or the messenger's chat words. */
+  source: { lesson: number } | { deck: true } | { chat: true };
   /** Short note shown on the word card (e.g. "masculine, even though it ends in -a"). */
   note?: string;
 }

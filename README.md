@@ -37,8 +37,20 @@ published as a private claude.ai artifact.
   English and a word for its meaning, listen, answer two questions, then practise
   the story's lines.
 - **Answer in Latin**: questions in Latin ("Quid legis?", quid = what) about you,
-  about the stories you read, and small scenes, answered with your own words;
-  the site checks the grammar and what the question asks for.
+  your friends, the stories you read and little imagined scenes, fresh from Claude
+  each round and answered with your own words, as creatively as you like; the
+  site checks the grammar and the coach judges the answer.
+- **Nūntiī (messages)**: a messenger with five friends in and around Rome
+  around 100 AD (Iūlia, Marcus, Gāius, Claudia, Lūcius), their group chat, and
+  "Someone new": a stranger from anywhere in the Roman world, rolled at random
+  (from ordinary to extreme or odd) and made real by Claude. They write only with
+  your words and the rules you have learned, have Roman portraits, their own
+  hours, moods and happenings that change at random, text first now and then,
+  type, read and answer when awake; a scheduled routine lets them write while
+  the page is closed and notifies your phone. Tap a message for its English, a
+  word for its meaning; Check asks the coach about your Latin.
+- **Claude settings**: the model (Haiku, Sonnet, Opus) and how hard it thinks,
+  chosen separately for the coach and for the people in the messenger.
 - **Fix my mistakes**: your mistakes come back later as new exercises on the
   same rules and words.
 - **Latin in English**: what English took from Latin, from Roman traders to
@@ -47,7 +59,12 @@ published as a private claude.ai artifact.
   "find the Latin" practice (dormitory → dormiō).
 - **Ask Claude**: a tutor that sees your lessons, words and weak spots, and what
   is on your screen (the exercise, the lines of a lesson in view, the word or card
-  you opened), so you can ask "what does this sentence mean?".
+  you opened, the chat you are in), so you can ask "what does this sentence mean?".
+
+Portraits: painted mummy portraits from Roman Egypt and a Boscoreale wall
+painting, from The Met, the Cleveland Museum of Art and the Badisches
+Landesmuseum Karlsruhe (CC0) and the Medelhavsmuseet, Stockholm (CC BY 4.0);
+each profile credits its own.
 
 ARTIFACT_URL: https://claude.ai/artifact/3cvi4ofuaPLg6LfXXf7efX
 

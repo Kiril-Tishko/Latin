@@ -14,7 +14,8 @@ import { dayKey, Progress } from "../../trainer/progress";
 import { applyResult, buildSession, mistakesSession, mistakesToFix, nextExercise, partExercise } from "../../trainer/session";
 import { Line } from "../../trainer/lines";
 import { practiceLines, storyOpen, storySession } from "../../trainer/stories";
-import { answersSession } from "../../trainer/answers";
+import { answersSession, openExercise } from "../../trainer/answers";
+import { freshQuestions, judgeOpen, withJudgement } from "../coach";
 import { videoSession } from "../../trainer/video";
 import { openAsk, judge } from "../ask";
 import { CaseChip, Icon, Laurel, toast } from "../components";
@@ -211,7 +212,22 @@ export function startSession(mode: Mode): boolean {
     return false;
   }
   setSession({ mode, items, index: 0, attempts: [], size: items.length, learned: [] });
+  // Answer in Latin: Claude writes fresh questions for this round; they take the places of the ones not reached yet
+  if (mode.kind === "answers" && !mode.story) void freshen(session!);
   return true;
+}
+
+/** Puts Claude's fresh questions into a round of Answer in Latin, after the exercise on screen. */
+async function freshen(started: Session) {
+  const fresh = await freshQuestions(started.items.length);
+  if ("error" in fresh || !fresh.length || !session || session.mode !== started.mode) return;
+  const s = session;
+  const c = ctx();
+  const keep = s.items.slice(0, s.index + 1);
+  const made = fresh.map((q) => openExercise(c, q)).filter((e) => !keep.some((k) => k.context === e.context));
+  const rest = s.items.slice(s.index + 1);
+  const items = [...keep, ...made, ...rest].slice(0, s.items.length);
+  setSession({ ...s, items });
 }
 
 /** A part learned on an earlier day is recalled once a day before its exercises. */
@@ -550,10 +566,24 @@ function Runner({ s }: { s: Session }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [ex.id, res, picked, answer]);
 
+  // an answer in the learner's own words is read by the coach; meanwhile the box waits
+  const [reading, setReading] = useState(false);
   function check(given = answer) {
-    if (res) return;
+    if (res || reading) return;
     if (!given.trim() && ex.answer !== "choice") return;
-    setRes(ex.check(given));
+    const engine = ex.check(given);
+    if (ex.kind !== "answer") {
+      setRes(engine);
+      return;
+    }
+    setReading(true);
+    const id = ex.id;
+    void judgeOpen(ex, given, engine).then((j) => {
+      if (session?.items[session.index]?.id !== id) return;
+      setReading(false);
+      setRes("error" in j ? engine : withJudgement(ex, engine, j));
+      if (!("error" in j)) setJudgement(null);
+    });
   }
 
   function giveUp() {
@@ -732,8 +762,8 @@ function Runner({ s }: { s: Session }) {
                 <button class="linkish" onClick={giveUp}>I don't know</button>
               </div>
               {ex.answer !== "choice" && (
-                <button class="btn big" onClick={() => check()} disabled={!answer.trim()}>
-                  Check <span class="kbd" style={{ color: "inherit", borderColor: "currentColor" }}>Enter</span>
+                <button class="btn big" onClick={() => check()} disabled={!answer.trim() || reading}>
+                  {reading ? "The coach is reading…" : <>Check <span class="kbd" style={{ color: "inherit", borderColor: "currentColor" }}>Enter</span></>}
                 </button>
               )}
             </div>
@@ -762,7 +792,7 @@ function Runner({ s }: { s: Session }) {
             <div class="spread ex-next">
               <div class="row">
                 <button class="btn ghost" onClick={askWhy}><Icon.quill /> Why?</button>
-                {res.verdict !== "correct" && ex.answer !== "choice" && answer.trim() && answer !== "—" && (
+                {res.verdict !== "correct" && ex.answer !== "choice" && ex.kind !== "answer" && answer.trim() && answer !== "—" && (
                   <button class="btn ghost" onClick={dispute} disabled={judging} title="Ask Claude to check whether your answer is also correct">
                     {judging ? "Asking…" : (
                       <>
@@ -1050,7 +1080,7 @@ function Feedback({ ex, res, answer }: { ex: Exercise; res: Result; answer: stri
         </div>
       )}
       <div class="stack answer" style={{ gap: "4px" }}>
-        <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{ex.kind === "answer" ? "For example" : res.verdict === "correct" ? "Model answer" : "Correct answer"}</span>
+        <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{ex.kind === "answer" ? (res.coached ? "Your idea, corrected" : "For example") : res.verdict === "correct" ? "Model answer" : "Correct answer"}</span>
         {ex.kind === "meaning" ? (
           <p class="latin-lg" style={{ fontFamily: "var(--f-text)" }}>{res.expected}</p>
         ) : ex.answer === "en" ? (

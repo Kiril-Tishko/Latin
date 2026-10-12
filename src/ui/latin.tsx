@@ -1,7 +1,7 @@
 // Latin with colored endings. Every inflected word shows its stem in ink and
 // its ending in the color of its case (verbs: teal); plurals are underlined.
 import { ComponentChildren, Fragment } from "preact";
-import { Analysis, annotate, caseOf, numOf } from "../latin/analyze";
+import { Analysis, annotate, caseOf, Lexicon, numOf } from "../latin/analyze";
 import { LToken } from "../latin/generate";
 import { describe } from "../latin/check";
 import { capitalize, stripMarks } from "../latin/text";
@@ -77,8 +77,8 @@ export function LatinTokens({ tokens, blank, whole, plain, period = true, cap = 
 }
 
 /** Any Latin text (lesson sentences, Claude's answers). Unknown words are shown plain. */
-export function LatinText({ text, plain, cls = "" }: { text: string; plain?: boolean; cls?: string }) {
-  const tokens = annotate(text, derived().lexicon);
+export function LatinText({ text, plain, cls = "", lex }: { text: string; plain?: boolean; cls?: string; lex?: Lexicon }) {
+  const tokens = annotate(text, lex ?? derived().lexicon);
   return (
     <span class={`latin ${plain ? "plain" : ""} ${cls}`} lang="la">
       {tokens.map((t, i) =>

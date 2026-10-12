@@ -45,6 +45,20 @@ export interface PartStat {
   learned?: number;
 }
 
+/** Which Claude answers: the model family (quick = Haiku, default = Sonnet, complex = Opus) and how hard it thinks. */
+export type ModelTier = "quick" | "default" | "complex";
+export type Effort = "low" | "medium" | "high";
+export interface ModelChoice {
+  tier: ModelTier;
+  effort: Effort;
+}
+
+/** Who the learner is in the messenger: how the people there call them, and the endings that go with it. */
+export interface Me {
+  name: string;
+  g: "m" | "f";
+}
+
 export interface Settings {
   /** Show long marks (ā) in Latin text. */
   macrons: boolean;
@@ -59,6 +73,14 @@ export interface Settings {
   rate: number;
   /** Read Latin prompts aloud as soon as they appear. */
   autoplay: boolean;
+  /** The coach: Ask Claude, the checks of answers, Answer in Latin. */
+  coach: ModelChoice;
+  /** The people in the messenger (Nūntiī). */
+  chat: ModelChoice;
+  /** The learner in the messenger (unset until they say). */
+  me?: Me;
+  /** The learner's time zone (IANA), e.g. "Europe/Kyiv"; unset: the device's. */
+  tz?: string;
 }
 
 export interface Progress {
@@ -86,7 +108,17 @@ export interface Progress {
 }
 
 // sensible sentences only: silly pairings confused the learner
-export const DEFAULT_SETTINGS: Settings = { macrons: true, dailyGoal: 20, silly: 0, hints: true, rate: 0.85, autoplay: false };
+// the coach: the balanced model thinking hard; the people in the messenger: the most capable one, as the learner asked
+export const DEFAULT_SETTINGS: Settings = {
+  macrons: true,
+  dailyGoal: 20,
+  silly: 0,
+  hints: true,
+  rate: 0.85,
+  autoplay: false,
+  coach: { tier: "default", effort: "high" },
+  chat: { tier: "complex", effort: "high" },
+};
 
 export function newProgress(): Progress {
   return {
@@ -127,6 +159,8 @@ export function migrate(raw: unknown): Progress {
     stories: p.stories ?? {},
     parts: p.parts ?? {},
   } as Progress;
+  out.settings.coach = modelChoice(out.settings.coach, base.settings.coach);
+  out.settings.chat = modelChoice(out.settings.chat, base.settings.chat);
   // Version 2 practises step by step. The learner remembered the words but not
   // the rules, so saves from version 1 start again at Lesson I.
   if ((p.version ?? 1) < 2) out.focusLesson = out.lessonsDone.length ? Math.min(...out.lessonsDone) : 1;
@@ -145,6 +179,18 @@ export function migrate(raw: unknown): Progress {
     Object.entries(out.parts).map(([id, st]) => [id, { seen: st.seen, right: st.right ?? 0, ...(st.learned ? { learned: st.learned } : {}) }]),
   );
   return out;
+}
+
+const TIERS: ModelTier[] = ["quick", "default", "complex"];
+const EFFORTS: Effort[] = ["low", "medium", "high"];
+
+/** A saved model choice, or the default where it is missing or unknown. */
+function modelChoice(x: unknown, fallback: ModelChoice): ModelChoice {
+  const m = (x ?? {}) as Partial<ModelChoice>;
+  return {
+    tier: TIERS.includes(m.tier as ModelTier) ? (m.tier as ModelTier) : fallback.tier,
+    effort: EFFORTS.includes(m.effort as Effort) ? (m.effort as Effort) : fallback.effort,
+  };
 }
 
 export const dayKey = (t = Date.now()) => {

@@ -19,6 +19,7 @@ import { Icon, toast } from "./components";
 import { Inline, Markup } from "./markup";
 import { SampleFn, sampleErrorText, sampler, storage } from "./platform";
 import { currentScreen, Screen, sharedByDefault, useScreenLabel } from "./screen";
+import { coachOpts, tierName } from "./models";
 import { derived, getProgress } from "./store";
 
 export interface AskContext {
@@ -114,13 +115,13 @@ const INSTRUCTIONS = `You are a friendly Latin tutor inside "Tabula Latina", a p
 The learner speaks English, Russian and Ukrainian natively. Explain in English. When it really helps, compare with Russian or Ukrainian grammar (cases, word order); they know both well.
 
 How to answer:
-- Short and structured by default, about 40-90 words: the answer itself in one **bold** line first, then 2-4 short bullets (the rule, why it applies here, one example as «Latin» = English). No greeting, no preamble, no closing summary, no offers of more help.
+- Short by default, about 30-90 words, but shaped by the question, not by a template. Choose what reads best each time: one or two plain sentences for a simple question; the key point in **bold** followed by 2-4 short bullets when there really are several points (a rule, why it applies here, an example); a short paragraph for a story, a comparison or a word's history; a few lines of forms when forms are compared. Do not start every answer the same way and do not force bullets onto something one sentence says well. No greeting, no preamble, no closing summary, no offers of more help.
 - A yes/no or one-word question gets one or two lines.
 - Give a longer, more open answer only when the learner asks for one ("tell me more", "explain in detail", "tell me about…") or wants to chat generally (history, culture, how a word came into English). Keep even that in short paragraphs or bullets, under about 250 words.
 - Stay inside what the learner knows (lessons, words and skills below). If you must use a word or form they have not learned, mark it "(new)" and keep it to a minimum.
 - Write every Latin word, form or sentence inside «guillemets», for example «puellam». For a form that could be read two ways, add #case.number inside the guillemets: «puellae#gen.sg», «discipulī#nom.pl». The page colors the endings. Use «» for Latin only: quote English, Russian and Ukrainian words with "double quotes".
 - Use **bold** only for the key point. No tables and no headings.
-- If the question is about a mistake, the bold line names the wrong ending and the right one; the bullets give the rule that decides it.
+- If the question is about a mistake, first name the wrong ending and the right one, then the rule that decides it.
 - Be exact. The rules under "Skills met" are this site's rules and they are correct: follow them. Check every Latin form before you write it. Never invent a grammar rule or pattern, and give only memory tricks that are true (an English relative, a real pattern). When there is no reliable way to tell (which infinitive a verb has, for example), say so plainly and suggest learning the pair («discō, discere»).
 - A question may end with [Facts from the site's grammar engine]: every Latin word in it, what each form can be, and its word's gender, group and forms. These facts are certain. Build your answer on them, never contradict them, and don't mention the note.
 - Where a word comes from and what it is related to: use the relatives in the facts, which are checked. Say which kind each is: borrowed (English, Russian or Ukrainian took it from Latin) or same ancient root (cousins from the common Indo-European ancestor, not borrowed). Never call a look-alike related, and never invent a relative; if the facts have none, say what you know and that it is less certain. Keep it short: the origin in one bold line, then the relatives as a short list.
@@ -213,7 +214,7 @@ Reply with only JSON: {"correct": true or false, "explanation": "one or two sent
 
 ${engineFacts([{ text: answer, mixed: true }, { text: ex.context, mixed: true }], derived().lexicon, derived().seenKnowledge.skills)}`;
   try {
-    const out = await sample.json<Judgement>(prompt, { modelTier: MODEL.tier, effort: MODEL.effort });
+    const out = await sample.json<Judgement>(prompt, coachOpts());
     if (typeof out?.correct !== "boolean") return { error: "Claude's reply could not be read. Try again." };
     return { correct: out.correct, explanation: String(out.explanation ?? "") };
   } catch (e) {
@@ -227,8 +228,6 @@ export interface Understanding {
   feedback: string;
 }
 
-/** How hard Claude thinks about an open answer: a short check, so the learner does not wait long. */
-const CHECK = { tier: "default", effort: "medium" } as const;
 const unhinted = (s: string) => s.replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "");
 
 /** Asks Claude whether an answer to a rule's open question shows the idea. */
@@ -250,7 +249,7 @@ Reply with only JSON: {"verdict": "right" or "partly" or "wrong", "feedback": "o
 
 ${engineFacts([{ text: answer, mixed: true }, { text: `${q.q} ${q.answer}`, mixed: true }], derived().lexicon, derived().seenKnowledge.skills)}`;
   try {
-    const out = await sample.json<Understanding>(prompt, { modelTier: CHECK.tier, effort: CHECK.effort });
+    const out = await sample.json<Understanding>(prompt, coachOpts());
     if (!out || !["right", "partly", "wrong"].includes(out.verdict)) return { error: "Claude's reply could not be read. Try again." };
     return { verdict: out.verdict, feedback: String(out.feedback ?? "") };
   } catch (e) {
@@ -274,9 +273,6 @@ export function withQuestion(box: string, q: string): string {
 /** The last suggestion put in each conversation's box, so a new one replaces it rather than piling up. */
 const lastSuggestion: Record<string, string> = {};
 
-const TIER_NAME: Record<string, string> = { quick: "quick model", default: "balanced model, thinking harder", complex: "most capable model" };
-/** The model for explanations and checks: the balanced one at high effort (a step smarter than its default). */
-const MODEL = { tier: "default", effort: "high" } as const;
 
 /**
  * The turns Claude reads: the conversation so far (last few), the first carrying
@@ -529,9 +525,8 @@ export function AskDrawer() {
         cache: false,
         signal: ctl.current.signal,
         onText: ({ text }: { text: string }) => setStreaming(text),
-        // the balanced model, thinking harder before it answers: fewer slips than its usual setting
-        modelTier: MODEL.tier,
-        effort: MODEL.effort,
+        // the coach's model, as chosen in Settings
+        ...coachOpts(),
       });
       const { body, practice } = splitPractice(res.text);
       const latest = getChat(c.id) ?? c;
@@ -719,7 +714,7 @@ export function AskDrawer() {
                 {t.role === "assistant" && (
                   <GrammarCheck text={t.content} canFix={i === turns.length - 1 && !busy} onFix={(found) => void fix(found)} />
                 )}
-                {t.role === "assistant" && t.tier && <div class="msg-meta">{TIER_NAME[t.tier] ?? t.tier}</div>}
+                {t.role === "assistant" && t.tier && <div class="msg-meta">{tierName(t.tier)}</div>}
                 {t.role === "user" && t.screen && <div class="msg-meta" title="What was on your screen when you asked">on {t.screen.label}</div>}
                 {t.role === "user" && t.noScreen && <div class="msg-meta" title="Asked with screen sharing switched off">screen not shared</div>}
                 {t.practice && t.practice.length > 0 && (

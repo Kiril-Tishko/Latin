@@ -215,9 +215,10 @@ export function checkAnswer(text: string, lex: Lexicon): Finding[] {
         need = pron.readings![0].entry.id === "ego" ? "1sg" : "2sg";
         who = `«${pron.text}»`;
       } else if (!iOrYouAre) {
-        const subjects = words.filter((t) => t !== v && t.readings?.length && t.readings.every((r) => r.entry.kind === "noun" && (caseOf(r) === "nom" || caseOf(r) === "voc")));
-        // "Puella, legis?" calls the girl: a name followed by a comma is not the subject
-        const calledOut = subjects.length === 1 && new RegExp(`${subjects[0].text}\\s*,`, "u").test(segment);
+        // a word that can only be calling someone (Marce, Gāī) is never the subject
+        const subjects = words.filter((t) => t !== v && t.readings?.length && t.readings.every((r) => r.entry.kind === "noun" && (caseOf(r) === "nom" || caseOf(r) === "voc")) && t.readings.some((r) => caseOf(r) === "nom"));
+        // "Puella, legis?" and "Quid legis, Iūlia?" call someone: a name set off by a comma is not the subject
+        const calledOut = subjects.length === 1 && new RegExp(`${subjects[0].text}\\s*,|,\\s*${subjects[0].text}`, "u").test(segment);
         if (subjects.length === 1 && !calledOut) {
           const nums = new Set(subjects[0].readings!.map((r) => numOf(r)));
           if (nums.size === 1) {

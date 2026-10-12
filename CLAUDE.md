@@ -20,6 +20,15 @@ published as a private claude.ai artifact.
   defaults to 0 and progress version 3 switched existing saves to it.
 - Follows the original playlist, with corrections from the 2025 "New Easy
   Latin Lessons" playlist (PLjqqMkeHFt1FjCaUrdcdMxF15sKUk9rHs) where they differ.
+- Wants to be asked questions before something big is built (AskUserQuestion),
+  then left to build.
+- Committed to the messenger (Nūntiī) as a main feature: people who feel real
+  and natural, text on their own at their own hours, a group chat, someone
+  random at the press of a button, portraits, the best model, phone
+  notifications, and personalities "random and extreme and weird and normal",
+  whose moods change with time and with what goes on in their lives (or not).
+  They chose: only words they know plus ~20 chat words, mistakes pointed out only
+  on Check, Kyiv time, separate model choices for the coach and the chats.
 
 ## Commands
 
@@ -29,6 +38,7 @@ npm test            # engine, content and exercise self-tests (vitest)
 npm run typecheck
 npm run build       # -> dist/tabula-latina.html (the artifact page) and dist/preview.html
 npm run smoke       # clicks through the built page in Chromium, saves screenshots to dist/screens
+SMOKE_ONLY=messenger npm run smoke   # one part only (messenger, learn, stories, conversations, chatScroll, askClaude, audio, pages)
 node scripts/build.mjs --dev   # unminified build for debugging
 ```
 
@@ -46,8 +56,14 @@ inlined. Publish with the Artifact tool:
 Artifact URL: https://claude.ai/artifact/3cvi4ofuaPLg6LfXXf7efX (also in README.md).
 
 Runtime capabilities used:
-- `sample`: the Ask Claude drawer, "I think my answer is right" (judge), and the
-  check of an open answer on a rule's page (`checkUnderstanding`).
+- `sample`: the Ask Claude drawer, "I think my answer is right" (judge), the
+  check of an open answer on a rule's page (`checkUnderstanding`), Answer in
+  Latin's fresh questions and judgments (src/ui/coach.ts), and the messenger
+  (below). Which model answers is the learner's choice in Settings: `settings.coach`
+  for Ask Claude, the checks and Answer in Latin (default Sonnet, high effort),
+  `settings.chat` for the people in the messenger (default Opus, high), each a
+  tier (Haiku = quick, Sonnet = default, Opus = complex) and an effort
+  (`coachOpts()` / `chatOpts()` in src/ui/models.ts; every call goes through them).
   Ask buttons only put a suggested question in the box; nothing goes to Claude
   until the learner presses Ask. A suggestion is added after what the learner
   has typed, never in its place (`withQuestion`); only an earlier untouched
@@ -77,9 +93,10 @@ Runtime capabilities used:
   at the latest message, a sent question glides to the top with room below
   that its answer fills (`.chat-space`), and only a new message that arrives
   below the screen, unseen, shows a "New message" button (gone once it comes
-  into view; reading higher up never shows it). Answers are short and
-  structured by default (a bold one-line answer, then 2-4 bullets) and longer
-  only when the learner asks (`INSTRUCTIONS` in src/ui/ask.tsx). The profile sends
+  into view; reading higher up never shows it). Answers are short by default
+  but shaped by the question, not by a template (the learner asked that they not
+  always look the same: a sentence, a bold point with bullets, a short
+  paragraph), and longer only when the learner asks (`INSTRUCTIONS` in src/ui/ask.tsx). The profile sends
   which parts are learned, in practice and not met yet, and each met rule's own
   text; the instructions forbid invented rules,
   keep «» for Latin only and name the trap Claude once fell into (agricola
@@ -95,9 +112,7 @@ Runtime capabilities used:
   noun is the complement: «Discipulus sum»). A finding shows
   as a "Grammar check" note under the answer, with "Fix this answer", which
   sends the findings back (a turn of `kind: "fix"`). The learner cannot judge
-  answers themselves, so there is no "this is wrong" button. Answers and the
-  judge use the balanced model at high effort (`MODEL` in ask.tsx); the most
-  capable tier is the next step if answers still slip.
+  answers themselves, so there is no "this is wrong" button.
 - `db` + `user`: progress in the viewer's private doc `data/users/<id>/progress`.
   The page also keeps a copy in localStorage; the newer `updatedAt` wins.
   Ask Claude conversations: one private doc each at
@@ -106,6 +121,12 @@ Runtime capabilities used:
   saved before the answer arrives. localStorage keeps a copy of the list, the
   unsent text per conversation and whether the drawer was open, so a reload
   loses nothing. Each saved answer records the model tier that gave it.
+  The messenger: `data/users/<id>/messenger` (meta: seenAt, plannedAt, the
+  people's lives, the strangers met), `…/messenger/threads/<chat>` (one doc per
+  chat, merged by message id with `dropped` tombstones, followed live),
+  `…/messenger/inbox/<id>` (messages the phone routine wrote; the page moves them
+  into their chats and deletes them) and `…/messenger/brief/now` (what the
+  routine needs, written by the page).
 
 ## Rules one at a time, then practice
 
@@ -122,7 +143,7 @@ then the questions one at a time. An answer counts as right when it has a word
 of every key group (`meetsKeys` in `src/trainer/path.ts`: lower case, no long
 marks, a key of one or two letters must stand alone, "I don't know" never
 counts); otherwise Claude judges it (`checkUnderstanding` in ask.tsx: right /
-partly / wrong with a short feedback, balanced model at medium effort), and
+partly / wrong with a short feedback, the coach's model), and
 without Claude the learner compares with the good answer. With both questions
 answered the part is seen (`markSeen`) and its exercises open.
 
@@ -186,10 +207,19 @@ examples ego. `judgeAnswer` checks with the engine: unknown words, grammar
 (`checkAnswer`; long marks never needed), the person (-ō about yourself), the
 question's own verb, what the question asks for (a thing with -m, in + -ā / -ō,
 ad / in + -m, who, to …, quod …), and a correct but odd pair ("I read the water")
-is "almost" (`sensibleObject`). "I think mine is right" asks Claude, told that any
-correct, sensible answer counts. A right answer adds one to the rules it used;
+is "almost" (`sensibleObject`). A right answer adds one to the rules it used;
 open answers are not logged as mistakes. Mode `answers`: a card on the practice
 page, and "Answer questions in Latin" on a story.
+Version 2, as the learner asked ("really open ended… so AI should check it"): a
+round starts with the fixed questions and Claude writes fresh ones for it
+(`freshQuestions` in src/ui/coach.ts: about the learner, the five friends of the
+messenger, imagined scenes; only their words, each vetted by `vetMessage`; the
+last 60 asked are kept so they do not repeat), which take the places of the
+questions not reached yet (`freshen` in train.tsx; `openExercise`, slot `free`).
+Every answer goes to the coach (`judgeOpen`): the engine's findings go along as
+facts, any correct, sensible answer counts, inventive ones most of all, and the
+coach's note and corrected version ("Your idea, corrected") are shown; without
+Claude the engine's verdict stands.
 
 Exercise builders work on any sentence: `writeOn`, `endingOn`, `chooseOn`,
 `tilesOn`, `meaningOn` in `src/trainer/exercises.ts` take tokens and an English
@@ -237,6 +267,62 @@ care ("much water", "the school is full") get hand-made Discover examples
 seen come back as fresh exercises of the same kind on the same rules and words;
 a right answer marks one fixed (`Mistake.fixed`), a wrong one never duplicates
 it. Home and the practice chooser show how many wait.
+
+## Nūntiī: the messenger
+
+`#nuntii`, `#nuntii-<chat>` (src/ui/pages/messenger.tsx, state and sync in
+src/ui/messenger.ts, pure logic in src/chat/). Five friends (src/content/people.ts:
+character, way of texting, a day in Rome's time with sleep and busy hours, moods
+with weights and how strongly they swing, happenings with their durations, ties
+to the others): Iūlia (21, poetry student, the girl the learner asked for),
+Marcus (23, scribe), Gāius (52, farmer near Tibur), Claudia (38, teacher in
+Ostia), Lūcius (29, poet and night owl), and their group «Amīcī».
+Portraits (src/content/portraits.ts, generated by scripts/content/portraits.py
+from downloaded museum images: painted mummy portraits and a Boscoreale fresco,
+CC0 and CC BY 4.0, credited in each profile).
+
+- Words: the learner's own (lesson words and added cards, no story-only ones),
+  in the forms of the rules seen (`formsFor`), plus the chat words (`CHAT_WORDS`:
+  salvē, valē, ita, minimē, quid, quis, ubi, quō, cūr, hodiē, crās, quoque, male,
+  optimē, grātiās, heu, euge, ecce, ō, hahae, agō for "quid agis?"; shown on the
+  Words page under Chat, glossed in questions) and names (declined; called with
+  the vocative: Marce, Gāī, Lūcī). Every message Claude writes is vetted
+  (src/chat/vet.ts: unknown words, forms and constructions not met, the engine's
+  grammar checks); one rewrite is asked for (`vetAll`), and what still slips is
+  kept with its new words marked. Long marks are put back (`withMacrons`).
+- Lives (src/chat/life.ts): `lifeNow` rolls a mood (slightly / plainly /
+  extremely, by the person's swing) and maybe a happening (their own, an everyday
+  one, or now and then an odd one) and keeps them for hours; the profile shows
+  "Today". `statusAt` says asleep / busy / free in their time zone;
+  `replyTiming` decides when they read and answer (a sleeper answers after waking,
+  one in twenty is woken up; busy people answer in between or later).
+- Strangers (src/chat/strangers.ts): "Someone new" rolls the dice (sex, age,
+  portrait, name, city across the empire with its time zone, job, temper from
+  mild to extreme, a quirk or none, why they write, how they text, their day,
+  whether they write first) and Claude makes a person of it (`meetStranger`:
+  about, secret, their own happenings, first messages). A stranger leaves the
+  list with "Say goodbye".
+- Claude is asked only on the learner's actions: Send (one answer per burst:
+  2.5 s pause; answers still on their way are taken back and written again),
+  opening the messenger (at most every 3 hours, `writeOwn`: what they write on
+  their own in the next three hours, each at its time), Someone new, and Check
+  (the coach: verdict, corrected Latin, a note). Prompts: src/chat/prompts.ts
+  (who they are, their day and mood now, the learner, the conversation, when the
+  answer arrives, how to be real, and the strict language block).
+- Feels real: typing dots (from reading, while Claude writes, until each
+  message), read ticks, "online" / "last seen", day separators, a "New" line,
+  a notice for a message arriving elsewhere in the app, an unread count (Roman
+  numerals) on the tab. Tap a message for its English, a word for its meaning.
+- Phone notifications: a Claude Code routine (trigger "Nūntiī: Roman friends
+  write", fresh session per run, push notifications, CRON_TZ=Europe/Kyiv at
+  8:47, 11:47, 14:47, 17:47 and 20:47) follows scripts/messenger-routine.md (with
+  its helper scripts/nuntii-routine.py embedded, as a routine's session may not
+  have this repo: who is awake, moods, the chats; the word check; the
+  notification line): it reads the brief (src/chat/brief.ts: the learner, the language block, every
+  allowed spelling, everyone's sheet and their lives rolled 48 h ahead), writes
+  0-3 messages into the inbox, and ends with one line about the unseen messages,
+  which becomes the notification. Change its schedule or prompt with
+  update_trigger (keep the prompt in sync with that file).
 
 ## Audio
 

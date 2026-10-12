@@ -5,7 +5,8 @@ import { STORIES } from "../src/content/stories";
 import { annotate } from "../src/latin/analyze";
 import { seeded } from "../src/latin/generate";
 import { full } from "../src/latin/types";
-import { answersSession, sceneExercise, storyExercise, storyQuestions, youExercise, youQuestions } from "../src/trainer/answers";
+import { answersSession, openExercise, sceneExercise, storyExercise, storyQuestions, youExercise, youQuestions } from "../src/trainer/answers";
+import { CHAT_WORDS } from "../src/chat/words";
 import { buildKnowledge, fullLexicon, skillsUpTo } from "../src/trainer/knowledge";
 import { lineSkills, readLine } from "../src/trainer/lines";
 import { newProgress } from "../src/trainer/progress";
@@ -134,5 +135,26 @@ describe("a round of open questions", () => {
     // a learner who has seen only Lesson I gets questions they can answer
     const early = answersSession(newProgress(), ctx(skillsUpTo([1])));
     for (const ex of early) expect(ex.check(ex.check("x").expected).verdict, ex.ask).toBe("correct");
+  });
+});
+
+describe("fresh questions from Claude (answered in the learner's own words)", () => {
+  const chatLex = fullLexicon(CHAT_WORDS);
+  const open = (q: { la: string; en: string; example: string; about?: string }, skills = all) => openExercise({ k: buildKnowledge([1, 2, 3, 4], [], 0, skills), lex: chatLex, r: seeded(3) }, q);
+
+  it("accepts any correct answer, creative ones too, and shows the chat words' meanings", () => {
+    const ex = open({ la: "Quid hodiē legis?", en: "What are you reading today?", example: "Epistulam legō.", about: "you" });
+    expect(ex.gloss).toEqual(expect.arrayContaining(["quid = what", "hodiē = today"]));
+    expect(ex.check("Librum magnum legō et epistulam scrībō.").verdict).toBe("correct");
+    expect(ex.check("Hodiē nōn legō: dormiō!").verdict).toBe("correct");
+    // the engine still catches unknown words and bad grammar; the coach then judges the rest
+    expect(ex.check("Cēnam legō.").verdict).toBe("wrong");
+    expect(ex.check("Agricola magna labōrat.").verdict).toBe("wrong");
+  });
+
+  it("credits the rules the answer uses", () => {
+    const ex = open({ la: "Quid agis?", en: "How are you?", example: "Epistulam scrībō." });
+    const res = ex.check("Epistulam scrībō et librum legō.");
+    expect(Object.keys(res.credit)).toEqual(expect.arrayContaining(["n1.acc.sg", "n2.acc.sg", "s.et"]));
   });
 });

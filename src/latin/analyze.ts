@@ -53,6 +53,11 @@ export class Lexicon {
     return this.exact.get(word.toLowerCase()) ?? this.loose.get(latinKey(word)) ?? [];
   }
 
+  /** Every reading of a word whatever its long marks (silva: silva and silvā). */
+  analyzeLoose(word: string): Analysis[] {
+    return this.loose.get(latinKey(word)) ?? [];
+  }
+
   /** Readings of a word that belong to one dictionary entry. */
   analyzeAs(word: string, entryId: string): Analysis[] {
     return (this.loose.get(latinKey(word)) ?? []).filter((a) => a.entry.id === entryId);

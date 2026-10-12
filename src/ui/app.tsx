@@ -18,6 +18,8 @@ import { connectChats } from "./chats";
 import { SKILL_BY_ID } from "../latin/skills";
 import { setSpeechPrefs } from "../audio/speech";
 import { useScreen } from "./screen";
+import { ArrivalNotice, Messenger } from "./pages/messenger";
+import { connectMessenger, unreadTotal, useMessenger } from "./messenger";
 
 // Section names in Latin; the English shows as a tooltip.
 const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.Element }[] = [
@@ -27,15 +29,23 @@ const TABS: { route: Route; label: string; en: string; icon: () => preact.JSX.El
   { route: { page: "words" }, label: "Verba", en: "Words", icon: Icon.book },
   { route: { page: "discover" }, label: "Inventiō", en: "Discover", icon: Icon.card },
   { route: { page: "rules" }, label: "Rēgulae", en: "Rules", icon: Icon.column },
+  { route: { page: "messenger" }, label: "Nūntiī", en: "Messages", icon: Icon.tablet },
 ];
 
 // a lesson page, a rule to learn, the stories and Latin in English belong to Lectiōnēs
 const UNDER_LESSONS = new Set<Route["page"]>(["lesson", "learn", "english", "stories", "story"]);
 const active = (r: Route, t: Route) => r.page === t.page || (UNDER_LESSONS.has(r.page) && t.page === "lessons");
 
-const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", learn: "A rule to learn", train: "Practice", words: "Words", discover: "Discover", rules: "Rules", english: "Latin in English", stories: "Stories", story: "A story" };
+const PAGE_NAME: Record<Route["page"], string> = { home: "Home", lessons: "Lessons", lesson: "A lesson", learn: "A rule to learn", train: "Practice", words: "Words", discover: "Discover", rules: "Rules", english: "Latin in English", stories: "Stories", story: "A story", messenger: "Messages" };
 
 const SYNC_TEXT = { local: "saved in this browser", connecting: "connecting…", synced: "saved to your account", saving: "saving…", error: "saving failed, will retry" };
+
+/** Unread messages in the messenger, as a small gold count. */
+function UnreadBadge() {
+  const now = useMessenger();
+  const n = unreadTotal(now);
+  return n > 0 ? <span class="tab-badge" aria-label={`${n} unread`}>{roman(n)}</span> : null;
+}
 
 export function App() {
   const route = useRoute();
@@ -48,6 +58,7 @@ export function App() {
   useEffect(() => {
     void connect();
     void connectChats();
+    void connectMessenger();
     onPractice((skills) => {
       if (startSession({ kind: "skills", skills, label: skills.map((s) => SKILL_BY_ID.get(s)?.title).join(", ") })) go({ page: "train" });
     });
@@ -85,6 +96,9 @@ export function App() {
     case "story":
       page = <StoryPage id={route.id} />;
       break;
+    case "messenger":
+      page = <Messenger thread={route.thread} />;
+      break;
     default:
       page = <Home />;
   }
@@ -100,6 +114,7 @@ export function App() {
             {TABS.map((t) => (
               <button key={t.label} title={t.en} aria-label={`${t.label} (${t.en})`} aria-current={active(route, t.route) ? "page" : undefined} onClick={() => go(t.route)}>
                 <t.icon /> {t.label}
+                {t.route.page === "messenger" && <UnreadBadge />}
               </button>
             ))}
           </nav>
@@ -114,9 +129,9 @@ export function App() {
         </div>
       </header>
 
-      <main class={`page${route.page === "train" ? " wide" : ""}`} id="main">{page}</main>
+      <main class={`page${route.page === "train" ? " wide" : route.page === "messenger" ? " wide msgr-page" : ""}`} id="main">{page}</main>
 
-      {route.page !== "train" && (
+      {route.page !== "train" && route.page !== "messenger" && (
         <footer class="site-foot" aria-label={`Tabula Latina, ${new Date().getFullYear()}`}>
           <Hedera />
           <span>{roman(new Date().getFullYear())}</span>
@@ -129,12 +144,14 @@ export function App() {
           <button key={t.label} title={t.en} aria-label={`${t.label} (${t.en})`} aria-current={active(route, t.route) ? "page" : undefined} onClick={() => go(t.route)}>
             <t.icon />
             {t.label}
+            {t.route.page === "messenger" && <UnreadBadge />}
           </button>
         ))}
       </nav>
 
       <AskDrawer />
       <Toaster />
+      {p.settings.me && <ArrivalNotice current={route.page === "messenger" ? route.thread ?? null : null} />}
       {settings && <Settings onClose={() => setSettings(false)} />}
     </div>
   );

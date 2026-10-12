@@ -46,6 +46,8 @@ export interface Result {
   credit: Record<string, number>;
   /** Word id -> correct? */
   wordCredit: Record<string, boolean>;
+  /** Judged by the coach (an answer in the learner's own words): `expected` is then their answer corrected. */
+  coached?: boolean;
 }
 
 export interface Exercise {

@@ -5,6 +5,8 @@ import { Icon, Modal } from "./components";
 import { getSync, resetProgress, update, useProgress } from "./store";
 import { updatePath } from "../trainer/path";
 import { audioSupported, hasLatinVoice, latinVoices, pickVoice, speak, useVoices } from "../audio/speech";
+import { ModelChoice } from "../trainer/progress";
+import { EFFORTS, TIERS } from "./models";
 
 export function Settings({ onClose }: { onClose: () => void }) {
   const p = useProgress();
@@ -67,6 +69,10 @@ export function Settings({ onClose }: { onClose: () => void }) {
 
         <AudioSettings />
 
+        <ClaudeSettings />
+
+        {p.settings.me && <MessengerSettings />}
+
         <label class="row ui">
           <input id="macrons" type="checkbox" checked={p.settings.macrons} onChange={(e) => update((x) => void (x.settings.macrons = (e.target as HTMLInputElement).checked))} />
           Show long vowels (ā, ē, ī, ō, ū), as in the videos
@@ -93,6 +99,71 @@ export function Settings({ onClose }: { onClose: () => void }) {
         )}
       </div>
     </Modal>
+  );
+}
+
+/** How the people in the messenger call the learner, and the endings of words about them. */
+function MessengerSettings() {
+  const p = useProgress();
+  const me = p.settings.me!;
+  return (
+    <div class="stack" style={{ gap: "6px" }}>
+      <span class="eyebrow">Nūntiī (messages)</span>
+      <div class="row" style={{ gap: "8px" }}>
+        <input
+          id="settings-me-name"
+          class="input"
+          value={me.name}
+          maxLength={24}
+          aria-label="Your name in the messenger"
+          onChange={(e) => {
+            const name = (e.target as HTMLInputElement).value.trim();
+            if (name) update((x) => void (x.settings.me = { ...me, name }));
+          }}
+        />
+        <div class="seg" role="group" aria-label="Words about you end in">
+          <button aria-pressed={me.g === "m"} onClick={() => update((x) => void (x.settings.me = { ...me, g: "m" }))}>-us (amīcus)</button>
+          <button aria-pressed={me.g === "f"} onClick={() => update((x) => void (x.settings.me = { ...me, g: "f" }))}>-a (amīca)</button>
+        </div>
+      </div>
+      <span class="small muted">Your friends in Nūntiī call you by this name; Latin words about you take these endings.</span>
+    </div>
+  );
+}
+
+/** The model and how hard it thinks, chosen separately for the coach and for the people in the messenger. */
+function ClaudeSettings() {
+  const p = useProgress();
+  const row = (key: "coach" | "chat", title: string, what: string) => {
+    const m: ModelChoice = p.settings[key];
+    return (
+      <div class="stack" style={{ gap: "6px" }}>
+        <span class="ui small"><b>{title}</b> <span class="muted">· {what}</span></span>
+        <div class="row" style={{ gap: "8px" }}>
+          <div class="seg" role="group" aria-label={`${title}: model`}>
+            {TIERS.map((t) => (
+              <button key={t.tier} id={`${key}-tier-${t.tier}`} title={t.note} aria-pressed={m.tier === t.tier} onClick={() => update((x) => void (x.settings[key] = { ...x.settings[key], tier: t.tier }))}>{t.label}</button>
+            ))}
+          </div>
+          <div class="seg" role="group" aria-label={`${title}: thinking`}>
+            {EFFORTS.map((e) => (
+              <button key={e.effort} id={`${key}-effort-${e.effort}`} aria-pressed={m.effort === e.effort} onClick={() => update((x) => void (x.settings[key] = { ...x.settings[key], effort: e.effort }))}>{e.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div class="stack" style={{ gap: "10px" }}>
+      <span class="eyebrow">Claude</span>
+      {row("coach", "Coach", "Ask Claude, checks, questions in Latin")}
+      {row("chat", "Chats", "the people in Nūntiī")}
+      <span class="small muted">
+        Model: Haiku is the fastest, Sonnet is balanced, Opus is the most capable. Thinking: how long it thinks before it answers. Smarter
+        and longer thinking means slower answers and more of your Claude usage. If your plan does not include a model, the nearest one answers.
+      </span>
+    </div>
   );
 }
 

@@ -709,16 +709,163 @@ async function learnFlow(name, viewport, withClaude) {
   await ctx.close();
 }
 
-await learnFlow("learn-desktop", { width: 1280, height: 900 }, true);
-await learnFlow("learn-phone", { width: 390, height: 844 }, false);
-await stories();
-await conversations();
-await chatScroll();
-await askClaude();
-await audio();
-await run("desktop-light", { width: 1280, height: 900 }, "light");
-await run("desktop-dark", { width: 1280, height: 900 }, "dark");
-await run("phone-light", { width: 390, height: 844 }, "light");
+// The messenger: setup, a chat with a friend who is awake (the clock is set to 12:30 in
+// Rome), the reply arriving after typing, read ticks, English on a tap, Check, the words
+// sheet, someone new, a message from the phone routine, the other device, and the phone
+// layout. Claude is played by the test; a message with a word the learner does not know
+// must come back rewritten.
+async function messenger() {
+  const shared = new Map();
+  const runtime = () => {
+    const prompts = [];
+    window.__prompts = prompts;
+    const sample = async () => ({ text: "", truncated: false });
+    sample.json = async (prompt) => {
+      prompts.push(prompt);
+      await new Promise((r) => setTimeout(r, 300));
+      if (prompt.includes("Invent a real person")) return { about: "A loud baker who sings while kneading.", secret: "Cannot read.", happenings: [{ en: "the oven broke", mood: "furious", hours: [4, 12] }], first: [{ la: "Salvē! Quis es?", en: "Hi! Who are you?", gap: 1 }] };
+      if (prompt.includes("ON THEIR OWN")) return { messages: [] };
+      if (prompt.includes("kind Latin coach")) return { verdict: "almost", better: "Librum legō.", note: "The object takes -m: «librum»." };
+      if (prompt.includes("break the learner's limits")) return { messages: [{ la: "Nōn dormiō.", en: "I'm not sleeping." }] };
+      const id = (prompt.match(/Person ids: "([a-z0-9]+)"/) || [])[1] || "iulia";
+      return { messages: [{ from: id, la: "Euge! 😄", en: "Great! 😄", gap: 1 }, { from: id, la: "Cēnam parō", en: "I'm making dinner", gap: 1 }], remember: [] };
+    };
+    const docRef = (path) => ({
+      get: async () => { const d = await window.__dbGet(path); return { exists: !!d, data: () => d ?? undefined }; },
+      set: async (data) => void (await window.__dbSet(path, JSON.parse(JSON.stringify(data)))),
+      delete: async () => void (await window.__dbDel(path)),
+      collection: (sub) => colRef(`${path}/${sub}`),
+      onSnapshot: (next) => {
+        let last = "";
+        const tick = async () => {
+          const d = await window.__dbGet(path);
+          const sig = JSON.stringify(d);
+          if (sig === last) return;
+          last = sig;
+          next({ exists: !!d, data: () => d ?? undefined });
+        };
+        void tick();
+        const t = setInterval(tick, 200);
+        return () => clearInterval(t);
+      },
+    });
+    const follow = (path, n = 1000) => (next) => {
+      let last = "";
+      const tick = async () => {
+        const docs = await window.__dbList(path);
+        const sig = JSON.stringify(docs);
+        if (sig === last) return;
+        last = sig;
+        next({ docs: docs.slice(0, n).map((d) => ({ id: d.id, data: () => d.data })) });
+      };
+      void tick();
+      const t = setInterval(tick, 200);
+      return () => clearInterval(t);
+    };
+    const colRef = (path) => ({
+      doc: (id) => docRef(`${path}/${id}`),
+      onSnapshot: follow(path),
+      orderBy: () => ({ limit: (n) => ({ onSnapshot: follow(path, n) }) }),
+    });
+    const db = { doc: docRef, collection: colRef };
+    window.claude = { use: async (n) => (n === "sample" ? sample : n === "db" ? db : n === "user" ? { id: async () => "u1" } : null) };
+  };
+  const device = async (name, viewport, time = "2026-10-12T10:30:00Z") => {
+    const ctx = await browser.newContext({ viewport });
+    await ctx.clock.install({ time: new Date(time) });
+    await seed(ctx);
+    await ctx.addInitScript(runtime);
+    const p = await ctx.newPage();
+    p.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
+    p.on("console", (m) => m.type() === "error" && !/fonts\.g/.test(m.text()) && errors.push(`${name} console: ${m.text()}`));
+    await p.exposeFunction("__dbGet", (path) => shared.get(path) ?? null);
+    await p.exposeFunction("__dbSet", (path, data) => void shared.set(path, data));
+    await p.exposeFunction("__dbDel", (path) => void shared.delete(path));
+    await p.exposeFunction("__dbList", (col) => [...shared.entries()].filter(([k]) => k.startsWith(col + "/") && !k.slice(col.length + 1).includes("/")).map(([k, data]) => ({ id: k.slice(col.length + 1), data })));
+    await p.goto(`file://${page}#nuntii`);
+    await p.waitForTimeout(700);
+    return { p, ctx };
+  };
+  const { p, ctx } = await device("messenger", { width: 1280, height: 860 });
+  await p.screenshot({ path: `${out}/messenger-setup.png` });
+  await p.fill("#me-name", "Kiril");
+  await p.click("#me-m");
+  await p.click("#me-start");
+  await p.waitForTimeout(600);
+  if ((await p.locator(".chat-row").count()) !== 6) errors.push(`messenger: expected 6 chats, found ${await p.locator(".chat-row").count()}`);
+  await p.click("#chat-iulia");
+  await p.fill("#composer", "Salve Iulia! Librum lego.");
+  await p.click("#composer-check");
+  await p.waitForTimeout(900);
+  if (!(await p.locator(".composer .check-note", { hasText: "Librum legō" }).count())) errors.push("messenger: Check shows no correction");
+  await p.click("#composer-send");
+  await p.waitForTimeout(3500);
+  // she is free at 12:30: she reads it within minutes and answers
+  await ctx.clock.fastForward("20:00");
+  await p.waitForTimeout(800);
+  const theirs = await p.locator(".bubble:not(.mine) .bubble-text").allTextContents();
+  if (!theirs.includes("Euge! 😄")) errors.push(`messenger: Iūlia's answer did not arrive (${JSON.stringify(theirs)})`);
+  if (theirs.some((t) => t.includes("Cēnam"))) errors.push("messenger: a message with words the learner does not know was shown unchanged");
+  if (!theirs.includes("Nōn dormiō.")) errors.push(`messenger: the slipped message was not rewritten (${JSON.stringify(theirs)})`);
+  if (!(await p.locator(".bubble.mine .ticks.read").count())) errors.push("messenger: the learner's message never shows as read");
+  const prompts = await p.evaluate(() => window.__prompts.join("\n---\n"));
+  if (!prompts.includes("You write as Iūlia") || !prompts.includes("THE LEARNER: Kiril")) errors.push("messenger: the reply prompt lacks the person or the learner");
+  // a tap on a word shows its meaning; a tap elsewhere on the message, its English
+  await p.locator(".bubble:not(.mine) .w").first().click();
+  if (!(await p.locator(".bubble-gloss", { hasText: "great!" }).count())) errors.push("messenger: a tap on a word does not show its meaning");
+  await p.locator(".bubble:not(.mine) .bubble-meta").first().click();
+  if (!(await p.locator(".bubble-en", { hasText: "Great!" }).count())) errors.push("messenger: a tap does not show the English");
+  await p.screenshot({ path: `${out}/messenger-chat.png` });
+  await p.click("button[aria-label='Your words']");
+  if (!(await p.locator(".words-sheet .word-chip", { hasText: "salvē" }).count())) errors.push("messenger: the words sheet lacks the chat words");
+  await p.keyboard.press("Escape");
+  await p.click("#chat-profile");
+  if (!(await p.locator(".profile", { hasText: "Today" }).count())) errors.push("messenger: the profile has no 'Today'");
+  await p.screenshot({ path: `${out}/messenger-profile.png` });
+  await p.keyboard.press("Escape");
+  // the phone routine left a message in the inbox: it lands in Marcus's chat, unread
+  shared.set("data/users/u1/messenger/inbox/r1", { chat: "marcus", from: "marcus", la: "Salvē! Labōrō 😩", en: "Hi! I'm working 😩", at: Date.parse("2026-10-12T10:40:00Z") });
+  await p.waitForTimeout(900);
+  if (shared.has("data/users/u1/messenger/inbox/r1")) errors.push("messenger: the inbox message was not taken");
+  if (!(await p.locator("#chat-marcus .unread-badge").count())) errors.push("messenger: the routine's message is not shown as unread");
+  await p.click("#find-someone");
+  await p.waitForTimeout(2500);
+  if (!(await p.locator(".chat-head-name").textContent())?.trim() || (await p.locator(".chat-row").count()) !== 7) errors.push("messenger: someone new did not open a chat");
+  await p.screenshot({ path: `${out}/messenger-stranger.png` });
+  // the other device sees the same chats
+  const other = await device("messenger-phone", { width: 390, height: 844 }, "2026-10-12T11:30:00Z");
+  await other.p.waitForTimeout(1200);
+  await other.p.click("#chat-iulia");
+  await other.p.waitForTimeout(300);
+  const there = await other.p.locator(".bubble .bubble-text").allTextContents();
+  if (!there.some((t) => t.includes("Librum"))) errors.push(`messenger: the other device does not show the chat (${JSON.stringify(there)})`);
+  await other.p.screenshot({ path: `${out}/messenger-phone-chat.png` });
+  await other.p.click(".chat-back");
+  await other.p.screenshot({ path: `${out}/messenger-phone-list.png` });
+  await other.ctx.close();
+  await ctx.close();
+}
+
+// SMOKE_ONLY=messenger npm run smoke: just one part
+const only = process.env.SMOKE_ONLY;
+const parts = {
+  messenger: () => messenger(),
+  learn: async () => {
+    await learnFlow("learn-desktop", { width: 1280, height: 900 }, true);
+    await learnFlow("learn-phone", { width: 390, height: 844 }, false);
+  },
+  stories: () => stories(),
+  conversations: () => conversations(),
+  chatScroll: () => chatScroll(),
+  askClaude: () => askClaude(),
+  audio: () => audio(),
+  pages: async () => {
+    await run("desktop-light", { width: 1280, height: 900 }, "light");
+    await run("desktop-dark", { width: 1280, height: 900 }, "dark");
+    await run("phone-light", { width: 390, height: 844 }, "light");
+  },
+};
+for (const [name, part] of Object.entries(parts)) if (!only || only === name) await part();
 await browser.close();
 if (errors.length) {
   console.error(errors.join("\n"));

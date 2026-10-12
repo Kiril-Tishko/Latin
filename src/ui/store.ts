@@ -2,6 +2,7 @@
 // available, and to this browser), plus derived knowledge for the engine.
 import { useEffect, useState } from "preact/hooks";
 import { CARD_BY_ID, DECK_CARDS } from "../content/deck";
+import { CHAT_WORDS, FIXED_NAMES } from "../chat/words";
 import { Lexicon } from "../latin/analyze";
 import { Knowledge } from "../latin/generate";
 import { Entry } from "../latin/types";
@@ -142,7 +143,8 @@ export function derived(): Derived {
   derivedCache = {
     knowledge: buildKnowledge(p.lessonsDone, added, p.settings.silly),
     seenKnowledge: buildKnowledge(p.lessonsDone, added, p.settings.silly, seenSkills(p)),
-    lexicon: fullLexicon(DECK_CARDS.map((c) => c.entry)),
+    // the chat words and the messenger's names too, so they are read (and colored) everywhere
+    lexicon: fullLexicon([...DECK_CARDS.map((c) => c.entry), ...CHAT_WORDS, ...FIXED_NAMES]),
     words: [...lessonWords(p.lessonsDone), ...added],
     added,
   };

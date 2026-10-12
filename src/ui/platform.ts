@@ -66,6 +66,31 @@ export async function chatCollection(): Promise<ChatCollection | null> {
   }
 }
 
+/** A collection of documents, as the store gives it (enough for the messenger). */
+export interface DocCollection {
+  doc(id: string): { set(data: Record<string, unknown>): Promise<void>; delete(): Promise<void> };
+  onSnapshot(next: (snap: { docs: DocSnap[] }) => void, error?: (e: { code?: string }) => void): () => void;
+}
+
+/** A document that can be followed live. */
+export interface LiveDoc extends DocRef {
+  onSnapshot(next: (snap: { exists: boolean; data(): Record<string, unknown> | undefined }) => void, error?: (e: { code?: string }) => void): () => void;
+}
+
+/** The messenger's documents in the viewer's private space, or null when the account store is unavailable. */
+export async function messengerStore(): Promise<{ meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection } | null> {
+  const [db, user] = await Promise.all([use("db"), use("user")]);
+  if (!db || !user) return null;
+  const id: string | null = await user.id().catch(() => null);
+  if (!id) return null;
+  try {
+    const meta = db.doc(`data/users/${id}/messenger`);
+    return { meta, brief: meta.collection("brief").doc("now"), threads: meta.collection("threads"), inbox: meta.collection("inbox") };
+  } catch {
+    return null;
+  }
+}
+
 export async function sampler(): Promise<SampleFn | null> {
   return (await use("sample")) as SampleFn | null;
 }

@@ -8,6 +8,8 @@
 //   needs:    the rules to read the question and answer it (all must have been seen)
 //   example:  a good answer (tests check that it passes the page's own check)
 
+import { CHAT_WORD_LIST } from "../chat/words";
+
 export type Slot = "obj" | "place" | "goal" | "pred" | "inf" | "reason";
 
 export interface YouQuestion {
@@ -51,8 +53,10 @@ export const YOU_QUESTIONS: YouQuestion[] = [
   { id: "bibis-cur", la: "Cūr aquam bibis?", en: "Why do you drink water?", verb: "bibo", slot: "reason", needs: [...YOU, "s.conn", "s.svo", "n1.acc.sg"], example: "Aquam bibō quod labōrō." },
 ];
 
-/** The meanings of the question words in a question ("quid = what"). */
-export const glossesOf = (la: string): string[] =>
-  Object.entries(QUESTION_WORDS)
+/** The meanings of the question words and chat words in a question ("quid = what", "hodiē = today"). */
+export const glossesOf = (la: string): string[] => {
+  const words: Record<string, string> = { ...Object.fromEntries(CHAT_WORD_LIST.filter((w) => w.kind === "fixed").map((w) => [(w as { lemma: string }).lemma, `${(w as { lemma: string }).lemma} = ${w.en}`])), ...QUESTION_WORDS, agis: "agis = you do (quid agis? = how are you?)" };
+  return Object.entries(words)
     .filter(([w]) => new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`, "iu").test(la))
     .map(([, g]) => g);
+};

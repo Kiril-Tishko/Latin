@@ -19,7 +19,8 @@ import { storyLines, storyOpen } from "./stories";
 
 /** What an answer has to be. */
 export interface Want {
-  slot: Slot | "subj" | "scene";
+  /** "free": any correct answer in the learner's own words (a fresh question from Claude, judged by the coach). */
+  slot: Slot | "subj" | "scene" | "free";
   /** The verb the answer must use, when it must be that one (by entry id). */
   verb?: string;
   /** The person of the answer's verb: -ō about yourself, -t / -nt about others. */
@@ -64,7 +65,9 @@ export function judgeAnswer(answer: string, want: Want, ctx: Ctx): { verdict: "c
   const tokens = read.flat();
   if (issues.length || !tokens.length) return { verdict: "wrong", issues: issues.length ? issues : [{ kind: "missing", message: "Write your answer in Latin." }], tokens };
 
-  if (want.slot === "scene") {
+  if (want.slot === "free") {
+    // anything goes: the words and the grammar are what the engine can check; the coach judges the rest
+  } else if (want.slot === "scene") {
     if (sentences.length < 2) issues.push({ kind: "missing", message: "Write two sentences: two things he or she does." });
     for (const t of read) {
       const v = verbOf(t);
@@ -187,6 +190,16 @@ function answerExercise(ctx: Ctx, o: { la: string; en?: string; instruction: str
   };
   ex.retry = () => answerExercise(ctx, o);
   return ex;
+}
+
+/**
+ * A fresh question from Claude, answered in the learner's own words: the engine
+ * checks the words and the grammar, the coach judges the answer.
+ */
+export function openExercise(ctx: Ctx, q: { la: string; en: string; example: string; about?: string }): Exercise {
+  const skills = [...new Set([q.la, q.example].flatMap((t) => sentencesOf(t).flatMap((x) => lineSkills(readLine(x, ctx.lex) ?? []))))].filter((s) => ctx.k.skills.has(s));
+  const instruction = q.about === "you" ? "Answer in Latin, about yourself" : q.about === "scene" ? "Answer in Latin: describe it" : "Answer in Latin, with your own words";
+  return answerExercise(ctx, { la: q.la, en: q.en, instruction, want: { slot: "free", person: "1sg" }, example: q.example, skills });
 }
 
 /** The questions about the learner that the rules seen allow. */

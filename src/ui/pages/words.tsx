@@ -1,6 +1,7 @@
 // My dictionary: every word from the lessons plus the cards added from
 // Discover, with strength, forms and spaced review.
 import { useMemo, useState } from "preact/hooks";
+import { CHAT_WORD_LIST } from "../../chat/words";
 import { CARD_BY_ID } from "../../content/deck";
 import { LESSONS } from "../../content/lessons";
 import { STORY_ONLY } from "../../content/words";
@@ -205,7 +206,7 @@ function matches(e: Entry, q: string, formHits: Set<string>): boolean {
 export function Words() {
   const p = useProgress();
   const d = derived();
-  const [filter, setFilter] = useState<number | "deck" | "all">("all");
+  const [filter, setFilter] = useState<number | "deck" | "all" | "chat">("all");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Entry | null>(null);
   const vocab = d.words.filter((w) => w.kind !== "fixed" && !STORY_ONLY.has(w.id));
@@ -214,10 +215,10 @@ export function Words() {
   // typing any form finds its word: puellam -> puella, labōrant -> labōrō
   const formHits = new Set(q ? d.lexicon.analyze(q).map((a) => a.entry.id) : []);
   const shown = vocab.filter(
-    (w) => (filter === "all" || (filter === "deck" ? "deck" in w.source : "lesson" in w.source && w.source.lesson === filter)) && matches(w, q, formHits),
+    (w) => (filter === "all" || (filter === "deck" ? "deck" in w.source : filter !== "chat" && "lesson" in w.source && w.source.lesson === filter)) && matches(w, q, formHits),
   );
   useScreen("page", "Words", () => {
-    const which = filter === "all" ? "all words" : filter === "deck" ? "the words added from Discover" : `the words of Lesson ${filter}`;
+    const which = filter === "all" ? "all words" : filter === "deck" ? "the words added from Discover" : filter === "chat" ? "the chat words of the messenger" : `the words of Lesson ${filter}`;
     const list = shown.slice(0, 40).map((w) => `${headword(w)} (${w.en})`).join(", ");
     return `The learner's dictionary: ${vocab.length} words, ${due} due for review. Showing ${which}${q ? `, searching "${q}"` : ""}: ${shown.length} word${shown.length === 1 ? "" : "s"}${shown.length ? `: ${list}${shown.length > 40 ? ", …" : ""}` : ""}.`;
   });
@@ -241,13 +242,27 @@ export function Words() {
             <button key={l.n} aria-pressed={filter === l.n} onClick={() => setFilter(l.n)}>{roman(l.n)}</button>
           ))}
           <button aria-pressed={filter === "deck"} onClick={() => setFilter("deck")}>Discovered ({d.added.length})</button>
+          <button aria-pressed={filter === "chat"} onClick={() => setFilter("chat")} title="Words for chatting in Nūntiī">Chat ({CHAT_WORD_LIST.length})</button>
         </div>
         <button class="btn" disabled={!due} onClick={() => startSession({ kind: "words" }) && go({ page: "train" })}>
           {due > 0 ? `Review ${due} word${due === 1 ? "" : "s"}` : "Nothing to review"}
         </button>
       </div>
+      {filter === "chat" && (
+        <>
+          <p class="small muted">Words for chatting with your friends in Nūntiī. The lessons have not taught them yet, so the messenger shows their meanings.</p>
+          <div class="word-grid">
+            {CHAT_WORD_LIST.filter((w) => matches(w, q, formHits)).map((w) => (
+              <div key={w.id} class="panel word-tile">
+                <span class="head latin" lang="la">{headword(w)}</span>
+                <span class="gloss">{w.en}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       <div class="word-grid">
-        {shown.map((w) => (
+        {filter !== "chat" && shown.map((w) => (
           <button key={w.id} class="panel word-tile" onClick={() => setOpen(w)}>
             <span class="head latin" lang="la">{headword(w)}</span>
             <span class="gloss">{w.en}</span>
@@ -255,7 +270,7 @@ export function Words() {
           </button>
         ))}
       </div>
-      {!shown.length && <p class="muted">{q ? `Nothing found for "${q}".` : "No words here yet. Open some cards in Discover."}</p>}
+      {!shown.length && filter !== "chat" && <p class="muted">{q ? `Nothing found for "${q}".` : "No words here yet. Open some cards in Discover."}</p>}
       {open && <WordModal e={open} onClose={() => setOpen(null)} />}
     </div>
   );

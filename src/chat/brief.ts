@@ -1,0 +1,78 @@
+// The brief the phone routine reads (data/users/<id>/messenger/brief/now):
+// everything it needs to write as the people while the page is closed, made by
+// the page with the same functions it uses itself: the learner, the words and
+// rules, who everyone is, and their moods for the next two days, rolled ahead.
+import { PEOPLE } from "../content/people";
+import { Life, LifeSpec, lifeNow, Rand } from "./life";
+import { Meta, Who, whoOf } from "./model";
+import { languageBlock, learnerBlock, PromptCtx } from "./prompts";
+import { allowedSpellings } from "./words";
+import { specOf } from "./engine";
+
+export interface Brief {
+  v: 1;
+  updatedAt: number;
+  me: { name: string; g: "m" | "f"; tz: string };
+  /** The learner, as the people know them. */
+  learner: string;
+  /** The words, forms and rules allowed, as Claude reads them. */
+  language: string;
+  /** Every allowed spelling, without long marks, lower case: a quick check of any message. */
+  forms: string[];
+  /** Who everyone is (without the time of day and mood, which change). */
+  people: { id: string; name: string; tz: string; wake: number; sleep: number; busy: [number, number, string][]; sheet: string }[];
+  /** Moods and happenings rolled ahead: each from its time on. */
+  lives: Record<string, (Life & { from: number })[]>;
+}
+
+/** Their lives for the next hours, rolled ahead at random. */
+export function rollAhead(spec: LifeSpec, life: Life | undefined, now: number, hours: number, r: Rand): (Life & { from: number })[] {
+  const out: (Life & { from: number })[] = [];
+  let cur = lifeNow(spec, life, now, r).life;
+  out.push({ ...cur, from: now });
+  let t = now;
+  for (let i = 0; i < 24; i++) {
+    t = Math.max(t + 60_000, Math.min(cur.moodUntil, cur.eventUntil && cur.eventUntil > t ? cur.eventUntil : Infinity));
+    if (t > now + hours * 3600_000) break;
+    cur = lifeNow(spec, cur, t + 1000, r).life;
+    out.push({ ...cur, from: t });
+  }
+  return out;
+}
+
+function sheet(w: Who): string {
+  return [
+    `${w.name} (${w.age}, ${w.g === "m" ? "man" : "woman"}; called «${w.voc}»), ${w.city}. ${w.job}.`,
+    `Character: ${w.about}`,
+    w.traits?.length ? `Temper: ${w.traits.join(", ")}.` : "",
+    w.quirk ? `Quirk: ${w.quirk}.` : "",
+    w.secret ? `Keeps to themselves at first: ${w.secret}.` : "",
+    `How they text: ${w.style}`,
+    w.ties ? `With the others: ${Object.entries(w.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: Rand = Math.random): Brief {
+  const ids = [...PEOPLE.map((p) => p.id), ...strangerIds];
+  const people = ids
+    .map((id) => whoOf(id, meta))
+    .filter((w): w is Who => !!w)
+    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w) }));
+  const lives: Brief["lives"] = {};
+  for (const id of ids) {
+    const spec = specOf(id, meta);
+    if (spec) lives[id] = rollAhead(spec, meta.life[id], ctx.now, 48, r);
+  }
+  return {
+    v: 1,
+    updatedAt: ctx.now,
+    me: { name: ctx.me.name, g: ctx.me.g, tz: ctx.tz },
+    learner: learnerBlock(ctx).replace(/ For .* it is .*$/, ""),
+    language: languageBlock(ctx),
+    forms: [...allowedSpellings(ctx.words)].sort(),
+    people,
+    lives,
+  };
+}

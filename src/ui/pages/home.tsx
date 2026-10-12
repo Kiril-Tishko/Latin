@@ -9,6 +9,7 @@ import { todayStep, TodayStep } from "../../trainer/today";
 import { Icon, Laurel, Mosaic } from "../components";
 import { LatinText } from "../latin";
 import { NextLesson } from "../next-lesson";
+import { actaUnread, todaysBoard, useMessenger } from "../messenger";
 import { useScreen } from "../screen";
 import { useProgress } from "../store";
 import { PartDots, partName } from "./learn";
@@ -23,6 +24,8 @@ export function stepLabel(step: TodayStep): string {
       return partName(step.part).toLowerCase();
     case "story":
       return "a new story";
+    case "acta":
+      return "today's news";
     case "words":
       return "your words";
     case "review":
@@ -41,6 +44,8 @@ function stepText(p: Progress, step: TodayStep): string {
       return `Continue practises ${partName(step.part)}, "${step.part.title}": ${partRight(p, step.part)} of ${PART_GOAL} right answers so far, ten make it learned; the day's mistakes and due words come mixed in.`;
     case "story":
       return `Continue opens a story that has just opened: "${step.story.title}" (${step.story.en}).`;
+    case "acta":
+      return "Continue opens today's Ācta Diurna, Rome's daily board of news written in the learner's words (in Nūntiī).";
     case "words":
       return `Continue gives a short round of the words that are due (${step.due} due).`;
     case "review":
@@ -55,7 +60,8 @@ export function Home() {
   const done = todayDone(p);
   const goal = p.settings.dailyGoal;
   const days = streak(p);
-  const step = todayStep(p, vocabIds());
+  useMessenger();
+  const step = todayStep(p, vocabIds(), Date.now(), actaUnread());
   const name = p.settings.me?.name;
   useScreen("page", "Home (Domus)", () => `The home page (Domus): one Continue button. Today: ${done} of ${goal} exercises done; ${days > 0 ? `a ${days}-day streak` : "no streak yet"}.\n${stepText(p, step)}`, { share: false });
 
@@ -121,6 +127,16 @@ function StepCard({ step }: { step: TodayStep }) {
           </span>
           <h1 class="home-title"><LatinText text={step.story.title} /></h1>
           <p class="muted">{step.story.en}. Only words and rules you know.</p>
+        </>
+      );
+    case "acta":
+      return (
+        <>
+          <span class="home-step ui">
+            Ācta Diurna · today's news <span class="chip home-new">new</span>
+          </span>
+          <h1 class="home-title"><LatinText text={todaysBoard()[0]?.title?.la || "Ācta Diurna"} /></h1>
+          <p class="muted">Rome's daily board, in your words: the day, the city, your friends, a notice from the walls.</p>
         </>
       );
     case "words":

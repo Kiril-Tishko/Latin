@@ -163,7 +163,9 @@ Runtime capabilities used:
   chat, merged by message id with `dropped` tombstones, followed live),
   `…/messenger/inbox/<id>` (messages the phone routine wrote; the page moves them
   into their chats and deletes them) and `…/messenger/brief/now` (what the
-  routine needs, written by the page).
+  routine needs, written by the page). The Ācta Diurna is the thread
+  `…/messenger/threads/acta` (kind "channel"; `meta.actaAt` marks a board being
+  written, so two devices do not both write it).
 
 ## The site: four tabs, one Continue
 
@@ -178,6 +180,7 @@ Latin names (English in the tooltip; `TABS` in src/ui/app.tsx, routes in nav.ts)
   rule opens its page, the rule in practice starts its round, everything learned
   starts a round of everything); once something is done that day, a story that
   has opened and is not read comes first (one between two rounds: `Day.story`),
+  then today's Ācta Diurna when it is out and unread (`actaUnread`, Nūntiī below),
   then, once a day and with ten or more due, a round of twelve words (`Day.words`).
   The card says what Continue will do (`StepCard`), with the day's goal and
   streak. Nothing else (no cards for Answer in Latin, stories or messages, no
@@ -594,6 +597,25 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   be swiped away like a phone notification (`useSwipeAway`); a tap opens the
   chat. On a phone Enter makes a new line in the message box and in Ask Claude,
   and the arrow sends (`enterSends`); the box grows with its lines.
+- Ācta Diurna (src/chat/acta.ts, the learner chose "a daily Roman newspaper"):
+  Rome's board of the day, pinned on top of the chats (`ActaRow`, `#nuntii-acta`,
+  `ActaView`). Once a Roman day (`actaKey`) Claude writes it with the chat
+  model (`ensureActa` in src/ui/messenger.ts: when the page opens and when the
+  messenger opens, after the account's chats have come in; Try again after a
+  failure): 4-5 items, each a kind (Diēs the day and its festival, Urbs the news
+  of Trajan's Rome from the calendar, Amīcī the friends' lives as neighbourhood
+  news, Titulus a notice like those painted on Pompeii's walls, now and then a
+  Prōdigium), a title and one to three short lines, only in the learner's words
+  and rules (`actaPrompt` with `languageBlock(ctx, false)`; every title and line
+  vetted with `vetAll`), earlier boards given so it does not repeat and may
+  follow one up (`earlierBoards`). Each item is a post with the id of the day
+  (`acta-20261012-0`: two devices writing at once merge into one board), its
+  lines one per line in `la` / `en`, `title` and `tag`. A tap on a line shows
+  its English, on a word what it is (`WordCard`, shared with the chats); each
+  item's speaker reads it with the device's voice; the eye shows all the
+  English; Ask Claude sees the board; Continue goes on with the day.
+  A new board counts one on the tab and comes in Continue (`todayStep`'s "acta").
+  `tests/acta.test.ts`; the smoke test reads one on two devices.
 - Phone notifications: a Claude Code routine (trigger "Nūntiī: Roman friends
   write", trig_01QU7TocqJanmp7LVdamvvdJ, a fresh session per run, push
   notifications, CRON_TZ=Europe/Kyiv at 8:51, 11:51, 14:51, 17:51 and 20:51) follows scripts/messenger-routine.md (with

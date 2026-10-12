@@ -19,7 +19,7 @@ import { SKILL_BY_ID } from "../latin/skills";
 import { setSpeechPrefs } from "../audio/speech";
 import { useScreen } from "./screen";
 import { ArrivalNotice, Messenger } from "./pages/messenger";
-import { connectMessenger, unreadTotal, useMessenger } from "./messenger";
+import { connectMessenger, ensureActa, unreadTotal, useMessenger } from "./messenger";
 
 // Four sections, named in Latin (the English shows as a tooltip): today's next step,
 // everything to read and learn, the learner's words, and the messenger.
@@ -58,6 +58,7 @@ export function App() {
     void connect();
     void connectChats();
     void connectMessenger();
+    void ensureActa();
     onPractice((skills) => {
       if (startSession({ kind: "skills", skills, label: skills.map((s) => SKILL_BY_ID.get(s)?.title).join(", ") })) go({ page: "train" });
     });

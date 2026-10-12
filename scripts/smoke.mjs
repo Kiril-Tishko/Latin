@@ -812,6 +812,15 @@ async function messenger() {
     sample.json = async (prompt) => {
       prompts.push(prompt);
       await new Promise((r) => setTimeout(r, 300));
+      if (prompt.includes("TODAY'S BOARD")) {
+        return {
+          items: [
+            { kind: "day", title: "Augustālia", titleEn: "The Augustalia", lines: [{ la: "Hodiē Augustālia!", en: "Today is the Augustalia!" }, { la: "Agricola nōn labōrat.", en: "The farmer does not work." }] },
+            { kind: "friends", title: "Lūcius", titleEn: "Lucius", lines: [{ la: "Lūcius nōn dormit.", en: "Lucius does not sleep." }, { la: "Poēta epistulam scrībit.", en: "The poet writes a letter." }] },
+            { kind: "notice", title: "Taurus", titleEn: "A bull", lines: [{ la: "Agricola taurum dēsīderat.", en: "A farmer misses his bull." }] },
+          ],
+        };
+      }
       if (prompt.includes("Invent a real person")) return { about: "A loud baker who sings while kneading.", secret: "Cannot read.", happenings: [{ en: "the oven broke", mood: "furious", hours: [4, 12] }], first: [{ la: "Salvē! Quis es?", en: "Hi! Who are you?", gap: 1 }] };
       if (prompt.includes("ON THEIR OWN")) return { messages: [] };
       if (prompt.includes("kind Latin coach")) return { verdict: "almost", better: "Librum legō.", note: "The object takes -m: «librum»." };
@@ -882,7 +891,26 @@ async function messenger() {
   await p.click("#me-m");
   await p.click("#me-start");
   await p.waitForTimeout(600);
-  if ((await p.locator(".chat-row").count()) !== 6) errors.push(`messenger: expected 6 chats, found ${await p.locator(".chat-row").count()}`);
+  if ((await p.locator(".chat-row:not(.acta-row)").count()) !== 6) errors.push(`messenger: expected 6 chats, found ${await p.locator(".chat-row:not(.acta-row)").count()}`);
+  // the Ācta Diurna: today's board, written once a day, pinned on top; a tap on a line shows its English, on a word what it is
+  await p.waitForTimeout(800);
+  if (!((await p.locator("#chat-acta .chat-row-preview").textContent()) ?? "").includes("Augustālia")) errors.push("messenger: today's Ācta Diurna is not on top of the chats");
+  if (!(await p.locator("#chat-acta .unread-badge").count())) errors.push("messenger: a new board does not show as unread");
+  await p.click("#chat-acta");
+  await p.waitForTimeout(300);
+  if ((await p.locator(".acta-post").count()) !== 3) errors.push(`messenger: the board shows ${await p.locator(".acta-post").count()} items (expected 3)`);
+  const line = p.locator(".acta-line").first();
+  const lineBox = await line.boundingBox();
+  await line.click({ position: { x: lineBox.width - 4, y: lineBox.height / 2 } });
+  if (!(await p.locator(".acta-en", { hasText: "Today is the Augustalia!" }).count())) errors.push("messenger: a tap on a line of the board does not show its English");
+  await p.locator(".acta-post .acta-line .w", { hasText: "Agricola" }).first().click();
+  if (!(await p.locator(".acta .word-card", { hasText: "farmer" }).count())) errors.push("messenger: a tap on a word of the board shows no word card");
+  if (!(await p.locator("#acta-continue").count())) errors.push("messenger: the board has no Continue");
+  await p.screenshot({ path: `${out}/messenger-acta.png` });
+  if (await p.locator("#chat-acta .unread-badge").count()) errors.push("messenger: the board stays unread after reading it");
+  const boards = await p.evaluate(() => window.__prompts.filter((x) => String(x).includes("TODAY'S BOARD")));
+  if (boards.length !== 1) errors.push(`messenger: the board was asked for ${boards.length} times`);
+  else if (!boards[0].includes("THE DAY IN ROME") || !boards[0].includes("Iūlia")) errors.push("messenger: the board's prompt lacks the day or the friends");
   await p.click("#chat-iulia");
   await p.fill("#composer", "Salve Iulia! Librum lego.");
   await p.click("#composer-check");
@@ -991,7 +1019,7 @@ async function messenger() {
   await p.click(".chat-back").catch(() => {});
   await p.click("#find-someone");
   await p.waitForTimeout(2500);
-  if (!(await p.locator(".chat-head-name").textContent())?.trim() || (await p.locator(".chat-row").count()) !== 7) errors.push("messenger: someone new did not open a chat");
+  if (!(await p.locator(".chat-head-name").textContent())?.trim() || (await p.locator(".chat-row:not(.acta-row)").count()) !== 7) errors.push("messenger: someone new did not open a chat");
   await p.screenshot({ path: `${out}/messenger-stranger.png` });
   // with a mouse and a real keyboard the bars stay while typing
   await p.focus("#composer");
@@ -1000,6 +1028,14 @@ async function messenger() {
   // the other device sees the same chats
   const other = await device("messenger-phone", { width: 390, height: 844 }, "2026-10-12T11:30:00Z");
   await other.p.waitForTimeout(1200);
+  // the other device has today's board from the account, and does not write another
+  if (!((await other.p.locator("#chat-acta .chat-row-preview").textContent()) ?? "").includes("Augustālia")) errors.push("messenger: the other device lacks today's board");
+  if (await other.p.evaluate(() => window.__prompts.some((x) => String(x).includes("TODAY'S BOARD")))) errors.push("messenger: the other device wrote the board again");
+  await other.p.click("#chat-acta");
+  await other.p.waitForTimeout(300);
+  await other.p.screenshot({ path: `${out}/messenger-phone-acta.png` });
+  await other.p.click(".chat-back");
+  await other.p.waitForTimeout(200);
   await other.p.click("#chat-iulia");
   await other.p.waitForTimeout(300);
   const there = await other.p.locator(".bubble .bubble-text").allTextContents();

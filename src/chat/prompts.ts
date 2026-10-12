@@ -56,13 +56,13 @@ export function rulesBlock(seen: Set<string>): string {
     .join("\n");
 }
 
-export function languageBlock(ctx: PromptCtx): string {
+export function languageBlock(ctx: PromptCtx, texting = true): string {
   return `LANGUAGE: strict, because the learner is a beginner and must understand every word.
 - Write in Latin with long marks (ā ē ī ō ū) exactly as in the lists.
 - Use ONLY the words and forms listed here. Nothing else, not even small common words (est, sunt, cum, mihi, tibi, hic, iam, sī, ut, valdē…) unless they are listed. Names from the list are fine; other names only if a person's own.
 - If you cannot say something with these words, say something simpler, leave it out, or let an emoji say it. Emoji are welcome and carry feelings the words cannot.
 - Roman emoji drawn for this tabula, written as codes exactly like this, never inside a word: ${emojiList()}. Use them now and then, when they fit, like any emoji.
-- Real texting: short messages, usually 1-8 words; sometimes one word, an interjection or only an emoji.
+${texting ? "- Real texting: short messages, usually 1-8 words; sometimes one word, an interjection or only an emoji." : "- Short, plain sentences: 3 to 9 words each, one thing said in each."}
 
 ${vocabularyBlock(ctx.words)}
 

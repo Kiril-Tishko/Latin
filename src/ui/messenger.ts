@@ -9,6 +9,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
+import { ACTA_ID, actaKey, boardOf, earlierBoards, writeActa } from "../chat/acta";
 import { checkDraft, Deps, meetStranger, refreshLives, timingFor, writeOwn, writeReply } from "../chat/engine";
 import { deviceZone, hashRand } from "../chat/life";
 import { CoachTurn, membersOf, mergeReactions, Meta, Msg, msgId, newMeta, newThread, Thread, unreadCount } from "../chat/model";
@@ -70,7 +71,7 @@ function emit() {
 
 export const getMeta = () => meta;
 export const getThread = (id: string): T => threads[id] ?? newThread(id, kindOf(id));
-const kindOf = (id: string): Thread["kind"] => (id === GROUP.id ? "group" : PEOPLE.some((p) => p.id === id) ? "dm" : "stranger");
+const kindOf = (id: string): Thread["kind"] => (id === GROUP.id ? "group" : id === ACTA_ID ? "channel" : PEOPLE.some((p) => p.id === id) ? "dm" : "stranger");
 
 /** Every conversation: the five friends and the group always, strangers until the learner says goodbye. */
 export function allThreads(): T[] {
@@ -81,7 +82,8 @@ export function allThreads(): T[] {
 export const errorOf = (id: string) => errors.get(id);
 
 export function unreadTotal(now = Date.now()): number {
-  return allThreads().reduce((n, t) => n + unreadCount(t, now), 0);
+  // a new board of the Ācta Diurna counts as one
+  return allThreads().reduce((n, t) => n + unreadCount(t, now), 0) + (actaUnread(now) ? 1 : 0);
 }
 
 /** Re-renders on every change and whenever a planned message arrives or someone starts typing. */
@@ -205,13 +207,16 @@ function saveMeta() {
 }
 
 let connected = false;
+let gotThreads: () => void = () => undefined;
+/** Resolves once the account's chats have come in (or there is no account to wait for). */
+const threadsReady = new Promise<void>((resolve) => (gotThreads = resolve));
 
 /** Connects to the account store (once per page load) and follows the messenger live. */
 export async function connectMessenger() {
   if (connected) return;
   connected = true;
   const s = await messengerStore();
-  if (!s) return;
+  if (!s) return gotThreads();
   store = s;
   try {
     follow(s);
@@ -246,6 +251,7 @@ function follow(s: NonNullable<typeof store>) {
   let first = true;
   s.threads.onSnapshot(
     (snap) => {
+      gotThreads();
       const seen = new Set<string>();
       for (const d of snap.docs) {
         const body = d.data() as T | undefined;
@@ -450,6 +456,7 @@ export async function opened() {
     saveMeta();
   }
   void writeBrief();
+  void ensureActa();
   if (now - meta.plannedAt < PLAN_EVERY) return;
   const ctx = promptCtx(now);
   if (!ctx) return;
@@ -538,6 +545,61 @@ export async function askCoach(id: string, question: string, turns: CoachTurn[],
     const err = (e ?? {}) as { code?: string; text?: string };
     if (err.text?.trim()) return { text: `${err.text.trim()}\n\n*(The answer was cut off.)*` };
     return { error: errorText(e) };
+  }
+}
+
+// ------------------------------------------------------------ Ācta Diurna
+
+let actaWriting = false;
+let actaError = "";
+
+/** Whether today's board is being written, or why it could not be. */
+export const actaState = () => ({ writing: actaWriting, error: actaError });
+
+/** Today's board, when it is out. */
+export const todaysBoard = (now = Date.now()) => boardOf(getThread(ACTA_ID), actaKey(now)).filter((m) => m.at <= now);
+
+/** Today's board is out and not read yet (Continue brings it, once something is done that day). */
+export function actaUnread(now = Date.now()): boolean {
+  const t = getThread(ACTA_ID);
+  return todaysBoard(now).some((m) => m.at > t.readAt);
+}
+
+/**
+ * Writes today's Ācta Diurna once a Roman day: when the page opens, the
+ * messenger opens, or the learner asks again after a failure (`force`). The
+ * account's chats come in first, so a board another device wrote is not
+ * written twice; a board asked for in the last quarter of an hour is waited for.
+ */
+export async function ensureActa(force = false): Promise<void> {
+  if (actaWriting) return;
+  await Promise.race([threadsReady, new Promise((r) => setTimeout(r, 6000))]);
+  const now = Date.now();
+  if (actaWriting || boardOf(getThread(ACTA_ID), actaKey(now)).length) return;
+  if (!force && meta.actaAt && now - meta.actaAt < 15 * 60_000) return;
+  const ctx = promptCtx(now);
+  if (!ctx) return;
+  const d = await deps();
+  if ("error" in d) {
+    actaError = d.error;
+    emit();
+    return;
+  }
+  actaWriting = true;
+  actaError = "";
+  meta = { ...meta, actaAt: now };
+  refreshLives(meta, PEOPLE.map((p) => p.id), now);
+  saveMeta();
+  try {
+    const posts = await writeActa(meta, ctx, d, earlierBoards(getThread(ACTA_ID), now));
+    if (!posts.length) throw new Error("empty");
+    const t = getThread(ACTA_ID);
+    saveThread(merge(t, { ...t, messages: [...t.messages, ...posts] }));
+  } catch (e) {
+    actaError = (e as Error)?.message === "empty" ? "The scribe wrote nothing today." : errorText(e);
+  } finally {
+    actaWriting = false;
+    emit();
   }
 }
 

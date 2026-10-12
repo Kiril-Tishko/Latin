@@ -16,6 +16,7 @@ import { derived, useProgress } from "../store";
 import { useScreen } from "../screen";
 import { NounTable, VerbTable } from "../tables";
 import { NextLesson } from "../next-lesson";
+import { actaUnread } from "../messenger";
 import { RuleList } from "./learn";
 import { continueLearning, vocabIds } from "./train";
 import { stepLabel } from "./home";
@@ -30,7 +31,7 @@ export function Lessons({ focus }: { focus?: "stories" }) {
   const seen = seenSkills(p);
   const watched = LESSONS.filter((l) => p.lessonsDone.includes(l.n));
   const later = LESSONS.filter((l) => !p.lessonsDone.includes(l.n));
-  const step = todayStep(p, vocabIds());
+  const step = todayStep(p, vocabIds(), Date.now(), actaUnread());
   // #stories: the lesson in hand, with its stories
   useEffect(() => {
     if (focus) document.getElementById(`lesson-block-${p.focusLesson}`)?.scrollIntoView({ block: "start" });

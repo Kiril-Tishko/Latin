@@ -33,6 +33,9 @@ export interface Msg {
   re?: string;
   /** Reactions, by who reacted ("me" or a person's id): the emoji and when it shows; an empty emoji is one taken back. */
   reactions?: Record<string, { e: string; at: number }>;
+  /** A post of the Ācta Diurna: its title, and its kind (the day, the city, the friends, a notice, a wonder); `la` and `en` hold its lines, one per line. */
+  title?: { la: string; en: string };
+  tag?: string;
 }
 
 /** The emoji anyone may react with: the learner's bar, and what the people may choose. */
@@ -71,9 +74,9 @@ export type CoachTurn =
   | { kind: "a"; text: string; at: number };
 
 export interface Thread {
-  /** A person's id, "amici" (the group) or a stranger's id. */
+  /** A person's id, "amici" (the group), a stranger's id, or "acta" (the Ācta Diurna). */
   id: string;
-  kind: "dm" | "group" | "stranger";
+  kind: "dm" | "group" | "stranger" | "channel";
   messages: Msg[];
   /** The learner has seen everything up to here (ms). */
   readAt: number;
@@ -90,6 +93,8 @@ export interface Meta {
   seenAt: number;
   /** When the people last decided on their own what to write. */
   plannedAt: number;
+  /** When the day's Ācta Diurna was last asked for (so two devices do not both write it). */
+  actaAt?: number;
   life: Record<string, Life>;
   strangers: Record<string, Stranger>;
 }
@@ -171,6 +176,7 @@ export const unreadCount = (t: Thread, now: number) => t.messages.filter((m) => 
 
 /** A message in one line, for lists and notices: a voice message and a photo say what they are. */
 export function preview(m: Msg): string {
+  if (m.title) return m.title.la;
   if (m.voice) return "🎤 Voice message";
   if (m.photo) return `📷 ${m.la || "Photo"}`;
   return m.la;

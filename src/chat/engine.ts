@@ -80,7 +80,7 @@ export function reactionEmoji(x: unknown): string | null {
 }
 
 // (a Roman emoji code Claude made up is dropped)
-const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+/g, " ").trim());
+export const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+/g, " ").trim());
 
 /**
  * Vets drafts; asks once for the ones that slipped to be written again; what

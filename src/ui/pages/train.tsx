@@ -32,6 +32,8 @@ import { audioReady, Speak } from "../speak";
 import { useScreen } from "../screen";
 import { PartDots, partName, PartRecap, rightWords } from "./learn";
 import { NO_CORRECTION } from "../keyboard";
+import { ACTA_ID } from "../../chat/acta";
+import { actaUnread } from "../messenger";
 
 /** What a round practises: a rule (Continue), everything (Continue, all learned), some rules (Ask Claude's "practise this"), or the words due (Continue, once a day). */
 export type Mode =
@@ -231,12 +233,14 @@ export const vocabIds = () => derived().words.filter((w) => w.kind !== "fixed").
  * round of everything.
  */
 export function continueLearning() {
-  const step = todayStep(getProgress(), vocabIds());
+  const step = todayStep(getProgress(), vocabIds(), Date.now(), actaUnread());
   switch (step.kind) {
     case "learn":
       return go({ page: "learn", id: step.part.id });
     case "story":
       return go({ page: "story", id: step.story.id });
+    case "acta":
+      return go({ page: "messenger", thread: ACTA_ID });
     case "words":
       update((p) => wordsGiven(p));
       return void (startSession({ kind: "words" }) && go({ page: "train" }));

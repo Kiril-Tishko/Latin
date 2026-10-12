@@ -52,3 +52,17 @@ describe("Continue's day", () => {
     expect(todayStep(p, vocab, NOW)).toMatchObject({ kind: "learn", part: { id: "2.1" } });
   });
 });
+
+describe("Continue and the Ācta Diurna", () => {
+  it("brings today's board once something is done, after a story, before the words", () => {
+    const p = lessonOne();
+    // nothing done yet today: the rule first, board or not
+    expect(todayStep(p, vocab, NOW, true).kind).toBe("practise");
+    recordDay(p, true, NOW);
+    expect(todayStep(p, vocab, NOW, true).kind).toBe("story");
+    for (const s of STORIES) p.stories[s.id] = NOW;
+    expect(todayStep(p, vocab, NOW, true).kind).toBe("acta");
+    // read: the day goes on
+    expect(todayStep(p, vocab, NOW, false).kind).toBe("words");
+  });
+});

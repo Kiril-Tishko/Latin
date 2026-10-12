@@ -12,20 +12,21 @@ export const WORD_ROUND_AT = 10;
 /** Exercises in that round. */
 export const WORD_ROUND = 12;
 
-export type TodayStep = NextStep | { kind: "story"; story: Story } | { kind: "words"; due: number };
+export type TodayStep = NextStep | { kind: "story"; story: Story } | { kind: "acta" } | { kind: "words"; due: number };
 
 /**
  * What Continue does now. A day starts with the rule (to learn or to
  * practise). Once something is done, an open story not read yet comes first
- * (one between two rounds), then, once a day and when enough are due, a round
- * of the words.
+ * (one between two rounds), then today's Ācta Diurna when it is out and not
+ * read (`acta`), then, once a day and when enough are due, a round of the words.
  */
-export function todayStep(p: Progress, vocab: string[], now = Date.now()): TodayStep {
+export function todayStep(p: Progress, vocab: string[], now = Date.now(), acta = false): TodayStep {
   const step = nextStep(p);
   const day = p.days[dayKey(now)];
   if (step.kind === "none" || !day?.done) return step;
   const story = day.story === undefined || day.done > day.story ? nextStory(p) : undefined;
   if (story) return { kind: "story", story };
+  if (acta) return { kind: "acta" };
   if (day.words === undefined) {
     const due = dueWords(p, vocab, now).length;
     if (due >= WORD_ROUND_AT) return { kind: "words", due };

@@ -8,7 +8,7 @@ import { Fragment } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { ENGRAVINGS } from "../../content/engravings";
 import { ROMAN_EMOJI } from "../../content/roman-emoji";
-import { emojiCodes, onlyEmoji, showEmoji } from "../../chat/emoji";
+import { emojiCodes, onlyEmoji, showEmoji, withoutEmoji } from "../../chat/emoji";
 import { GROUP, PEOPLE } from "../../content/people";
 import { phrasebook } from "../../content/phrases";
 import { PORTRAIT_BY_ID } from "../../content/portraits";
@@ -25,10 +25,12 @@ import { enterSends, Icon, Modal, useSwipeAway } from "../components";
 import { LatinText } from "../latin";
 import { audioReady, Speak } from "../speak";
 import { Inline, Markup } from "../markup";
-import { fixRequest, GrammarCheck } from "../ask";
+import { fixRequest, GrammarCheck, openAsk } from "../ask";
+import { ACTA_ID, ACTA_KINDS, ActaKind, linesOf, newestBoard } from "../../chat/acta";
 import { go } from "../nav";
 import { useScreen } from "../screen";
 import {
+  actaState,
   allThreads,
   answer,
   askCoach,
@@ -36,6 +38,7 @@ import {
   check,
   composing,
   connectMessenger,
+  ensureActa,
   errorOf,
   findSomeone,
   forget,
@@ -55,6 +58,7 @@ import { storage } from "../platform";
 import { WordModal } from "./words";
 import { knownWord, openAddWord } from "../addword";
 import { NO_CORRECTION } from "../keyboard";
+import { continueLearning } from "./train";
 
 // ---------------------------------------------------------------- pieces
 
@@ -78,6 +82,15 @@ function GroupAvatar({ size = 44 }: { size?: number }) {
       {PEOPLE.slice(0, 4).map((p) => (
         <img key={p.id} src={PORTRAIT_BY_ID.get(p.portrait)?.src} alt="" />
       ))}
+    </span>
+  );
+}
+
+/** The Ācta Diurna's face: SPQR on a round seal. */
+function ActaAvatar({ size = 44 }: { size?: number }) {
+  return (
+    <span class="avatar acta-avatar" style={{ "--av-size": `${size}px` }} aria-label="Ācta Diurna">
+      <span class="acta-seal" aria-hidden="true">{showEmoji(":spqr:")}</span>
     </span>
   );
 }
@@ -167,8 +180,13 @@ export function Messenger({ thread }: { thread?: string }) {
     if (me) void opened();
   }, [!!me]);
   const t = thread ? getThread(thread) : null;
-  const known = t && (thread === GROUP.id || PEOPLE.some((x) => x.id === thread) || getMeta().strangers[thread!]) && !t.gone;
-  useScreen("page", known ? `Messenger: chat with ${thread === GROUP.id ? `the group ${GROUP.name}` : nameOf(thread!)}` : "Messenger", () => (known ? screenText(t!, now) : "The list of chats in the messenger."));
+  const acta = thread === ACTA_ID;
+  const known = t && (acta || thread === GROUP.id || PEOPLE.some((x) => x.id === thread) || getMeta().strangers[thread!]) && !t.gone;
+  useScreen(
+    "page",
+    acta ? "Messenger: the Ācta Diurna (Rome's daily board of news)" : known ? `Messenger: chat with ${thread === GROUP.id ? `the group ${GROUP.name}` : nameOf(thread!)}` : "Messenger",
+    () => (acta ? boardText(t!, now) : known ? screenText(t!, now) : "The list of chats in the messenger."),
+  );
   return (
     <>
       <Scene />
@@ -177,7 +195,7 @@ export function Messenger({ thread }: { thread?: string }) {
       ) : (
         <div class={`msgr${known ? " in-chat" : ""}`}>
           <ChatList active={known ? thread! : null} now={now} />
-          {known ? <ChatView key={thread} id={thread!} now={now} /> : <EmptyChat />}
+          {acta ? <ActaView now={now} /> : known ? <ChatView key={thread} id={thread!} now={now} /> : <EmptyChat />}
         </div>
       )}
     </>
@@ -291,6 +309,7 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
       {finding && <Finding onStop={() => finding.ctl.abort()} />}
       {error && <p class="small well list-note">{error}</p>}
       <div class="chat-rows" role="list">
+        {(!q || actaMatches(q, now)) && <ActaRow active={active === ACTA_ID} now={now} />}
         {rows.map(({ t, last, who }) => {
           const unread = unreadCount(t, now);
           const typing = typingIn(t, now);
@@ -326,6 +345,43 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
         <ListFoot />
       </div>
     </aside>
+  );
+}
+
+/** Does the board match a search: its name, or any title or line, Latin or English? */
+const actaMatches = (q: string, now: number) =>
+  plain("Ācta Diurna").includes(q) || arrived(getThread(ACTA_ID), now).some((m) => [m.la, m.en ?? "", m.title?.la ?? "", m.title?.en ?? ""].some((x) => plain(x).includes(q)));
+
+/** The Ācta Diurna, pinned at the top of the chats: today's first title, or the scribe at work. */
+function ActaRow({ active, now }: { active: boolean; now: number }) {
+  const t = getThread(ACTA_ID);
+  const board = newestBoard(t, now);
+  const last = board.at(-1);
+  const unread = unreadCount(t, now);
+  const { writing } = actaState();
+  return (
+    <button role="listitem" id="chat-acta" class={`chat-row acta-row${active ? " active" : ""}${unread ? " unread" : ""}`} onClick={() => go({ page: "messenger", thread: ACTA_ID })}>
+      <ActaAvatar size={64} />
+      <span class="chat-row-main">
+        <span class="chat-row-top">
+          <span class="chat-row-name" lang="la">Ācta Diurna</span>
+          {last && <span class="chat-row-time">{when(last.at, now)}</span>}
+        </span>
+        <span class="chat-row-bottom">
+          <span class="chat-row-preview">
+            {writing ? (
+              <i class="typing-text">The scribe is writing today's board…</i>
+            ) : board.length ? (
+              <span lang="la">{showEmoji(board.map((m) => preview(m)).join(" · "))}</span>
+            ) : (
+              <span>Rome's daily news, in your words</span>
+            )}
+          </span>
+          {unread > 0 && <span class="unread-badge" aria-label={`${unread} unread`}>{roman(unread)}</span>}
+        </span>
+      </span>
+      <span class="chat-row-go" aria-hidden="true"><Icon.chevron /></span>
+    </button>
   );
 }
 
@@ -385,6 +441,36 @@ function wordNoteText(a: Analysis, text: string, e: Entry, name: boolean): { tex
     return { text: `${text} — the "${PN_NAMES[pn] ?? pn}" form of ${head} (${e.env.base})` };
   }
   return { text: `${text} — ${name ? "a name" : e.en}` };
+}
+
+/** The word tapped in a text (its index among the words), as a card says it. */
+function tappedWord(text: string, index: number, lex: ReturnType<typeof chatWords>["lex"]): { word: string; text: string; entry?: Entry; add?: string } | null {
+  const tok = annotate(showEmoji(text), lex).filter((x) => x.isWord)[index];
+  if (!tok) return null;
+  const a = tok.analysis ?? tok.readings?.[0];
+  return { word: tok.text, ...(a ? wordNote(a, tok.text) : { text: `${tok.text} — a word you have not learned yet`, add: tok.text }) };
+}
+
+/** What a tapped word is, under its message: hear it, open it, or add it to the learner's words. */
+function WordCard({ note, id, mine, onOpen }: { note: { word: string; text: string; entry?: Entry; add?: string }; id: string; mine?: boolean; onOpen: (e: Entry) => void }) {
+  return (
+    <div class={`word-card-row${mine ? " mine" : ""}`}>
+      <div class="word-card">
+        {/* hear the word, known or not */}
+        <Speak text={note.word} id={`word-${id}`} label={`Hear «${note.word}»`} />
+        <button
+          class="word-card-main"
+          onClick={() => (note.entry ? onOpen(note.entry) : note.add && openAddWord(note.add, "messenger"))}
+          disabled={!note.entry && !note.add}
+          aria-label={note.entry ? `${note.text}: open the word` : note.add ? `${note.text}: add it to my words` : note.text}
+        >
+          <span class="word-card-text">{note.text}</span>
+          {note.entry && <span class="word-card-go"><Icon.chevron /></span>}
+          {note.add && <span class="word-card-add"><Icon.plus /> Add</span>}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function ChatView({ id, now }: { id: string; now: number }) {
@@ -497,13 +583,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
   };
 
   /** The word card for a message, if one of its words was tapped (with the word itself, to hear it). */
-  const cardOf = (m: Msg) => {
-    if (card?.msg !== m.id) return null;
-    const tok = annotate(showEmoji(m.la), lex).filter((x) => x.isWord)[card.index];
-    const a = tok?.analysis ?? tok?.readings?.[0];
-    if (!tok) return null;
-    return { word: tok.text, ...(a ? wordNote(a, tok.text) : { text: `${tok.text} — a word you have not learned yet`, add: tok.text }) };
-  };
+  const cardOf = (m: Msg) => (card?.msg === m.id ? tappedWord(m.la, card.index, lex) : null);
 
   let lastDay = "";
   const lastMine = shown.filter((m) => m.from === "me").at(-1)?.id;
@@ -652,24 +732,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     </button>
                   </div>
                 )}
-                {note && (
-                  <div class={`word-card-row${mine ? " mine" : ""}`}>
-                    <div class="word-card">
-                      {/* hear the word, known or not */}
-                      <Speak text={note.word} id={`word-${m.id}-${card!.index}`} label={`Hear «${note.word}»`} />
-                      <button
-                        class="word-card-main"
-                        onClick={() => (note.entry ? setWordOpen(note.entry) : note.add && openAddWord(note.add, "messenger"))}
-                        disabled={!note.entry && !note.add}
-                        aria-label={note.entry ? `${note.text}: open the word` : note.add ? `${note.text}: add it to my words` : note.text}
-                      >
-                        <span class="word-card-text">{note.text}</span>
-                        {note.entry && <span class="word-card-go"><Icon.chevron /></span>}
-                        {note.add && <span class="word-card-add"><Icon.plus /> Add</span>}
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {note && <WordCard note={note} id={`${m.id}-${card!.index}`} mine={mine} onOpen={setWordOpen} />}
                 {mine && !onlyEmoji(m.la) && (m.check || m.id === lastMine || openEn.includes(m.id)) && <Checked m={m} id={id} />}
                 {mine && m.id === lastMine && <NewWords m={m} />}
               </Fragment>
@@ -696,6 +759,161 @@ function ChatView({ id, now }: { id: string; now: number }) {
       {words && <WordsSheet onClose={() => setWords(false)} onPick={(f) => insertIntoComposer(id, f)} />}
       {wordOpen && <WordModal e={wordOpen} onClose={() => setWordOpen(null)} />}
       {photo && <PhotoView id={photo} onClose={() => setPhoto(null)} />}
+    </section>
+  );
+}
+
+/** What Ask Claude sees of the board: the newest board's items, Latin with English. */
+function boardText(t: Thread, now: number): string {
+  const board = newestBoard(t, now);
+  if (!board.length) return "The Ācta Diurna, Rome's daily board of news in the learner's words: no board yet.";
+  return `The Ācta Diurna, Rome's daily board of news, written in the learner's words (${romanDate(romeDay(board[0].at))}):\n${board
+    .map((m) => `[${ACTA_KINDS[m.tag as ActaKind]?.en ?? "News"}] ${m.title?.la ?? ""} (${m.title?.en ?? ""})\n${linesOf(m).map((l) => `  ${l.la} = ${l.en}`).join("\n")}`)
+    .join("\n")}`;
+}
+
+/**
+ * The Ācta Diurna: Rome's board of the day, an item to a post (its kind, its
+ * title, its lines). A tap on a line shows its English, a tap on a word what it
+ * is; the newest board opens at its first item.
+ */
+function ActaView({ now }: { now: number }) {
+  const t = getThread(ACTA_ID);
+  const posts = arrived(t, now);
+  const lex = chatWords().lex;
+  const { writing, error } = actaState();
+  const [open, setOpen] = useState<string[]>([]);
+  const [allEn, setAllEn] = useState(false);
+  const [card, setCard] = useState<{ key: string; index: number } | null>(null);
+  const [wordOpen, setWordOpen] = useState<Entry | null>(null);
+  const count = posts.length;
+  useEffect(() => {
+    markRead(ACTA_ID);
+  }, [count]);
+  // the newest board, from its first item
+  const firstOfNewest = newestBoard(t, now)[0]?.id;
+  useLayoutEffect(() => {
+    if (firstOfNewest) document.getElementById(`msg-${firstOfNewest}`)?.scrollIntoView({ block: "start" });
+  }, [firstOfNewest]);
+  useEffect(() => {
+    if (card) document.querySelector(".acta .word-card")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [card?.key, card?.index]);
+
+  /** A tap on a word: what it is, under its line; elsewhere on the line: its English. */
+  const onLine = (key: string, e: MouseEvent) => {
+    const w = (e.target as HTMLElement).closest<HTMLElement>(".w");
+    if (w) {
+      const index = [...(e.currentTarget as HTMLElement).querySelectorAll(".w")].indexOf(w);
+      if (index >= 0) {
+        setCard(card?.key === key && card.index === index ? null : { key, index });
+        return;
+      }
+    }
+    setOpen(open.includes(key) ? open.filter((x) => x !== key) : [...open, key]);
+  };
+  const shows = (key: string) => allEn || open.includes(key);
+  const cardFor = (key: string, text: string) => (card?.key === key ? tappedWord(text, card.index, lex) : null);
+
+  let lastDay = "";
+  return (
+    <section class="chat msgr-panel acta" aria-label="Ācta Diurna">
+      <header class="chat-head">
+        <button class="btn ghost small chat-back" onClick={() => go({ page: "messenger" })} aria-label="Back to the chats">←</button>
+        <span class="chat-head-who">
+          <ActaAvatar size={72} />
+          <span class="stack" style={{ gap: 0, minWidth: 0 }}>
+            <span class="chat-head-name" lang="la">Ācta Diurna</span>
+            <span class="chat-head-sub">Rome's daily board, in your words</span>
+          </span>
+        </span>
+        <div class="chat-tools">
+          <button class="round-btn" id="acta-english" aria-label={allEn ? "Hide the English" : "Show the English of all"} aria-pressed={allEn} onClick={() => setAllEn(!allEn)}>
+            <Icon.eye />
+          </button>
+        </div>
+        <Sprig cls="head-sprig" flip />
+      </header>
+      <div class="chat-msgs acta-msgs" data-ask="The board">
+        <div class="chat-flow">
+          {!posts.length && !writing && !error && (
+            <p class="acta-empty muted">
+              Once a day the scribe writes up Rome's news on this board, only with your words: the day, the city, your friends, a notice from the walls.
+            </p>
+          )}
+          {posts.map((m) => {
+            const day = dayLabel(m.at, now);
+            const newDay = day.la !== lastDay;
+            lastDay = day.la;
+            const kind = ACTA_KINDS[m.tag as ActaKind] ?? ACTA_KINDS.city;
+            const titleKey = `${m.id}:t`;
+            const titleCard = m.title?.la ? cardFor(titleKey, m.title.la) : null;
+            return (
+              <Fragment key={m.id}>
+                {newDay && (
+                  <div class="chat-day" title={day.en}>
+                    <Sprig cls="day-sprig" />
+                    <span class="day-pill">
+                      <span lang={/^(Hodiē|Heri)$/.test(day.la) ? "la" : "en"}>{day.la}</span>
+                      <span class="day-roman" lang="la">{day.roman}</span>
+                    </span>
+                    <Sprig cls="day-sprig" flip />
+                  </div>
+                )}
+                <article class={`acta-post acta-${m.tag ?? "city"}`} id={`msg-${m.id}`}>
+                  <span class="acta-top">
+                    <span class="acta-kind" lang="la" title={kind.en}>{kind.la}</span>
+                    {/* hear the item read out (the device's voice) */}
+                    <Speak text={withoutEmoji([m.title?.la, ...linesOf(m).map((l) => l.la)].filter(Boolean).join(". ").replace(/([.!?])\./g, "$1"))} id={`acta-${m.id}`} label="Hear it read" />
+                  </span>
+                  {m.title?.la && (
+                    <h3 class="acta-title" onClick={(e) => onLine(titleKey, e as unknown as MouseEvent)}>
+                      <LatinText text={showEmoji(m.title.la)} lex={lex} />
+                    </h3>
+                  )}
+                  {m.title?.en && shows(titleKey) && <p class="acta-en">{showEmoji(m.title.en)}</p>}
+                  {titleCard && <WordCard note={titleCard} id={`${m.id}-t-${card!.index}`} onOpen={setWordOpen} />}
+                  {linesOf(m).map((l, j) => {
+                    const key = `${m.id}:${j}`;
+                    const note = cardFor(key, l.la);
+                    return (
+                      <Fragment key={key}>
+                        <p class="acta-line" onClick={(e) => onLine(key, e as unknown as MouseEvent)}>
+                          <LatinText text={showEmoji(l.la)} lex={lex} />
+                        </p>
+                        {l.en && shows(key) && <p class="acta-en">{showEmoji(l.en)}</p>}
+                        {note && <WordCard note={note} id={`${m.id}-${j}-${card!.index}`} onOpen={setWordOpen} />}
+                      </Fragment>
+                    );
+                  })}
+                  {m.newWords && allEn && <p class="acta-en small">New to you: {m.newWords.join(", ")}</p>}
+                </article>
+              </Fragment>
+            );
+          })}
+          {writing && (
+            <div class="acta-writing well small" role="status">
+              <Icon.quill /> <span lang="la">Scrība scrībit…</span> The scribe is writing today's board.
+            </div>
+          )}
+          {error && !writing && (
+            <div class="chat-error well small">
+              {error} <button class="linkish" onClick={() => void ensureActa(true)}>Try again</button>
+            </div>
+          )}
+        </div>
+      </div>
+      <div class="acta-foot">
+        <span class="small muted ui">Tap a line for its English, a word for what it is.</span>
+        <span class="row" style={{ gap: "8px" }}>
+          <button class="btn ghost small" onClick={() => openAsk(null, "Help me read today's board: is there a word or an ending I should look at twice?")}>
+            <Icon.quill /> Ask Claude
+          </button>
+          <button class="btn small" id="acta-continue" onClick={continueLearning}>
+            <Icon.play /> Continue
+          </button>
+        </span>
+      </div>
+      {wordOpen && <WordModal e={wordOpen} onClose={() => setWordOpen(null)} />}
     </section>
   );
 }

@@ -276,7 +276,6 @@ interface RunnerState {
   res: Result | null;
   showHints: boolean;
   showRule: boolean;
-  showEnglish: boolean;
   judgement: string | null;
 }
 
@@ -303,15 +302,14 @@ const stop = (t: string) => (/[.!?…]$/.test(t.trim()) ? t.trim() : `${t.trim()
 /** What Claude should know about the exercise on screen, as it stands right now. */
 function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
   const answered = !!st.res;
-  const english = ex.english && (ex.kind === "ending" || ex.kind === "transform" || ex.kind === "choose") && !answered
-    ? st.showEnglish ? ` Its English, shown: "${ex.english}".` : " Its English is hidden behind a Translate button."
-    : "";
+  const english = ex.english && (ex.kind === "ending" || ex.kind === "transform" || ex.kind === "choose") && !answered ? ` Its English is shown above it: "${ex.english}".` : "";
+  const goal = ex.kind === "transform" && ex.answerEnglish && !answered ? ` The new sentence is to say: "${ex.answerEnglish}".` : "";
   const shown: Record<ExerciseKind, string> = {
     en2la: `the English sentence "${ex.english}", to write in Latin.`,
     la2en: `the Latin sentence "${shownLatin(ex, true)}", to translate into English.`,
     listen: answered ? `the sentence that was read aloud: "${shownLatin(ex, true)}"` : "a Latin sentence read aloud, not shown in writing until the answer is checked.",
     ending: `"${shownLatin(ex, answered)}"${answered ? "" : ", with one ending left out (___)."}${english}`,
-    transform: `"${shownLatin(ex, true)}".${english}`,
+    transform: `"${shownLatin(ex, true)}".${english}${goal}`,
     choose: `"${shownLatin(ex, answered)}"; options: ${ex.choices?.map((c) => c.label).join(" / ")}.${english}`,
     form: plainText(ex.ask ?? ""),
     identify: `the sentence "${shownLatin(ex, true)}"; the learner taps the word asked for.`,
@@ -344,37 +342,50 @@ function describeExercise(s: Session, ex: Exercise, st: RunnerState): string {
   return lines.filter(Boolean).join("\n");
 }
 
-/** What to do, in a few plain words, and how: write, tap, type in the gap, listen, change. */
+/**
+ * What to do, in a few plain words, and how (write, tap, type in the gap,
+ * listen, change), with what the answer is to be (`expect`: "only the missing
+ * letters", "the whole new sentence", "1 word is extra"): the learner asked
+ * never to have to guess what is wanted.
+ */
 type How = "write" | "tap" | "gap" | "listen" | "change";
-function taskOf(ex: Exercise): { how: How; text: string; dir?: string } {
+function taskOf(ex: Exercise): { how: How; text: string; dir?: string; expect?: string } {
   const label = ex.ask?.split("→")[1]?.trim() ?? "";
   switch (ex.kind) {
     case "en2la":
-      return { how: "write", text: "Write this sentence in Latin", dir: "English → Latin" };
+      return { how: "write", text: "Write this sentence in Latin", dir: "English → Latin", expect: "the whole sentence · any word order · long marks not needed" };
     case "la2en":
-      return { how: "write", text: "Write it in English", dir: "Latin → English" };
+      return { how: "write", text: "Write it in English", dir: "Latin → English", expect: "the whole sentence, in English" };
     case "ending":
-      return { how: "gap", text: "Type the missing ending in the gap" };
+      return { how: "gap", text: "Type the missing ending in the gap", expect: "only the missing letters" };
     case "choose":
-      return { how: "tap", text: "Tap the word that fits the gap" };
-    case "form":
-      return { how: "gap", text: label ? `Write the form for ${label}` : "Write the form" };
+      return { how: "tap", text: "Tap the word that fits the gap", expect: "one of the words below" };
+    case "form": {
+      const n = ex.check("—").expected.trim().split(/\s+/).length;
+      return { how: "gap", text: label ? `Write the form for ${label}` : "Write the form", expect: n > 1 ? `${n} words` : "one word" };
+    }
     case "transform":
-      return { how: "change", text: `Change the Latin: ${ex.instruction.charAt(0).toLowerCase()}${ex.instruction.slice(1).replace(/\.$/, "")}` };
+      return { how: "change", text: `Change the Latin: ${ex.instruction.charAt(0).toLowerCase()}${ex.instruction.slice(1).replace(/\.$/, "")}`, expect: "the whole new sentence, in Latin" };
     case "identify":
-      return { how: "tap", text: ex.instruction.replace(/^Which word (is|says) (.*)\?$/, "Tap the word that $1 $2") };
+      return { how: "tap", text: ex.instruction.replace(/^Which word (is|says) (.*)\?$/, "Tap the word that $1 $2"), expect: "one word" };
     case "listen":
-      return { how: "listen", text: "Listen, then write what you hear" };
+      return { how: "listen", text: "Listen, then write what you hear", expect: "the whole sentence, in Latin" };
     case "tiles":
-      return { how: "tap", text: "Tap the words in order to build the sentence" };
+      return {
+        how: "tap",
+        text: "Tap the words in order to build the sentence",
+        expect: ex.extra ? `${ex.extra} word${ex.extra > 1 ? "s are" : " is"} extra: leave ${ex.extra > 1 ? "them" : "it"} out` : "use every word",
+      };
     case "meaning":
-      return { how: "tap", text: "Tap what it means" };
+      return { how: "tap", text: "Tap what it means", expect: "one of the three" };
     case "vocab":
-      return ex.answer === "en" ? { how: "write", text: "Write what it means", dir: "Latin → English" } : { how: "write", text: "Write the Latin word", dir: "English → Latin" };
+      return ex.answer === "en"
+        ? { how: "write", text: "Write what it means", dir: "Latin → English", expect: "the English meaning" }
+        : { how: "write", text: "Write the Latin word", dir: "English → Latin", expect: "one word · long marks not needed" };
     case "derive":
-      return { how: "write", text: "Write the Latin word inside this English word" };
+      return { how: "write", text: "Write the Latin word inside this English word", expect: "one Latin word, any form" };
     case "answer":
-      return { how: "write", text: ex.instruction, dir: ex.last ? "your turn" : "your own words" };
+      return { how: "write", text: ex.instruction, dir: ex.last ? "your turn" : "your own words", expect: "a short answer in Latin, your own words" };
   }
 }
 
@@ -391,7 +402,6 @@ function Runner({ s }: { s: Session }) {
   const showRule = help;
   // a rule that is still new is shown with its colors from the start
   const showColors = !!ex.easy || help;
-  const [showEnglish, setShowEnglish] = useState(false);
   const [judging, setJudging] = useState(false);
   const [judgement, setJudgement] = useState<string | null>(null);
   // after an answer: the details (the rule, every slip, Claude) only on Why?
@@ -407,11 +417,11 @@ function Runner({ s }: { s: Session }) {
   const sideRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   useScreen("page", `Exercise ${s.index + 1} of ${roundSize(s)}: ${KIND_LABEL[ex.kind]}`, () =>
-    describeExercise(s, ex, { answer, res, showHints, showRule, showEnglish, judgement }),
+    describeExercise(s, ex, { answer, res, showHints, showRule, judgement }),
   );
 
   // the exercise always fits the window: shrink it (never below a readable size) when it would scroll
-  useLayoutEffect(() => fitToWindow(panelRef.current, !!res), [ex.id, res, showHints, showRule, showEnglish, judgement, judging, why]);
+  useLayoutEffect(() => fitToWindow(panelRef.current, !!res), [ex.id, res, showHints, showRule, judgement, judging, why]);
 
   useEffect(() => {
     if (!res) inputRef.current?.focus();
@@ -519,7 +529,11 @@ function Runner({ s }: { s: Session }) {
       items = [...items.slice(0, s.index + 1), extras[0], ...items.slice(s.index + 1)];
       extras = extras.slice(1);
     } else if (part && s.plan !== undefined && (s.made ?? 0) < s.plan) {
-      const fresh = partExercise(getProgress(), ctx(), part, s.lines ?? [], STEPWISE, new Set(items.map((e) => e.context)), items.slice(0, s.index + 1));
+      // wrong answers in a row on the rule's own exercises: the next one is not harder
+      const own = attempts.filter((a) => !a.ex.aside);
+      let missed = 0;
+      for (let i = own.length - 1; i >= 0 && own[i].res.verdict === "wrong"; i--) missed++;
+      const fresh = partExercise(getProgress(), ctx(), part, s.lines ?? [], STEPWISE, new Set(items.map((e) => e.context)), items.slice(0, s.index + 1), missed);
       if (fresh) {
         items = [...items.slice(0, s.index + 1), fresh, ...items.slice(s.index + 1)];
         made = (made ?? 0) + 1;
@@ -603,6 +617,7 @@ function Runner({ s }: { s: Session }) {
                 <span class="task-text ex-instruction">{task.text}</span>
                 {task.dir && <span class="task-dir">{task.dir}</span>}
                 {sources.length > 0 && <span class="ex-source">{sources.join(" · ")}</span>}
+                {task.expect && !res && <span class="task-expect">→ {task.expect}</span>}
               </div>
             );
           })()}
@@ -613,8 +628,6 @@ function Runner({ s }: { s: Session }) {
               res={res}
               chosen={answer}
               onChoose={(id) => { setAnswer(id); check(id); }}
-              english={showEnglish}
-              onEnglish={() => setShowEnglish(true)}
               box={{ value: answer, onInput: setAnswer, onEnter: () => (res ? next() : check()), ref: inputRef }}
             />
           </div>
@@ -758,14 +771,25 @@ function TileBoard({ tiles, picked, onPick, done }: { tiles: string[]; picked: n
   );
 }
 
-/** The English of a Latin prompt, hidden behind a button so the meaning is worked out first. */
-function Translation({ text, shown, onShow }: { text?: string; shown: boolean; onShow: () => void }) {
-  if (!text) return null;
-  if (shown) return <p class="muted ex-english">{text}</p>;
+/**
+ * The English of the sentence, above the Latin of a gap exercise: who does
+ * what is always in sight (the learner had to guess the doer when it was
+ * hidden), and the word the gap stands for is marked in both lines.
+ */
+function EnglishLine({ text, mark, goal }: { text: string; mark?: [number, number]; goal?: boolean }) {
+  const [a, b] = mark ?? [0, 0];
   return (
-    <button class="linkish ex-english" onClick={onShow} title="Show the English meaning">
-      Translate
-    </button>
+    <p class={`ex-english-top${goal ? " goal" : ""}`} lang="en">
+      {mark ? (
+        <>
+          {text.slice(0, a)}
+          <mark class="en-mark">{text.slice(a, b)}</mark>
+          {text.slice(b)}
+        </>
+      ) : (
+        text
+      )}
+    </p>
   );
 }
 
@@ -811,13 +835,11 @@ function Prompt(props: {
   res: Result | null;
   chosen: string;
   onChoose: (id: string) => void;
-  english: boolean;
-  onEnglish: () => void;
   box: AnswerBox;
 }) {
   const { ex, showColors, res, chosen, onChoose, box } = props;
-  // once answered, the translation of the correct answer is in the feedback
-  const translation = !res && <Translation text={ex.english} shown={props.english} onShow={props.onEnglish} />;
+  // the English is in sight before the answer (who does what); after it, the feedback has it
+  const english = !res && ex.english ? <EnglishLine text={ex.english} mark={ex.mark} /> : null;
   switch (ex.kind) {
     case "en2la":
     case "tiles":
@@ -830,7 +852,7 @@ function Prompt(props: {
             {ex.audio && <Speak text={ex.audio} id={`prompt-${ex.id}`} />}
           </p>
           {ex.gloss && ex.gloss.length > 0 && <p class="answer-gloss ui">{ex.gloss.join(" · ")}</p>}
-          {translation}
+          {!res && ex.english && <p class="muted ex-english">{ex.english}</p>}
         </div>
       );
     case "meaning":
@@ -882,27 +904,33 @@ function Prompt(props: {
     case "ending":
       return (
         <div class="stack" style={{ gap: "6px" }}>
+          {english}
           <p class="latin-lg gap-line">
             <LatinTokens tokens={ex.latin!} blank={res ? undefined : ex.blank} plain={!showColors} gap={res ? undefined : <GapInput box={box} label="The missing ending" />} />
           </p>
-          {translation}
         </div>
       );
     case "transform":
+      // the sentence as it is, and what it is to become: the learner sees the goal, not only the change
       return (
         <div class="stack" style={{ gap: "6px" }}>
           <p class="latin-lg">
             <LatinTokens tokens={ex.latin!} plain={!showColors} />
             {ex.audio && <Speak text={ex.audio} id={`prompt-${ex.id}`} />}
           </p>
-          {translation}
+          {!res && ex.english && <p class="muted ex-english">{ex.english}</p>}
+          {!res && ex.answerEnglish && (
+            <p class="ex-goal">
+              <span class="goal-label ui">Make it say</span> <span lang="en">{ex.answerEnglish}</span>
+            </p>
+          )}
         </div>
       );
     case "choose":
       return (
         <div class="stack" style={{ gap: "6px" }}>
+          {english}
           <p class="latin-lg"><LatinTokens tokens={ex.latin!} blank={res ? undefined : ex.blank} whole plain={!showColors} /></p>
-          {translation}
           <div class="choices" role="group" aria-label="Options">
             {ex.choices!.map((c, i) => {
               const state = !res ? "" : c.id === ex.correctChoice ? "chosen-good" : c.id === chosen ? "chosen-bad" : "";

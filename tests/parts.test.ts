@@ -349,6 +349,41 @@ describe("practice of each part", () => {
     }
   }, 30_000);
 
+  it("after a wrong answer gives nothing harder, and after two in a row something easier", () => {
+    const RANK: ExerciseKind[] = ["meaning", "choose", "tiles", "ending", "identify", "form", "la2en", "listen", "transform", "en2la"];
+    let stays = 0;
+    let down = 0;
+    for (const part of PARTS) {
+      for (const seed of [3, 9]) {
+        const p = learner(part, 5);
+        const k = buildKnowledge([1, 2, 3, 4], [], 0, through(part));
+        const lines = practiceLines(lex, k);
+        const ctx = { k, lex, r: seeded(seed), audio: true };
+        const seen = new Set<string>();
+        const prev: Exercise[] = [];
+        let missed = 0;
+        for (let i = 0; i < 7; i++) {
+          const ex = partExercise(p, ctx, part, lines, STEPWISE, seen, prev, missed);
+          if (!ex) break;
+          if (missed > 0 && !ex.earlier) {
+            const before = RANK.indexOf(prev.at(-1)!.kind);
+            expect(RANK.indexOf(ex.kind), `${part.id}: ${prev.at(-1)!.kind} then ${ex.kind}`).toBeLessThanOrEqual(before);
+            if (missed === 1) stays++;
+            else if (RANK.indexOf(ex.kind) < before) down++;
+          }
+          prev.push(ex);
+          // the fourth and fifth answers are wrong
+          const wrong = i === 3 || i === 4;
+          const answer = wrong ? "xxxx" : modelAnswer(ex);
+          applyResult(p, ex, ex.check(answer), answer);
+          missed = wrong ? missed + 1 : 0;
+        }
+      }
+    }
+    expect(stays).toBeGreaterThan(30);
+    expect(down).toBeGreaterThan(10);
+  }, 30_000);
+
   it("rule 3.2: the -ī of an -us word is in every exercise (it once was in none)", () => {
     const part = PARTS.find((x) => x.id === "3.2")!;
     const { out } = playRound(part, 5, 5);

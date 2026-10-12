@@ -331,7 +331,9 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
     });
     if (poss && !poss.noun.proper) {
       np.poss = poss;
-      np.possFirst = chance(r, 0.3);
+      // after its noun (amīca discipulī) until the hardest sentences: in front of it, a beginner
+      // takes it for the subject («Discipulī amīca…»)
+      np.possFirst = rich(k) >= 1 && chance(r, 0.3);
     }
   }
   return np;
@@ -838,9 +840,13 @@ const groupOf = (t?: LToken) => (t && NOUNISH.test(t.role) ? t.role.replace("-ad
 /**
  * A genitive between two nouns could belong to either ("Puella deae epistulam
  * scrībit": the goddess's girl, or the goddess's letter?). Moves it to the far
- * side of its own noun: "Puella epistulam deae scrībit".
+ * side of its own noun: "Puella epistulam deae scrībit". In a plain sentence
+ * (`plain`: while a rule is not yet hard) a subject's genitive stays after its
+ * noun, as a beginner reads it, and the other noun goes after the verb
+ * instead: "Magistra amīcae legit epistulam", not "Amīcae magistra epistulam legit"
+ * (the learner took the genitive in front for the subject).
  */
-export function untangle(out: LToken[]): LToken[] {
+export function untangle(out: LToken[], plain = false): LToken[] {
   for (let i = 1; i < out.length - 1; i++) {
     const t = out[i];
     if (!t.role.endsWith("-poss")) continue;
@@ -848,6 +854,12 @@ export function untangle(out: LToken[]): LToken[] {
     const left = groupOf(out[i - 1]);
     const right = groupOf(out[i + 1]);
     if (!left || !right || left === right) continue;
+    if (plain && left === own && !out.some((x) => x.role === "inf")) {
+      let j = i + 1;
+      while (j < out.length && groupOf(out[j]) === right) j++;
+      out.push(...out.splice(i + 1, j - i - 1));
+      continue;
+    }
     if (right === own) {
       out.splice(i, 1);
       let j = i;
@@ -901,7 +913,7 @@ export function latinTokens(c: Clause, k: Knowledge): LToken[] {
     // nōn stays right before est: "Poēta nōn est puella" / "Poēta puella nōn est"
     if (c.pred.predFirst) out.push(...pred, ...neg, verb);
     else out.push(...neg, verb, ...pred);
-    return untangle(out);
+    return untangle(out, rich(k) < 1);
   }
   if (c.inf) {
     if (c.inf.obj && c.verb.id !== "doceo") out.push(...npTokens(c.inf.obj, "obj"));
@@ -910,7 +922,7 @@ export function latinTokens(c: Clause, k: Knowledge): LToken[] {
   if (c.adv === "bene") out.push(fixedToken(k, "bene", "adv", "bene"));
   if (c.neg) out.push(fixedToken(k, "non", "neg", "nōn"));
   out.push(verb);
-  return untangle(out);
+  return untangle(out, rich(k) < 1);
 }
 
 export function latinText(tokens: LToken[]): string {

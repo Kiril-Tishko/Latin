@@ -124,6 +124,8 @@ async function run(name, viewport, colorScheme) {
   for (let i = 0; i < 4; i++) {
     await p.waitForTimeout(200);
     if (!(await p.locator(".task-line .task-text").count())) errors.push(`${name}: an exercise without a plain task line`);
+    // what the answer is to be is always said ("only the missing letters", "1 word is extra")
+    if (!(await p.locator(".task-line .task-expect").count())) errors.push(`${name}: an exercise does not say what the answer is to be`);
     if (i === 1) {
       await p.locator("#ex-help").click();
       await p.waitForTimeout(100);
@@ -132,6 +134,8 @@ async function run(name, viewport, colorScheme) {
     if (i === 3) {
       if (!(await p.locator(".ex-source", { hasText: "earlier mistake" }).count())) errors.push(`${name}: the round does not bring an earlier mistake back`);
       if (!(await p.locator(".prompt .gap-input").count())) errors.push(`${name}: the ending is not typed into the sentence`);
+      // who does what is in sight: the English above the gap, the gap's word marked in it
+      if (!(await p.locator(".prompt .ex-english-top .en-mark").count())) errors.push(`${name}: a gap exercise does not show its English with the word marked`);
       await p.screenshot({ path: `${out}/${name}-gap.png` });
     }
     if (await p.locator(".tile-board").count()) {

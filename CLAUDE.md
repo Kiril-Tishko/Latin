@@ -260,9 +260,14 @@ piece first, a single form when only a form can show it (to …: -re; vīnī), t
 videos' and stories' sentences for et between two verbs (`practiceLines`; lines
 that say a word twice and verbless phrases are left out). The learner asked for
 coherent rounds: exercises come in blocks of three of one kind (`BLOCK`,
-`blockKind`), from the phase's main kinds toward harder ones, and only of kinds
-that can show the rule (`countingKinds`: "in / ad + -m" never shows in one
-ending). Past the simple phase every fifth reviews an earlier rule in the same
+`blockKind`): a simple or mixed round starts with its easiest kind and climbs one
+or two steps at a time (`EASY_TO_HARD`; the last phase starts with its main
+kinds), only of kinds that can show the rule (`countingKinds`: "in / ad + -m"
+never shows in one ending). After a wrong answer nothing harder comes (the
+learner asked, "not strict"): one miss keeps the kind, two in a row step down,
+the sentence is plainer (a phase back), no earlier-rule review comes between,
+and the fallbacks stay at or below the kind missed (`missed` in `partExercise`,
+counted from the round's own exercises in `Runner.next`). Past the simple phase every fifth reviews an earlier rule in the same
 kind (`earlier`). The day's review comes between: up to two mistakes (the
 rule's own first, then the oldest: `mistakesSession(…, prefer)`) and two words
 that are due, every fourth exercise (`dayReview`, marked `aside`, so they don't
@@ -332,7 +337,17 @@ constructions in its round (et between two verbs), and five of them are mixed
 into every round of everything (`linesSession`, `LINES_IN_MIX`).
 
 Every exercise shows one plain task line with a sign for how to answer (write,
-tap, type in the gap, listen, change: `taskOf` in `src/ui/pages/train.tsx`).
+tap, type in the gap, listen, change: `taskOf` in `src/ui/pages/train.tsx`),
+and under it what the answer is to be (`expect`: "only the missing letters",
+"the whole new sentence", "1 word is extra: leave it out"): the learner asked
+never to have to guess the task, only to think about words and rules. A gap
+exercise (ending, choose) always shows its English above the Latin (hidden
+behind Translate, the doer was a guess when ego / tū was left out), with the
+gap's word marked in both lines (`englishMark` in exercises.ts, `Exercise.mark`:
+the noun, describing word or verb, the right one of two by its role); a
+sentence to change shows what it is to say ("Make it say: I do not write the
+book", `answerEnglish`); word tiles say how many are extra (`Exercise.extra`);
+an open question shows its English under it.
 Endings and forms are typed into the sentence itself (`GapInput`), a sentence to
 change starts in the answer box, and the infinitive is asked from the tū form
 (its vowel decides it: from discō alone it cannot be known). Only an exercise
@@ -363,7 +378,10 @@ learned (`PUPILS`, `LEARNABLE`), whose things and people are (`OWNED`,
 `RELATIONS`, `OWNERS`, `mine` for "my"), where people and gods are and what they
 do there (`whoAt`, `doneAt`, `HOMES`, `REFUGES`, `NOT_DIVINE`, `makesSense`), and
 the word tags in `words.ts` / `deck.ts` (e.g. `long`, `unseen`, `story`). A
-genitive never stands between two nouns (`untangle`). The learner found odd
+genitive never stands between two nouns (`untangle`); in plain sentences (until
+a rule is hard) it stays after its noun and the other noun goes after the verb
+(«Magistra amīcae legit epistulam», `untangle(out, plain)`; `possFirst` only in
+rich sentences), since a genitive in front was read as the subject. The learner found odd
 sentences in practice, so `makesSense` also refuses: a teacher's work done by
 anyone but a teacher or a poet (`TEACHERS`; the taught are `PUPILS`), "has the
 farmer" (`HAD`), "writes the poet's letter", a place with an owner, "the poet is

@@ -2,7 +2,7 @@
 // and words it practises, so the session can update mastery afterwards.
 import { Analysis, Lexicon } from "../latin/analyze";
 import { checkEnglish, checkLatin, CheckedToken, describe, hinted, Issue, slotsFor, Verdict } from "../latin/check";
-import { normalizeEnglish } from "../latin/english";
+import { en3s, enIng, enPlural, normalizeEnglish } from "../latin/english";
 import {
   chance, Clause, english, generate, Knowledge, latinText, latinTokens, LToken, NP, pick, Rand, shuffle, swapRoles, verbUsable,
   nounUsable, adjUsable, adjFits, makesSense, sensibleObject,
@@ -90,6 +90,10 @@ export interface Exercise {
   last?: boolean;
   /** For "tiles": the words to build the answer from (the right ones and a wrong form or two). */
   tiles?: string[];
+  /** For "tiles": how many of them are extra (wrong forms to leave out). */
+  extra?: number;
+  /** Where the gapped word is in `english` ([start, end)): marked there too, so the gap and its meaning are seen together. */
+  mark?: [number, number];
   /** A sentence from the video of this lesson. */
   video?: number;
   /** A sentence from this story (its title). */
@@ -206,6 +210,7 @@ export function tilesOn(ctx: Ctx, tokens: LToken[], englishText: string, skills:
     instruction: KIND_LABEL.tiles,
     answer: "tiles",
     tiles,
+    extra: chosen.length,
     hints: [],
     context: `Build the Latin for "${englishText}" from the tiles ${tiles.join(" / ")}. Model answer: ${latinText(tokens)}`,
   };
@@ -336,6 +341,42 @@ export function tokenRules(t: LToken, tokens: LToken[]): string[] {
   return out;
 }
 
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Where a word of the Latin sentence is in its English: the noun, describing
+ * word or verb that the gap stands for ("girl" in "The farmer sees the girl."),
+ * so the exercise can mark it in both lines. When a word comes twice ("the
+ * friend (f) of the friend (m)"), its role picks the one: whose → after "of" or
+ * before "'s", the object → the later one, the subject → the first.
+ */
+export function englishMark(englishText: string, t: LToken): [number, number] | null {
+  const e = t.analysis?.entry;
+  if (!e || e.kind === "fixed") return null;
+  const meanings = [e.en, ...(e.alt ?? [])].map((m) => m.replace(/^(the|a|an|to) /, "").replace(/\s*\(.*\)$/, "").trim()).filter(Boolean);
+  let forms: string[];
+  if (e.kind === "verb") {
+    const vs = [e.env, ...(e.altv ?? [])];
+    forms = vs.flatMap((v) => [v.base, en3s(v), enIng(v), v.past ?? "", v.pp ?? ""]).filter(Boolean);
+    if (e.irregular === "sum") forms.push("am", "are", "is");
+    if (e.irregular === "possum") forms.push("can", "cannot", "able");
+  } else if (e.kind === "noun") forms = meanings.flatMap((m) => [m, enPlural(m, e.enPl)]);
+  else forms = meanings;
+  // the longest first, so "reads" is not cut to "read"
+  const words = [...new Set(forms)].sort((a, b) => b.length - a.length).map(escape);
+  if (!words.length) return null;
+  const re = new RegExp(`\\b(?:${words.join("|")})(?:'s|s'|')?(?![\\w])`, "gi");
+  const hits = [...englishText.matchAll(re)].map((m) => [m.index!, m.index! + m[0].length] as [number, number]);
+  if (!hits.length) return null;
+  if (hits.length === 1) return hits[0];
+  const before = (h: [number, number]) => englishText.slice(0, h[0]);
+  const whose = (h: [number, number]) => /\bof (the |a |an |my )?$/i.test(before(h)) || /'s?$/.test(englishText.slice(h[0], h[1]));
+  if (t.role.endsWith("-poss")) return hits.find(whose) ?? hits[0];
+  const plain = hits.filter((h) => !whose(h));
+  const pool = plain.length ? plain : hits;
+  return t.role.startsWith("obj") || t.role.startsWith("pp") ? pool[pool.length - 1] : pool[0];
+}
+
 export function endingOn(ctx: Ctx, tokens: LToken[], englishText: string, focus: string[]): Exercise | null {
   // before subject and object are told apart (Lesson II), a subject's ending is
   // just the dictionary form: blank something that tests a rule instead
@@ -356,6 +397,7 @@ export function endingOn(ctx: Ctx, tokens: LToken[], englishText: string, focus:
     latin: tokens,
     blank,
     english: englishText,
+    mark: englishMark(englishText, target) ?? undefined,
     hints: [`${dictionaryForm(a.entry)}: ${a.entry.en}`],
     answer: "ending",
     skills,
@@ -478,6 +520,7 @@ export function chooseOn(ctx: Ctx, tokens: LToken[], englishText: string, focus:
     latin: tokens,
     blank,
     english: englishText,
+    mark: englishMark(englishText, target) ?? undefined,
     hints: [`${dictionaryForm(a.entry)}: ${a.entry.en}`],
     answer: "choice",
     choices: all.map((x, i) => ({ id: String(i), label: x.text })),

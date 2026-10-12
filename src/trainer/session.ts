@@ -207,6 +207,7 @@ const PHASE_LEVEL: Record<Phase, number> = { simple: 0.3, mixed: 0.75, hard: 0.9
 
 /** Exercise kinds from the easiest (recognise) to the hardest (write it all yourself). */
 const EASY_TO_HARD: MadeKind[] = ["meaning", "choose", "tiles", "ending", "identify", "form", "la2en", "listen", "transform", "en2la"];
+const rankOf = (k: ExerciseKind) => EASY_TO_HARD.indexOf(k as MadeKind);
 /** How many exercises of one kind come in a row: one instruction, then a few of the same. */
 export const BLOCK = 3;
 
@@ -237,25 +238,39 @@ function countingKinds(part: Part, c: Ctx, level: number, phaseKinds: [ExerciseK
 
 /**
  * The kind of the next exercise in a round: the kind of the last ones until
- * there are three of it, then a harder kind of the phase (by its weights),
- * so a round reads as a few short blocks from easy to hard.
+ * there are three of it, then the next harder kind of the phase (one or two
+ * steps up, never a leap), so a round reads as a few short blocks from easy
+ * to hard. A simple or mixed round starts with its easiest kind; the last
+ * phase starts with its main kinds. After a wrong answer (`missed`: wrong
+ * answers in a row) it never gets harder, as the learner asked: one miss keeps
+ * the kind, two in a row step down to an easier one.
  */
-export function blockKind(r: Rand, prev: Exercise[], phaseKinds: [ExerciseKind, number][]): MadeKind | undefined {
+export function blockKind(r: Rand, prev: Exercise[], phaseKinds: [ExerciseKind, number][], missed = 0, gentle = true): MadeKind | undefined {
   const own = prev.filter((e) => !e.aside);
   const last = own.at(-1);
   const inPhase = (k: ExerciseKind) => phaseKinds.some(([x]) => x === k);
+  const rank = (k: ExerciseKind) => EASY_TO_HARD.indexOf(k as MadeKind);
+  const byRank = [...phaseKinds].sort((a, b) => rank(a[0]) - rank(b[0]));
+  if (last && missed > 0) {
+    const easier = byRank.filter(([k]) => rank(k) < rank(last.kind));
+    if (missed >= 2 && easier.length) return easier[easier.length - 1][0] as MadeKind;
+    if (inPhase(last.kind)) return last.kind as MadeKind;
+    return (easier.at(-1)?.[0] ?? byRank[0]?.[0]) as MadeKind | undefined;
+  }
   if (last && inPhase(last.kind)) {
     let run = 0;
     for (let i = own.length - 1; i >= 0 && own[i].kind === last.kind; i--) run++;
     if (run < BLOCK) return last.kind as MadeKind;
   }
-  const rank = (k: ExerciseKind) => EASY_TO_HARD.indexOf(k as MadeKind);
-  // a round starts with one of the phase's main kinds (the hardest ones in the last phase)
   if (!last) {
-    const top = Math.max(0, ...phaseKinds.map(([, w]) => w));
-    return weighted(r, phaseKinds.filter(([, w]) => w >= top / 2)) as MadeKind | undefined;
+    // the last phase starts with its main kinds; the others gently, with their easiest
+    if (!gentle) {
+      const top = Math.max(0, ...phaseKinds.map(([, w]) => w));
+      return weighted(r, phaseKinds.filter(([, w]) => w >= top / 2)) as MadeKind | undefined;
+    }
+    return byRank[0]?.[0] as MadeKind | undefined;
   }
-  const harder = phaseKinds.filter(([k]) => rank(k) > rank(last.kind));
+  const harder = byRank.filter(([k]) => rank(k) > rank(last.kind)).slice(0, 2);
   const pool = harder.length ? harder : phaseKinds.filter(([k]) => k !== last.kind);
   return weighted(r, pool.length ? pool : phaseKinds) as MadeKind | undefined;
 }
@@ -268,22 +283,27 @@ export function blockKind(r: Rand, prev: Exercise[], phaseKinds: [ExerciseKind, 
  * between two verbs, live only there). A piece that only a single form can show
  * (to …: -re; vīnī) gets one. Past the simple ones, one in five reviews earlier rules.
  */
-export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], kinds: ExerciseKind[], seen: Set<string>, prev: Exercise[] = []): Exercise | null {
+export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], kinds: ExerciseKind[], seen: Set<string>, prev: Exercise[] = [], missed = 0): Exercise | null {
   const phase = partPhase(p, part);
   const level = PHASE_LEVEL[phase];
   const allowed = kinds.filter((kind) => kind !== "vocab" && kind !== "derive" && (kind !== "listen" || !!ctx.audio)) as MadeKind[];
   const phaseKinds = kindWeights(level).filter(([kind]) => allowed.includes(kind as MadeKind));
   const fixed = lines.filter((l) => l.skills.some((s) => part.skills.includes(s)) && l.skills.every((s) => ctx.k.skills.has(s)));
-  const c: Ctx = { ...ctx, k: { ...ctx.k, ...sentenceStyle(level, ctx.k.silly) } };
+  // after a wrong answer the sentence is plainer too (a phase back), until an answer is right again
+  const styleLevel = missed > 0 ? PHASE_LEVEL[phase === "hard" ? "mixed" : "simple"] : level;
+  const c: Ctx = { ...ctx, k: { ...ctx.k, ...sentenceStyle(styleLevel, ctx.k.silly) } };
   // a few of one kind in a row, from easy to hard, of the kinds that can show this rule
   const usable = countingKinds(part, c, level, phaseKinds, fixed, lines);
-  const block = blockKind(ctx.r, prev, usable);
+  const block = blockKind(ctx.r, prev, usable, missed, phase !== "hard");
   const blockKinds: [ExerciseKind, number][] = block ? [[block, 1]] : usable;
   // when the block's kind can't show the rule: another kind, not the one that just had its few
   const lastKind = prev.filter((e) => !e.aside).at(-1)?.kind;
-  const others = usable.filter(([k]) => k !== lastKind || k === block);
-  const otherKinds = others.length ? others : usable;
-  const lineKinds = block ? kindsFor(level).filter(([k]) => k === block) : kindsFor(level).filter(([k]) => k !== lastKind);
+  // after a wrong answer, nothing harder than the kind that was missed (when anything easier can show the rule)
+  const cap = missed > 0 && lastKind ? rankOf(lastKind) : Infinity;
+  const notHarder = <T extends [ExerciseKind, number] | ExerciseKind>(xs: T[]): T[] => xs.filter((x) => rankOf(Array.isArray(x) ? x[0] : x) <= cap);
+  const others = notHarder(usable.filter(([k]) => k !== lastKind || k === block));
+  const otherKinds = others.length ? others : notHarder(usable).length ? notHarder(usable) : usable;
+  const lineKinds = notHarder(block ? kindsFor(level).filter(([k]) => k === block) : kindsFor(level).filter(([k]) => k !== lastKind));
   // aimed at the rule, new in this round, and a right answer adds one to the rule
   const fits = (ex: Exercise | null, wanted: string[]): ex is Exercise =>
     !!ex && !seen.has(ex.context) && ex.skills.some((s) => wanted.includes(s)) && countsFor(part, ex.check(rightAnswer(ex)));
@@ -296,7 +316,7 @@ export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], k
   const own = prev.filter((e) => !e.aside);
   let since = 0;
   for (let i = own.length - 1; i >= 0 && !own[i].earlier; i--) since++;
-  if (phase !== "simple" && since >= 4) {
+  if (phase !== "simple" && since >= 4 && missed === 0) {
     const review = nextExercise(p, ctx, { size: 1, adaptive: true, kinds: block ? [block] : kinds }, seen);
     if (review) return { ...review, earlier: true };
   }
@@ -313,7 +333,7 @@ export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], k
     }
   }
   // a piece only a single form can show: the form first, then the phase's kinds (the harder ones never while the rule is new)
-  const order = [...new Set([...allowed.filter((k) => k === "form"), ...phaseKinds.map(([k]) => k as MadeKind), ...(phase === "simple" ? [] : shuffle(ctx.r, allowed))])];
+  const order = notHarder([...new Set([...allowed.filter((k) => k === "form"), ...phaseKinds.map(([k]) => k as MadeKind), ...(phase === "simple" ? [] : shuffle(ctx.r, allowed))])]);
   for (const kind of order) {
     for (let attempt = 0; attempt < 8; attempt++) {
       const ex = makeExercise(kind, c, focus);
@@ -322,7 +342,7 @@ export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], k
   }
   // any piece of the rule: the fixed sentences (et between two verbs), then new ones
   for (const line of shuffle(ctx.r, fixed)) {
-    for (const [kind] of shuffle(ctx.r, kindsFor(level))) {
+    for (const [kind] of shuffle(ctx.r, notHarder(kindsFor(level)))) {
       const ex = lineExercise(c, line, kind, lines);
       if (fits(ex, part.skills)) return done(ex);
     }

@@ -1018,6 +1018,14 @@ html, .drawer-body, .modal > .panel, .table-wrap { scrollbar-width: thin; scroll
 .task-dir { font-family: var(--f-ui); font-size: 0.8rem; font-weight: 600; color: var(--gold); border: 1px solid var(--gold-soft); border-radius: 999px; padding: 1px 10px; white-space: nowrap; }
 .task-line .ex-source { flex-basis: 100%; padding-left: 44px; font-family: var(--f-ui); font-size: 0.85rem; font-weight: 500; letter-spacing: 0; color: var(--ink-2); }
 .exercise.answered .task-line .task-text { font-size: 1rem; }
+/* what the answer is to be, under the task: never a guess */
+.task-line .task-expect { flex-basis: 100%; padding-left: 44px; margin-top: -3px; font-family: var(--f-ui); font-size: 0.86rem; font-weight: 500; color: var(--ink-2); }
+/* the English above a gap exercise: who does what is always in sight, and the word the gap stands for is marked */
+.exercise .prompt .ex-english-top { margin: 0; font-family: var(--f-text); font-size: max(0.56em, 1.08rem); line-height: 1.35; color: var(--ink-2); }
+.en-mark { color: var(--ink); background: color-mix(in srgb, var(--gold-soft) 22%, transparent); border-bottom: 3px solid var(--gold); border-radius: 3px 3px 0 0; padding: 0 2px; }
+/* a sentence to change: what it is to say */
+.exercise .prompt .ex-goal { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-family: var(--f-text); font-size: max(0.6em, 1.12rem); line-height: 1.35; color: var(--ink); }
+.ex-goal .goal-label { font-size: 0.66em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); }
 
 /* the answer typed into the sentence: a small wax box where the ending (or the form) goes */
 .gap-word { white-space: nowrap; }

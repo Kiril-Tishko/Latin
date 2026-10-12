@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { makeBrief } from "../src/chat/brief";
-import { meetStranger, refreshLives, writeOwn, writeReply } from "../src/chat/engine";
+import { applyFeelings, meetStranger, refreshLives, writeOwn, writeReply } from "../src/chat/engine";
 import { COMMON_HAPPENINGS, lifeNow, localTime, replyTiming, statusAt } from "../src/chat/life";
-import { mergeReactions, Msg, newMeta, newThread, preview, reactionsOf, Thread, voiceOf } from "../src/chat/model";
+import { mergeBonds, mergeReactions, Msg, newMeta, newThread, preview, reactionsOf, silentNow, Thread, voiceOf } from "../src/chat/model";
 import { adYear, birthdaysNear, calendarBlock, calendarWords, festivalsNear, romanDate, todayLine } from "../src/chat/calendar";
 import { PHOTOS, photoSrc, photosFor } from "../src/content/photos";
 import { phrasebook } from "../src/content/phrases";
@@ -248,7 +248,7 @@ describe("writing as the people (Claude played by the test)", () => {
     expect(p).toContain("THE LEARNER: Kiril");
     expect(p).toContain("words about them take the endings of amīcus, discipulus");
     expect(p).toContain("they are free");
-    expect(p).toContain("Never correct the learner's Latin");
+    expect(p).toContain("never correct the learner's Latin");
   });
 });
 
@@ -507,5 +507,91 @@ describe("like a real messenger: quotes, reactions, friends who talk", () => {
     expect(toGroup).not.toContain("likes wine");
     expect(replyPrompt(newThread("marcus", "dm"), newMeta(), ctx, { at: ctx.now, why: "free" })).toContain("WHAT THE OTHERS KNOW ABOUT KIRIL");
     expect(gossipBlock(newThread("marcus", "dm"), newMeta(), ctxFor(SEEN))).toBe("");
+  });
+});
+
+describe("real relationships: feelings about the learner, trolling, grudges, silence", () => {
+  const at = Date.UTC(2026, 9, 12, 12, 0);
+  const thread = (id: string, kind: Thread["kind"], la: string): Thread => ({ ...newThread(id, kind), messages: [{ id: "a", from: "me", la, at }] });
+
+  it("give everyone a nature in love and in fights, and a first impression of the learner", () => {
+    for (const p of PEOPLE) {
+      expect(p.heart.length, p.id).toBeGreaterThan(80);
+      expect(p.first.length, p.id).toBeGreaterThan(20);
+    }
+    const prompt = replyPrompt(thread("gaius", "dm", "Salvē!"), newMeta(), ctxFor(SEEN, at), { at: at + 60_000, why: "free" });
+    expect(prompt).toContain("Does not trust the learner yet");
+    expect(prompt).toContain("With people they care about:");
+    // a person, not a rulebook: no forced niceness, but nothing sexual on the page
+    expect(prompt).not.toMatch(/never cruel|friendly and clean|light and sweet/);
+    expect(prompt).toContain("trolled and provoked");
+    expect(prompt).toContain("Anything sexual stays off the page");
+    expect(prompt).toContain('"feel"');
+    expect(prompt).toContain('"silent"');
+  });
+
+  it("keep what a conversation did to them: their feelings, a dated moment, a mood, the silent treatment", async () => {
+    const meta = newMeta();
+    const ask = async <T,>(): Promise<T> =>
+      ({
+        messages: [],
+        feel: { lucius: "He laughed at my poem. I hate him. A little.", nobody: "x" },
+        moment: { lucius: "mocked my poem about the moon" },
+        mood: { lucius: "wounded" },
+        silent: { lucius: 6 },
+      }) as T;
+    const reply = await writeReply(thread("lucius", "dm", "Carmen tuum malum est!"), meta, ctxFor(ALL, at), { ask, opts: {}, lex, r: seeded(3) });
+    // no answer at all is an answer: he read it and said nothing
+    expect(reply.messages).toEqual([]);
+    expect(Object.keys(reply.feelings)).toEqual(["lucius"]);
+    applyFeelings(meta, reply, at);
+    const bond = meta.bonds!.lucius;
+    expect(bond.feel).toContain("I hate him");
+    expect(bond.moments).toEqual(["12 Oct: mocked my poem about the moon"]);
+    expect(silentNow(bond, at + 5 * 3600_000)).toBe(true);
+    expect(silentNow(bond, at + 7 * 3600_000)).toBe(false);
+    expect(meta.life.lucius.mood).toBe("wounded");
+    // the next prompt knows: how he feels, what happened, and that he is ignoring the learner
+    const next = replyPrompt(thread("lucius", "dm", "Ignosce!"), meta, ctxFor(ALL, at + 3600_000), { at: at + 3700_000, why: "free" });
+    expect(next).toContain("I hate him. A little.");
+    expect(next).toContain("mocked my poem about the moon");
+    expect(next).toContain("silent treatment");
+    // making up ends the silence, and the feeling moves on
+    applyFeelings(meta, { feelings: { lucius: { feel: "Fine. I forgive him. Poets must.", silent: 0, moment: "apologised" } }, moods: {} }, at + 3600_000);
+    expect(silentNow(meta.bonds!.lucius, at + 2 * 3600_000)).toBe(false);
+    expect(meta.bonds!.lucius.moments.length).toBe(2);
+  });
+
+  it("let someone giving the silent treatment write nothing to the learner in private, but still talk in the group", async () => {
+    const meta = newMeta();
+    applyFeelings(meta, { feelings: { iulia: { feel: "Furious.", silent: 10 } }, moods: {} }, at);
+    const ask = async <T,>(): Promise<T> =>
+      ({ messages: [{ chat: "iulia", from: "iulia", la: "Hmm.", en: "Hmm.", in: 1 }, { chat: GROUP.id, from: "iulia", la: "Salvēte!", en: "Hi all!", in: 2 }] }) as T;
+    const threads = [...PEOPLE.map((p) => newThread(p.id, "dm")), newThread(GROUP.id, "group")];
+    const own = await writeOwn(threads, meta, ctxFor(SEEN, at), { ask, opts: {}, lex, r: seeded(4) });
+    expect(own.map((o) => o.chat)).toEqual([GROUP.id]);
+  });
+
+  it("let feelings move while the learner is away", async () => {
+    const meta = newMeta();
+    const ask = async <T,>(): Promise<T> => ({ messages: [], feel: { claudia: "Kiril has not written for days. I worry." }, moment: { claudia: "noticed Kiril's silence" } }) as T;
+    const threads = [...PEOPLE.map((p) => newThread(p.id, "dm")), newThread(GROUP.id, "group")];
+    await writeOwn(threads, meta, ctxFor(SEEN, at), { ask, opts: {}, lex, r: seeded(4) });
+    expect(meta.bonds!.claudia.feel).toContain("I worry");
+    expect(meta.bonds!.claudia.moments[0]).toContain("noticed Kiril's silence");
+  });
+
+  it("let friends hear how the others feel, keep the newer feelings from two devices, and tell the phone routine", () => {
+    const meta = newMeta();
+    applyFeelings(meta, { feelings: { iulia: { feel: "I think I have a crush on Kiril." } }, moods: {} }, at);
+    const p = replyPrompt(thread("marcus", "dm", "Salvē!"), meta, ctxFor(SEEN, at), { at: at + 60_000, why: "free" });
+    expect(p).toContain("HOW THE OTHERS FEEL ABOUT KIRIL");
+    expect(p).toContain("crush on Kiril");
+    const older = { iulia: { feel: "old", moments: [], updatedAt: 1 } };
+    expect(mergeBonds(older, meta.bonds).iulia.feel).toContain("crush");
+    expect(mergeBonds(meta.bonds, older).iulia.feel).toContain("crush");
+    const brief = makeBrief(meta, ctxFor(SEEN, at), [], seeded(8));
+    expect(brief.people.find((x) => x.id === "iulia")!.sheet).toContain("crush on Kiril");
+    expect(brief.people.find((x) => x.id === "gaius")!.sheet).toContain("Does not trust the learner yet");
   });
 });

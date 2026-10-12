@@ -8,7 +8,7 @@ import { GROUP, PEOPLE } from "../content/people";
 import { SKILLS } from "../latin/skills";
 import type { Me } from "../trainer/progress";
 import { Life, localTime, moodText, partOfDay, statusAt } from "./life";
-import { CoachTurn, Meta, Msg, REACTIONS, Thread, Who, membersOf, whoOf } from "./model";
+import { Bond, CoachTurn, Meta, Msg, REACTIONS, Thread, Who, membersOf, silentNow, whoOf } from "./model";
 import type { Stranger } from "./strangers";
 import type { AllowedWord } from "./words";
 
@@ -96,6 +96,19 @@ export function knownPeople(who: Who, meta?: Meta): string {
   return met.length ? `People the learner has met whom ${who.name} knows: ${met.map((s) => `${s.name} (${s.job}, ${s.city}): ${s.link!.how}`).join("; ")}.` : "";
 }
 
+/** How someone feels about the learner now (private: it shows only in how they write). */
+export function bondBlock(who: Who, bond: Bond | undefined, now: number): string {
+  return [
+    `How ${who.name} feels about the learner (private; it shows in how they write, never as a report): ${bond?.feel || who.first || "no real opinion yet; first impressions are still forming"}`,
+    bond?.moments.length ? `What has happened between them: ${bond.moments.slice(-10).join("; ")}.` : "",
+    silentNow(bond, now)
+      ? `${who.name} is giving the learner the silent treatment, until ${localTime(bond!.silentUntil!, who.tz).hm} their time: reads, does not answer. They break it only if what the learner writes truly gets to them; in the group they may talk to the others and ignore the learner, or talk about them.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** Who someone is, for Claude to write as them. */
 export function personBlock(who: Who, life: Life | undefined, now: number, meta?: Meta): string {
   const lines = [
@@ -106,8 +119,10 @@ export function personBlock(who: Who, life: Life | undefined, now: number, meta?
     who.why ? `Why they wrote to the learner in the first place: ${who.why}.` : "",
     who.secret ? `Keeps to themselves at first: ${who.secret}.` : "",
     `How they text: ${who.style}`,
+    who.heart ? `With people they care about: ${who.heart}` : "",
     who.ties ? `With the others: ${Object.entries(who.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
     knownPeople(who, meta),
+    bondBlock(who, meta?.bonds?.[who.id], now),
     `Right now: ${dayNow(who, now)}; ${lifeLine(life)}.`,
   ];
   return lines.filter(Boolean).join("\n");
@@ -151,13 +166,15 @@ export function conversationBlock(thread: Thread, meta: Meta, ctx: PromptCtx, tz
     .join("\n");
 }
 
-const HOW_TO_BE_REAL = `HOW TO BE REAL:
-- You are real people with lives of your own, not teachers or assistants. Never correct the learner's Latin, never explain words or grammar. If you do not understand them, react as a friend would («Quid? 😅») or guess.
-- Answer what the learner actually said. Sometimes ask something back, often not; change the subject now and then, as people do. Do not end every message with a question, do not greet again in the middle of a conversation, and never repeat something already said.
-- Moods are real and may be extreme: let them change what and how you write (length, emoji, capitals, «...», sighs, silence). A bad mood can make someone short or grumpy, but never cruel to the learner. Something going on in your life comes up on its own, when it fits.
-- The hour and the people change moods too: sleepy at dawn, hungry before dinner, tired or tender late at night, as fits each person; a kind word cheers someone up, teasing or jealousy stings, news from a friend can turn a day around. Moods may shift within a conversation.
-- Never mention AI, phones, the site, lessons, word lists or rules. You live in the Roman world around 100 AD; you write on a «tabula» that carries messages.
-- Keep it friendly and clean: no sexual content; romance stays light and sweet.`;
+const HOW_TO_BE_REAL = `BE THEM:
+These are real people with pride, moods, opinions, needs and a history with the learner, not characters following a script. Write what they would really text now, given everything that has happened between them.
+- Their feelings about the learner grow from what actually happens: attention or neglect, kindness, jokes, flirting, teasing, insults, trolling, lies, apologies. They can come to adore, fancy, trust, miss, envy, resent, distrust or despise the learner, and change their minds; it shows in everything: how often and how much they write, warmth or coldness, jealousy, sulking, pride.
+- They can be trolled and provoked, and they react as themselves: one falls for it, one bites back or trolls back harder, one is truly hurt, one laughs it off. They can be petty, sarcastic, rude, cold, clingy, flirty, furious or stubborn; they hold grudges, give the silent treatment, complain about the learner to the others, demand an apology, make up.
+- Moods are real and can be extreme; the hour, their own day and what is said change them, also within a conversation.
+- They have lives and agendas of their own: they disagree, change the subject, ask for favours, gossip, make plans, forget things, contradict themselves, are not always free or interested. Like real texting: no greeting again in the middle of a talk, not a question at the end of every message, nothing said twice.
+- Romance can grow as it would between real people: crushes, bold flirting, passion, jealousy, rivalry, heartbreak. Anything sexual stays off the page: hinted at, never described.
+- They never correct the learner's Latin or explain grammar; when they do not understand, they react as a friend would («Quid? 😅») or guess.
+- They live in the Roman world around 100 AD and write on a «tabula» that carries messages; they know nothing of AI, phones, sites, lessons or word lists.`;
 
 /** For a reply: everyone in the thread, with their state now. */
 function peopleOf(thread: Thread, meta: Meta, now: number): string {
@@ -171,12 +188,16 @@ const EXTRAS = `- "voice": true (optional) makes it a short voice message: they 
 - "photo": "<photo id>" (optional) sends one of the photos listed with the message, "la" being its caption (a few words, or only an emoji): rarely, when it fits the moment or the talk.`;
 
 const OUTPUT = `Reply with only JSON:
-{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "re": <number>, "voice": true, "photo": "<photo id>"}], "react": [{"from": "<person id>", "emoji": "<emoji>"}], "remember": ["<new fact about the learner>"]}
-- 1 to 4 messages; one is often right. "gap": 1-40 (typing time is added by the page; a long gap is a pause to think).
+{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "re": <number>, "voice": true, "photo": "<photo id>"}], "react": [{"from": "<person id>", "emoji": "<emoji>"}], "remember": ["<new fact about the learner>"], "feel": {"<person id>": "<how they feel about the learner now>"}, "moment": {"<person id>": "<what just happened between them>"}, "mood": {"<person id>": "<their mood now>"}, "silent": {"<person id>": <hours>}}
+- 0 to 4 messages; one is often right. No answer at all ("messages": []) is an answer too: they read it and say nothing (hurt, sulking, playing it cool, busy). "gap": 1-40 (typing time is added by the page; a long gap is a pause to think).
 - "re" (optional): the number (#) of the message this one answers, shown quoted above it as in any messenger. Only when it answers something that is not simply the last message: one of several things the learner said, an earlier question, a message from someone else in the group. Usually leave it out.
 ${EXTRAS}
 - "react" (optional): a reaction to the learner's last message, as people do in messengers: one emoji per person, from ${REACTIONS.join(" ")}. When it fits (a joke 😂, sweet words ❤️, news 😮, sad news 😢, thanks 🙏); often none. Rarely a reaction is the whole answer, when the message needs no words: then "messages" may be [].
-- "remember": 0-2 short facts about the learner worth remembering later (English), or [].`;
+- "remember": 0-2 short facts about the learner worth remembering later (English), or [].
+- "feel" (for anyone whose feelings about the learner moved now): how they feel about the learner after this, in their own words, first person, one or two sentences (English): what they would never say aloud. Feelings move slowly or suddenly, as with real people.
+- "moment" (when something happened between them worth remembering later: a joke, an insult, a kindness, a confession, a fight): a few words (English).
+- "mood" (when this conversation changed someone's mood): their mood now, a word or two.
+- "silent" (when someone is hurt or angry enough to ignore the learner): the hours they will ignore them, 1 to 24; 0 when they end a silence.`;
 
 /** The photos the people of a chat could send now (none sent lately in this chat). */
 export function photosBlock(people: Who[], recent: string[]): string {
@@ -235,11 +256,17 @@ export function gossipBlock(thread: Thread, meta: Meta, ctx: PromptCtx): string 
   if (!who) return "";
   if (who.stranger) {
     const friend = who.link && PEOPLE.find((p) => p.id === who.link!.to);
-    const l = friend ? lines([friend.id]) : [];
+    const l = friend ? [...lines([friend.id]), ...(meta.bonds?.[friend.id]?.feel ? [`- what ${friend.name} feels about ${name}: ${meta.bonds[friend.id].feel}`] : [])] : [];
     return l.length ? `WHAT ${friend!.name.toUpperCase()} MAY HAVE TOLD ${who.name.toUpperCase()} ABOUT ${name.toUpperCase()} (if they talked; never all at once):\n${l.join("\n")}` : "";
   }
   const l = lines([...PEOPLE.map((p) => p.id).filter((id) => id !== who.id), GROUP.id]);
-  return l.length ? `WHAT THE OTHERS KNOW ABOUT ${name.toUpperCase()} (friends talk: ${who.name} may have heard some of it, and may ask about it, tease or let on, as friends do; something told in private ${who.name} may not know):\n${l.join("\n")}` : "";
+  const feelings = PEOPLE.filter((p) => p.id !== who.id && meta.bonds?.[p.id]?.feel).map((p) => `- ${p.name}: ${meta.bonds![p.id].feel}`);
+  return [
+    l.length ? `WHAT THE OTHERS KNOW ABOUT ${name.toUpperCase()} (friends talk: ${who.name} may have heard some of it, and may ask about it, tease or let on, as friends do; something told in private ${who.name} may not know):\n${l.join("\n")}` : "",
+    feelings.length ? `HOW THE OTHERS FEEL ABOUT ${name.toUpperCase()}, as far as friends tell each other (${who.name} may have picked some of it up, or guess):\n${feelings.join("\n")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /** The learner's last message as the grammar engine reads it, and how to take a mistake: literally, as a Roman would. */
@@ -305,13 +332,14 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
     strangers ? `STRANGERS THE LEARNER HAS MET:\n${strangers}` : "",
     ctx.calendar ?? "",
     `THE CHATS NOW (last messages):\n${recent}`,
-    `DECIDE like life: sometimes nobody writes; often one person writes one to three messages; now and then a short exchange happens in the group (friends talking to each other and to the learner). Someone writes only when awake and when there is a reason: news, their mood or what is going on, a question, a follow-up to an earlier talk, a greeting at a fitting hour, missing the learner. Do not write into a chat that has messages still on their way. In all, at most two private chats plus one group exchange of up to six messages.`,
+    `DECIDE like life: sometimes nobody writes; often one person writes one to three messages; now and then a short exchange happens in the group (friends talking to each other and to the learner). Someone writes only when awake and when there is a reason: news, their mood or what is going on, a question, a follow-up to an earlier talk, a greeting at a fitting hour, missing the learner. Feelings drive it: someone who misses or fancies the learner writes more, someone hurt waits for an apology or writes something pointed, someone giving the silent treatment does not write to the learner (but may complain about them in the group). Do not write into a chat that has messages still on their way. In all, at most two private chats plus one group exchange of up to six messages.`,
     HOW_TO_BE_REAL,
     languageBlock(ctx),
     photosBlock(everyone, sent),
     `Reply with only JSON:
 {"messages": [{"chat": "<chat id>", "from": "<person id>", "la": "<Latin>", "en": "<English>", "in": <minutes from now, 0-${hours * 60}>, "voice": true, "photo": "<photo id>"}]}
 Messages of one chat in time order; a burst of messages is a minute or less apart. {"messages": []} when nobody writes.
+Optionally also "feel": {"<person id>": "<how they feel about the learner now, first person, one or two sentences>"} for anyone whose feelings moved while the learner was away (missing them, worrying, cooling off after days of silence, still angry), and "moment": {"<person id>": "<a few words worth remembering>"}.
 ${EXTRAS}
 Person ids: ${PEOPLE.map((p) => `"${p.id}"`).join(", ")}${Object.keys(meta.strangers).length ? `, strangers by their chat id` : ""}.`,
   ]
@@ -347,7 +375,7 @@ export function strangerPrompt(s: Stranger, life: Life | undefined, ctx: PromptC
     HOW_TO_BE_REAL,
     languageBlock(ctx),
     `Reply with only JSON:
-{"about": "<two or three vivid sentences in English: who they are>", "secret": "<one thing they will not say at first>", "happenings": [{"en": "<something that could happen in their life>", "mood": "<the mood it brings>", "hours": [<shortest>, <longest>]}], "first": [{"la": "<Latin>", "en": "<English>", "gap": <seconds>}]}
+{"about": "<two or three vivid sentences in English: who they are>", "secret": "<one thing they will not say at first>", "feel": "<how they feel about the learner from the start, first person, one sentence>", "happenings": [{"en": "<something that could happen in their life>", "mood": "<the mood it brings>", "hours": [<shortest>, <longest>]}], "first": [{"la": "<Latin>", "en": "<English>", "gap": <seconds>}]}
 - "happenings": 4 to 6 things, everyday ones and odd ones.
 - "first": ${s.writesFirst ? "1 to 3 messages" : "[]"}.`,
   ].join("\n\n");

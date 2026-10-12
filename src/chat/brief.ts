@@ -5,7 +5,7 @@
 import { PEOPLE } from "../content/people";
 import { Life, LifeSpec, lifeNow, Rand } from "./life";
 import { Meta, Who, whoOf } from "./model";
-import { knownPeople, languageBlock, learnerBlock, PromptCtx } from "./prompts";
+import { bondBlock, knownPeople, languageBlock, learnerBlock, PromptCtx } from "./prompts";
 import { allowedSpellings, calendarEntry, formsFor } from "./words";
 import { calendarBlock, calendarWords, romeDay } from "./calendar";
 import { PHOTOS } from "../content/photos";
@@ -47,7 +47,7 @@ export function rollAhead(spec: LifeSpec, life: Life | undefined, now: number, h
   return out;
 }
 
-function sheet(w: Who, meta: Meta): string {
+function sheet(w: Who, meta: Meta, now: number): string {
   return [
     `${w.name} (${w.age}, ${w.g === "m" ? "man" : "woman"}; called «${w.voc}»), ${w.city}. ${w.job}.`,
     `Character: ${w.about}`,
@@ -55,8 +55,11 @@ function sheet(w: Who, meta: Meta): string {
     w.quirk ? `Quirk: ${w.quirk}.` : "",
     w.secret ? `Keeps to themselves at first: ${w.secret}.` : "",
     `How they text: ${w.style}`,
+    w.heart ? `With people they care about: ${w.heart}` : "",
     w.ties ? `With the others: ${Object.entries(w.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
     knownPeople(w, meta),
+    // how they feel about the learner now, and a silent treatment going on
+    bondBlock(w, meta.bonds?.[w.id], now),
   ]
     .filter(Boolean)
     .join("\n");
@@ -67,7 +70,7 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
   const people = ids
     .map((id) => whoOf(id, meta))
     .filter((w): w is Who => !!w)
-    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta) }));
+    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now) }));
   const lives: Brief["lives"] = {};
   for (const id of ids) {
     const spec = specOf(id, meta);

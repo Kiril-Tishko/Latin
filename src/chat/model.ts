@@ -87,6 +87,33 @@ export interface Thread {
   gone?: boolean;
 }
 
+/**
+ * How someone feels about the learner: private (never shown; it shows only in
+ * how they write), grown from everything that happened between them.
+ */
+export interface Bond {
+  /** In their own words, first person ("He laughed at my poem. I am not talking to him today."). */
+  feel: string;
+  /** What happened between them worth remembering, oldest first ("12 Oct: mocked my poem"). */
+  moments: string[];
+  /** Ignoring the learner until then (ms): the silent treatment. */
+  silentUntil?: number;
+  updatedAt: number;
+}
+
+/** How many moments a bond keeps. */
+export const MOMENTS = 14;
+
+/** Two copies of the bonds together: for each person, the newer one. */
+export function mergeBonds(a: Record<string, Bond> | undefined, b: Record<string, Bond> | undefined): Record<string, Bond> {
+  const out = { ...(a ?? {}) };
+  for (const [id, x] of Object.entries(b ?? {})) if (!out[id] || x.updatedAt >= out[id].updatedAt) out[id] = x;
+  return out;
+}
+
+/** Is someone ignoring the learner now? */
+export const silentNow = (bond: Bond | undefined, now: number) => !!bond?.silentUntil && bond.silentUntil > now;
+
 export interface Meta {
   v: 1;
   /** When the learner last had the messenger open. */
@@ -97,6 +124,8 @@ export interface Meta {
   actaAt?: number;
   life: Record<string, Life>;
   strangers: Record<string, Stranger>;
+  /** How each person feels about the learner (see Bond). */
+  bonds?: Record<string, Bond>;
 }
 
 export const newMeta = (): Meta => ({ v: 1, seenAt: 0, plannedAt: 0, life: {}, strangers: {} });
@@ -126,6 +155,10 @@ export interface Who {
   link?: { to: string; how: string };
   /** A friend's voice in voice messages. */
   voice?: { pitch: number; rate: number };
+  /** How they are with people they care about (friends; strangers have their temper). */
+  heart?: string;
+  /** How they feel about the learner before anything has happened. */
+  first?: string;
   stranger: boolean;
 }
 
@@ -152,6 +185,7 @@ export function whoOf(id: string, meta: Meta): Who | null {
     quirk: s.quirk,
     why: s.why,
     secret: s.secret,
+    first: s.first,
     link: s.link,
     stranger: true,
   };

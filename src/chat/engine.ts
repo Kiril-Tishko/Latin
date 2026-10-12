@@ -10,7 +10,7 @@ import { Lexicon } from "../latin/analyze";
 import { checkAnswer, literalReading } from "../latin/facts";
 import { PHOTO_BY_ID, photoSrc } from "../content/photos";
 import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from "./life";
-import { Meta, Msg, msgId, REACTIONS, Thread, membersOf, Who } from "./model";
+import { Meta, MOMENTS, Msg, msgId, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, strangerPrompt } from "./prompts";
 import { rollStranger, Stranger } from "./strangers";
 import { vetMessage, withMacrons } from "./vet";
@@ -116,9 +116,19 @@ export async function vetAll<T extends Draft>(drafts: T[], ctx: PromptCtx, deps:
 
 // --------------------------------------------------------------- replies
 
+/** What a conversation did to someone: their feelings about the learner, a moment to remember, the silent treatment (hours; 0 ends it). */
+export interface Feeling {
+  feel?: string;
+  moment?: string;
+  silent?: number;
+}
+
 export interface Reply {
   messages: Msg[];
   remember: string[];
+  /** How the conversation moved each person: feelings about the learner, and moods. */
+  feelings: Record<string, Feeling>;
+  moods: Record<string, string>;
   /** When the learner's messages were read (one-to-one chats). */
   readAt: number;
   /** Reactions to the learner's last message, each shown a moment after its person reads it. */
@@ -138,7 +148,7 @@ export function timingFor(members: Who[], now: number, r: Rand = Math.random) {
 export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps, timing?: Timing): Promise<Reply> {
   const r = deps.r ?? Math.random;
   const members = membersOf(thread.id, meta);
-  if (!members.length) return { messages: [], remember: [], readAt: ctx.now, reactions: [] };
+  if (!members.length) return { messages: [], remember: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {} };
   refreshLives(meta, members.map((w) => w.id), ctx.now, r);
   const { first, byId } = timing ?? timingFor(members, ctx.now, r);
   // the learner's last messages, read word by word: a mistake is taken literally
@@ -149,7 +159,15 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   }
   const literal = burst.length ? literalReading(withoutEmoji(burst.join(" ")), deps.lex) : "";
   const prompt = replyPrompt(thread, meta, ctx, { at: first.t.startAt, why: first.t.why }, literal);
-  const raw = await deps.ask<{ messages?: { from?: string; la?: string; en?: string; gap?: number; re?: unknown; voice?: unknown; photo?: unknown }[]; react?: { from?: string; emoji?: string }[]; remember?: string[] }>(prompt, { ...deps.opts, cache: false });
+  const raw = await deps.ask<{
+    messages?: { from?: string; la?: string; en?: string; gap?: number; re?: unknown; voice?: unknown; photo?: unknown }[];
+    react?: { from?: string; emoji?: string }[];
+    remember?: string[];
+    feel?: Record<string, unknown>;
+    moment?: Record<string, unknown>;
+    mood?: Record<string, unknown>;
+    silent?: Record<string, unknown>;
+  }>(prompt, { ...deps.opts, cache: false });
   const ids = new Set(members.map((w) => w.id));
   const fromOf = (x: unknown) => (ids.has(String(x)) ? String(x) : members.length === 1 ? members[0].id : "");
   // "re": the number of a message in the conversation the prompt showed (a quote of the very last one says nothing)
@@ -180,7 +198,53 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     if (!target || !from || !e || reactions.some((y) => y.from === from)) continue;
     reactions.push({ msg: target.id, from, e, at: Math.round((byId.get(from)?.readAt ?? first.t.readAt) + 1500 + r() * 4000) });
   }
-  return { messages, remember, readAt: first.t.readAt, reactions };
+  return { messages, remember, readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids) };
+}
+
+/** The feelings, moments, moods and silences Claude reported, for the people of the thread only. */
+export function feelingsOf(
+  raw: { feel?: Record<string, unknown>; moment?: Record<string, unknown>; mood?: Record<string, unknown>; silent?: Record<string, unknown> },
+  ids: Set<string>,
+): Pick<Reply, "feelings" | "moods"> {
+  const feelings: Record<string, Feeling> = {};
+  const moods: Record<string, string> = {};
+  const obj = (x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : {});
+  const of = (id: string) => (feelings[id] ??= {});
+  for (const [id, v] of Object.entries(obj(raw.feel))) if (ids.has(id) && clean(v)) of(id).feel = clean(v).slice(0, 400);
+  for (const [id, v] of Object.entries(obj(raw.moment))) if (ids.has(id) && clean(v)) of(id).moment = clean(v).slice(0, 160);
+  for (const [id, v] of Object.entries(obj(raw.silent))) {
+    const h = Number(v);
+    if (ids.has(id) && Number.isFinite(h) && h >= 0) of(id).silent = Math.min(24, h);
+  }
+  for (const [id, v] of Object.entries(obj(raw.mood))) if (ids.has(id) && clean(v)) moods[id] = clean(v).slice(0, 40);
+  return { feelings, moods };
+}
+
+/** A day as the people say it in their memories: "12 Oct". */
+const dayStamp = (t: number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/Rome" });
+
+/**
+ * Keeps what a conversation did to the people: their feelings about the
+ * learner (in their own words), the moment (dated), the silent treatment, and
+ * a mood that lasts a few hours. Changes meta in place.
+ */
+export function applyFeelings(meta: Meta, r: Pick<Reply, "feelings" | "moods">, now: number) {
+  const bonds = { ...(meta.bonds ?? {}) };
+  for (const [id, f] of Object.entries(r.feelings)) {
+    const old = bonds[id] ?? { feel: "", moments: [], updatedAt: 0 };
+    const silentUntil = f.silent === undefined ? old.silentUntil : f.silent > 0 ? now + f.silent * 3600_000 : undefined;
+    bonds[id] = {
+      feel: f.feel || old.feel,
+      moments: f.moment ? [...old.moments, `${dayStamp(now)}: ${f.moment}`].slice(-MOMENTS) : old.moments,
+      ...(silentUntil ? { silentUntil } : {}),
+      updatedAt: now,
+    };
+  }
+  meta.bonds = bonds;
+  for (const [id, mood] of Object.entries(r.moods)) {
+    const life = meta.life[id];
+    if (life) meta.life[id] = { ...life, mood, level: "", moodUntil: now + 4 * 3600_000 };
+  }
 }
 
 // -------------------------------------------------------- on their own
@@ -195,7 +259,13 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
   const r = deps.r ?? Math.random;
   const live = threads.filter((t) => !t.gone);
   refreshLives(meta, [...new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)))], ctx.now, r);
-  const raw = await deps.ask<{ messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown }[] }>(ownPrompt(live, meta, ctx, hours), { ...deps.opts, cache: false });
+  const raw = await deps.ask<{ messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown }[]; feel?: Record<string, unknown>; moment?: Record<string, unknown> }>(
+    ownPrompt(live, meta, ctx, hours),
+    { ...deps.opts, cache: false },
+  );
+  // feelings move while the learner is away too (missing them, cooling off)
+  const everyone = new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)));
+  applyFeelings(meta, feelingsOf({ feel: raw?.feel, moment: raw?.moment }, everyone), ctx.now);
   const byChat = new Map(live.map((t) => [t.id, t]));
   const drafts = (raw?.messages ?? [])
     .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)), ...extras(m) }))
@@ -206,6 +276,8 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
       if (t.messages.some((x) => x.from !== "me" && x.at > ctx.now)) return false;
       const member = membersOf(t.id, meta).find((w) => w.id === m.from);
       if (!member) return false;
+      // the silent treatment: not a word to the learner in private (in the group they may still talk)
+      if (t.kind !== "group" && silentNow(meta.bonds?.[member.id], ctx.now + m.in * 60000)) return false;
       return statusAt(member.day, member.tz, ctx.now + m.in * 60000).state !== "asleep";
     })
     .slice(0, 10);
@@ -229,12 +301,13 @@ export async function meetStranger(meta: Meta, ctx: PromptCtx, deps: Deps): Prom
   const s = rollStranger(r, { names: used.map((x) => x.name), portraits: used.map((x) => x.portrait) }, ctx.now);
   // their mood and what is going on, before Claude meets them (common happenings until they have their own)
   const { life } = lifeNow({ moods: s.moods, swing: s.swing, happenings: [] }, undefined, ctx.now, r);
-  const raw = await deps.ask<{ about?: string; secret?: string; happenings?: { en?: string; mood?: string; hours?: number[] }[]; first?: { la?: string; en?: string; gap?: number }[] }>(
+  const raw = await deps.ask<{ about?: string; secret?: string; feel?: string; happenings?: { en?: string; mood?: string; hours?: number[] }[]; first?: { la?: string; en?: string; gap?: number }[] }>(
     strangerPrompt(s, life, ctx),
     { ...deps.opts, cache: false },
   );
   s.about = clean(raw?.about) || undefined;
   s.secret = clean(raw?.secret) || undefined;
+  s.first = clean(raw?.feel) || undefined;
   s.happenings = (raw?.happenings ?? [])
     .map((h) => ({ en: clean(h.en), mood: clean(h.mood) || undefined, hours: [Number(h.hours?.[0]) || 4, Number(h.hours?.[1]) || 24] as [number, number] }))
     .filter((h) => h.en)

@@ -10,9 +10,9 @@ import { useEffect, useState } from "preact/hooks";
 import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
 import { ACTA_ID, actaKey, boardOf, earlierBoards, writeActa } from "../chat/acta";
-import { checkDraft, Deps, meetStranger, refreshLives, timingFor, writeOwn, writeReply } from "../chat/engine";
+import { applyFeelings, checkDraft, Deps, meetStranger, refreshLives, timingFor, writeOwn, writeReply } from "../chat/engine";
 import { deviceZone, hashRand } from "../chat/life";
-import { CoachTurn, membersOf, mergeReactions, Meta, Msg, msgId, newMeta, newThread, Thread, unreadCount } from "../chat/model";
+import { CoachTurn, membersOf, mergeBonds, mergeReactions, Meta, Msg, msgId, newMeta, newThread, Thread, unreadCount } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
 import { allowedWords, calendarEntry, chatEntries, chatLexicon, nameEntry } from "../chat/words";
 import { calendarBlock, calendarWords, romeDay } from "../chat/calendar";
@@ -242,6 +242,8 @@ function follow(s: NonNullable<typeof store>) {
         plannedAt: Math.max(meta.plannedAt, Number(remote.plannedAt) || 0),
         life: { ...meta.life, ...(remote.life ?? {}) },
         strangers: { ...meta.strangers, ...(remote.strangers ?? {}) },
+        // feelings: for each person the newer, from either copy
+        bonds: mergeBonds(meta.bonds, remote.bonds),
       };
       saveLocal();
       emit();
@@ -432,7 +434,11 @@ export async function answer(id: string) {
       return mine.length ? { ...m, reactions: { ...m.reactions, ...Object.fromEntries(mine.map((x) => [x.from, { e: x.e, at: Math.max(x.at, now + 600) }])) } } : m;
     });
     saveThread({ ...t, messages: [...reacted, ...messages], memory: [...new Set([...t.memory, ...reply.remember])].slice(-24) });
+    // what the conversation did to them: feelings about the learner, a moment, a mood, the silent treatment
+    applyFeelings(meta, reply, now);
+    meta = { ...meta };
     saveMeta();
+    void writeBrief();
   } catch (e) {
     if ((e as { code?: string })?.code !== "cancelled") errors.set(id, errorText(e));
   } finally {

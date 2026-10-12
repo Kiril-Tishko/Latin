@@ -36,6 +36,13 @@ published as a private claude.ai artifact.
   whose moods change with time and with what goes on in their lives (or not).
   They chose: only words they know plus ~20 chat words, mistakes pointed out only
   on Check, Kyiv time, separate model choices for the coach and the chats.
+  Later they asked for genuine, humanlike relationships rather than strict
+  instructions: people who can be trolled, who get emotional and form opinions
+  and feelings about the learner. They chose: feelings never shown (only felt
+  in how people write), reactions like a real person's (grudges, the silent
+  treatment, complaining to the others, forgiving), and bonds that can grow
+  into anything, "the wilder the better" (crushes, passion, rivalry, hatred);
+  anything sexual stays off the page (Claude does not write it).
 
 ## Commands
 
@@ -569,6 +576,21 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   (`ANY_WORD`; the engine's unknown-word note is no longer sent). Prompts: src/chat/prompts.ts
   (who they are, their day and mood now, the learner, the conversation, when the
   answer arrives, how to be real, and the strict language block).
+- Relationships (src/chat/model.ts `Bond`, `Meta.bonds`): each person keeps
+  how they feel about the learner in their own words (`feel`, first person,
+  private: never shown on the page), dated `moments` between them, and the
+  silent treatment (`silentUntil`). Friends start from `first` and have a
+  `heart` (src/content/people.ts: what stings them, what wins them over, how
+  they fight, sulk, make up and show love); a stranger's first impression comes
+  from Claude (`Stranger.first`). The prompts read `bondBlock` in every person
+  block (and in the routine's sheets) and `gossipBlock` carries how the others
+  feel; the persona text (`HOW_TO_BE_REAL`, "BE THEM") describes people, not
+  rules. A reply may be no answer at all, and returns `feel`, `moment`, `mood`
+  (lasts four hours) and `silent` (hours, 0 ends it) per person
+  (`feelingsOf`, kept by `applyFeelings` after each answer); writing on their
+  own, feelings drift too (missing the learner, cooling off), and someone
+  ignoring the learner writes nothing in private (`writeOwn`). Bonds merge per
+  person, the newer winning (`mergeBonds`).
 - Like a real messenger (the learner asked for it to feel even more like real
   people): a tap on someone's message shows its English and a row of reactions
   (❤️ 😂 👍 😮 😢 🙏) with Reply. A reply carries `re` and shows the message it

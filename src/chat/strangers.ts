@@ -39,6 +39,8 @@ export interface Stranger {
   /** From Claude: who they are (English, two or three sentences) and what they keep to themselves. */
   about?: string;
   secret?: string;
+  /** How they felt about the learner from the start (Claude, when they were made real). */
+  first?: string;
   createdAt: number;
 }
 

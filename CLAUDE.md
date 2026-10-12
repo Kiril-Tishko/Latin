@@ -314,8 +314,8 @@ CC0 and CC BY 4.0, credited in each profile).
   a notice for a message arriving elsewhere in the app, an unread count (Roman
   numerals) on the tab. Tap a message for its English, a word for its meaning.
 - Phone notifications: a Claude Code routine (trigger "Nūntiī: Roman friends
-  write", fresh session per run, push notifications, CRON_TZ=Europe/Kyiv at
-  8:47, 11:47, 14:47, 17:47 and 20:47) follows scripts/messenger-routine.md (with
+  write", trig_01QU7TocqJanmp7LVdamvvdJ, a fresh session per run, push
+  notifications, CRON_TZ=Europe/Kyiv at 8:51, 11:51, 14:51, 17:51 and 20:51) follows scripts/messenger-routine.md (with
   its helper scripts/nuntii-routine.py embedded, as a routine's session may not
   have this repo: who is awake, moods, the chats; the word check; the
   notification line): it reads the brief (src/chat/brief.ts: the learner, the language block, every

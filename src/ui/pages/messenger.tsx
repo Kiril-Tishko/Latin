@@ -10,6 +10,7 @@ import { ENGRAVINGS } from "../../content/engravings";
 import { ROMAN_EMOJI } from "../../content/roman-emoji";
 import { emojiCodes, onlyEmoji, showEmoji } from "../../chat/emoji";
 import { GROUP, PEOPLE } from "../../content/people";
+import { phrasebook } from "../../content/phrases";
 import { PORTRAIT_BY_ID } from "../../content/portraits";
 import { localTime, moodText, statusAt } from "../../chat/life";
 import { arrived, Check, CoachTurn, membersOf, Msg, preview, Thread, unreadCount, voiceOf, Who, whoOf } from "../../chat/model";
@@ -990,21 +991,30 @@ const EVERYDAY = [
   "✍️", "📚", "🌹", "🎶", "🏇", "🙈", "🥲", "😅", "🤨", "😤", "🥳", "💤", "🎉", "👀", "💯", "🤝",
 ];
 
-/** The ＋'s emoji: the Roman ones (drawn for this site, then real ones) and everyday faces and things. */
-function EmojiPicker({ onPick, onClose }: { onPick: (s: string) => void; onClose: () => void }) {
-  const [tab, setTab] = useState<"roman" | "everyday">(() => (storage.get("tabula-latina-emoji-tab") === "everyday" ? "everyday" : "roman"));
+type PickerTab = "roman" | "everyday" | "phrases";
+const PICKER_TABS: PickerTab[] = ["roman", "everyday", "phrases"];
+
+/**
+ * The ＋: the Roman emoji (drawn for this site, then real ones), everyday faces
+ * and things, and the phrasebook (greetings to this chat's person by name).
+ */
+function EmojiPicker({ id, onPick, onPhrase, onClose }: { id: string; onPick: (s: string) => void; onPhrase: (s: string) => void; onClose: () => void }) {
+  const [tab, setTab] = useState<PickerTab>(() => {
+    const saved = storage.get("tabula-latina-emoji-tab") as PickerTab | null;
+    return saved && PICKER_TABS.includes(saved) ? saved : "roman";
+  });
   // a tap anywhere else closes it (the ＋ itself toggles it)
   useEffect(() => {
     const away = (e: PointerEvent) => !(e.target as HTMLElement).closest?.(".emoji-pop, .plus-btn") && onClose();
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, []);
-  const choose = (t: "roman" | "everyday") => {
+  const choose = (t: PickerTab) => {
     setTab(t);
     storage.set("tabula-latina-emoji-tab", t);
   };
   return (
-    <div class="emoji-pop" role="dialog" aria-label="Emoji">
+    <div class="emoji-pop" role="dialog" aria-label="Emoji and phrases">
       <div class="emoji-tabs" role="tablist">
         <button role="tab" aria-selected={tab === "roman"} onClick={() => choose("roman")}>
           <span class="emoji-tab-icon">{ROMAN_EMOJI[0].char}</span> Roman
@@ -1012,15 +1022,44 @@ function EmojiPicker({ onPick, onClose }: { onPick: (s: string) => void; onClose
         <button role="tab" aria-selected={tab === "everyday"} onClick={() => choose("everyday")}>
           <span class="emoji-tab-icon">😊</span> Everyday
         </button>
+        <button id="phrases-tab" role="tab" aria-selected={tab === "phrases"} onClick={() => choose("phrases")}>
+          <span class="emoji-tab-icon">💬</span> Phrases
+        </button>
       </div>
-      <div class="emoji-grid">
-        {tab === "roman" && ROMAN_EMOJI.map((e) => (
-          <button key={e.code} class="emoji-btn roman" onClick={() => onPick(e.char)} aria-label={`Add ${e.en}`} title={e.en}>{e.char}</button>
-        ))}
-        {(tab === "roman" ? ROMAN_REAL : EVERYDAY).map((e) => (
-          <button key={e} class="emoji-btn" onClick={() => onPick(e)} aria-label={`Add ${e}`}>{e}</button>
-        ))}
-      </div>
+      {tab === "phrases" ? (
+        <Phrasebook id={id} onPick={onPhrase} />
+      ) : (
+        <div class="emoji-grid">
+          {tab === "roman" && ROMAN_EMOJI.map((e) => (
+            <button key={e.code} class="emoji-btn roman" onClick={() => onPick(e.char)} aria-label={`Add ${e.en}`} title={e.en}>{e.char}</button>
+          ))}
+          {(tab === "roman" ? ROMAN_REAL : EVERYDAY).map((e) => (
+            <button key={e} class="emoji-btn" onClick={() => onPick(e)} aria-label={`Add ${e}`}>{e}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Ready phrases with their English: a tap puts one into the message. */
+function Phrasebook({ id, onPick }: { id: string; onPick: (s: string) => void }) {
+  const groups = phrasebook(membersOf(id, getMeta()), id === GROUP.id);
+  return (
+    <div class="phrase-list">
+      {groups.map((g) => (
+        <div key={g.title} class="phrase-group">
+          <span class="eyebrow">{g.title}</span>
+          <div class="phrase-grid">
+            {g.phrases.map((ph) => (
+              <button key={ph.la} class="phrase-btn" onClick={() => onPick(ph.la)} title={ph.note}>
+                <span class="phrase-la" lang="la">{ph.la}</span>
+                <span class="phrase-en">{ph.en}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1036,13 +1075,17 @@ function Composer({ id }: { id: string }) {
     setText(v);
     storage.set(DRAFT_KEY(id), v);
   };
-  /** Puts something in at the cursor (an emoji), or after what is written (a word). */
-  const put = (s: string, atCursor: boolean) => {
+  /** Puts something in at the cursor (an emoji; a phrase, spaced from the words around it), or after what is written (a word). */
+  const put = (s: string, atCursor: boolean, spaced = false) => {
     const el = box.current;
     const cur = el?.value ?? text;
     if (atCursor && el) {
       const a = el.selectionStart ?? cur.length;
       const b = el.selectionEnd ?? cur.length;
+      if (spaced) {
+        if (a > 0 && !/\s$/.test(cur.slice(0, a))) s = ` ${s}`;
+        if (b < cur.length && !/^\s/.test(cur.slice(b))) s = `${s} `;
+      }
       change(cur.slice(0, a) + s + cur.slice(b));
       requestAnimationFrame(() => {
         el.focus();
@@ -1083,8 +1126,8 @@ function Composer({ id }: { id: string }) {
       {err && <p class="small bad">{err}</p>}
       {!checking && notLatin(text) && <p class="composer-hint small ui">English? Tap ✓ and the coach writes it in Latin.</p>}
       <div class="composer-row">
-        {emoji && <EmojiPicker onPick={(e) => put(e, true)} onClose={() => setEmoji(false)} />}
-        <button class="plus-btn" aria-label="Emoji" aria-expanded={emoji} onClick={() => setEmoji(!emoji)}>
+        {emoji && <EmojiPicker id={id} onPick={(e) => put(e, true)} onPhrase={(ph) => put(ph, true, true)} onClose={() => setEmoji(false)} />}
+        <button class="plus-btn" aria-label="Emoji and phrases" aria-expanded={emoji} onClick={() => setEmoji(!emoji)}>
           <Icon.plus />
         </button>
         <textarea

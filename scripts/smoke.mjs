@@ -872,6 +872,16 @@ async function messenger() {
   await p.locator(".emoji-pop button", { hasText: "🍷" }).click();
   if (!(await p.inputValue("#composer")).includes("🍷")) errors.push("messenger: the ＋ does not add an emoji");
   await p.fill("#composer", "");
+  // the phrasebook beside the emoji: a greeting to her by name goes into the message
+  if (!(await p.locator(".emoji-pop").count())) await p.click(".plus-btn");
+  await p.click("#phrases-tab");
+  await p.locator(".phrase-btn", { hasText: "Salvē, Iūlia!" }).click();
+  await p.locator(".phrase-btn", { hasText: "Quid agis?" }).click();
+  if ((await p.inputValue("#composer")) !== "Salvē, Iūlia! Quid agis?") errors.push(`messenger: the phrasebook does not put phrases into the message (${JSON.stringify(await p.inputValue("#composer"))})`);
+  await p.screenshot({ path: `${out}/messenger-phrases.png` });
+  await p.click("#phrases-tab");
+  await p.press("#composer", "Escape");
+  await p.fill("#composer", "");
   await p.click("button[aria-label='Your words']");
   if (!(await p.locator(".words-sheet .word-chip", { hasText: "salvē" }).count())) errors.push("messenger: the words sheet lacks the chat words");
   await p.keyboard.press("Escape");

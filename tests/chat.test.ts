@@ -5,6 +5,7 @@ import { COMMON_HAPPENINGS, lifeNow, localTime, replyTiming, statusAt } from "..
 import { newMeta, newThread, preview, Thread, voiceOf } from "../src/chat/model";
 import { adYear, birthdaysNear, calendarBlock, calendarWords, festivalsNear, romanDate, todayLine } from "../src/chat/calendar";
 import { PHOTOS, photoSrc, photosFor } from "../src/content/photos";
+import { phrasebook } from "../src/content/phrases";
 import { literalReading } from "../src/latin/facts";
 import { languageBlock, PromptCtx, replyPrompt } from "../src/chat/prompts";
 import { LINKS, rollStranger } from "../src/chat/strangers";
@@ -423,5 +424,31 @@ describe("New words stick: the words of a message the site does not know", () =>
   it("leaves out English messages, emoji codes and single letters", () => {
     expect(strangeWords("how do I say heart?", lex)).toEqual([]);
     expect(strangeWords("Salvē :lupa: :laurus: :laurea: ō", lex)).toEqual([]);
+  });
+});
+
+describe("the phrasebook beside the emoji", () => {
+  const marcus = PERSON_BY_ID.get("marcus")!;
+  const books = [phrasebook([marcus], false), phrasebook(PEOPLE, true), ...PEOPLE.map((p) => phrasebook([p], false))];
+  it("greets the person by name, or everyone in the group", () => {
+    const one = phrasebook([marcus], false).flatMap((g) => g.phrases.map((p) => p.la));
+    expect(one).toEqual(expect.arrayContaining(["Salvē, Marce!", "Valē, Marce!", "Quid agis?", "Ita.", "Minimē.", "Grātiās!", "Bene dormī!"]));
+    const all = phrasebook(PEOPLE, true).flatMap((g) => g.phrases.map((p) => p.la));
+    expect(all).toEqual(expect.arrayContaining(["Salvēte, amīcī!", "Valēte, amīcī!", "Quid agitis?", "Marce!", "Gāī!", "Lūcī!", "Iūlia!", "Claudia!"]));
+    expect(all).not.toContain("Salvē, Marce!");
+  });
+  it("uses only words the site knows, but for the one its note names", () => {
+    for (const book of books)
+      for (const ph of book.flatMap((g) => g.phrases)) {
+        const allowed = ph.note ? [ph.note.split(":")[0]] : [];
+        expect(strangeWords(ph.la, lex).filter((w) => !allowed.includes(w.toLowerCase())), ph.la).toEqual([]);
+        expect(ph.en.length, ph.la).toBeGreaterThan(1);
+      }
+  });
+  it("lists each phrase once", () => {
+    for (const book of books) {
+      const la = book.flatMap((g) => g.phrases.map((p) => p.la));
+      expect(new Set(la).size).toBe(la.length);
+    }
   });
 });

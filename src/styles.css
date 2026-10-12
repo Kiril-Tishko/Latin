@@ -1694,6 +1694,14 @@ main.page.msgr-page { padding-block: 14px; }
 .emoji-btn { width: 42px; height: 42px; border: 0; background: none; font-size: 1.5rem; border-radius: 8px; cursor: pointer; }
 .emoji-btn.roman { font-size: 1.75rem; }
 .emoji-btn:hover { background: var(--panel-2); }
+/* the phrasebook: ready phrases with their English, a tap puts one in the message */
+.phrase-list { width: 364px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
+.phrase-group { display: flex; flex-direction: column; gap: 4px; }
+.phrase-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.phrase-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 9px; border: 1px solid var(--m-line-soft); border-radius: 9px; background: var(--m-bubble, var(--panel)); cursor: pointer; text-align: left; }
+.phrase-btn:hover { background: var(--panel-2); }
+.phrase-la { font-family: var(--f-text); font-size: 1.02rem; color: var(--ink); }
+.phrase-en { font-family: var(--f-ui); font-size: 0.74rem; color: var(--ink-2); }
 
 /* a message of emoji alone: big, without its bubble */
 .bubble.emoji-only { background: none; border-color: transparent; filter: none; padding-inline: 2px; }
@@ -1778,6 +1786,7 @@ main.page.msgr-page { padding-block: 14px; }
   .send-btn { width: 46px; height: 46px; }
   .emoji-pop { left: 0; right: 0; }
   .emoji-grid { grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); max-height: 210px; }
+  .phrase-list { width: auto; max-height: 260px; }
   .arrival { right: 12px; left: 12px; max-width: none; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 }
 

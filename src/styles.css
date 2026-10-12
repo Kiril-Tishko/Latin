@@ -1926,3 +1926,5 @@ main.page.msgr-page { padding-block: 14px; }
   .family-row { grid-template-columns: 1fr; }
   .rel-label { min-width: 0; }
 }
+.better-voice summary { cursor: pointer; color: var(--ink); }
+.better-voice ul { margin: 6px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }

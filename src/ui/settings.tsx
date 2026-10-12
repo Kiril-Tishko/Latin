@@ -5,6 +5,7 @@ import { Icon, Modal } from "./components";
 import { getSync, resetProgress, update, useProgress } from "./store";
 import { updatePath } from "../trainer/path";
 import { audioSupported, hasLatinVoice, latinVoices, pickVoice, speak, useVoices } from "../audio/speech";
+import { recordedCount } from "../audio/recorded";
 import { ModelChoice } from "../trainer/progress";
 import { EFFORTS, TIERS } from "./models";
 import { NO_CORRECTION } from "./keyboard";
@@ -181,6 +182,42 @@ const SPEEDS = [
   [1, "Natural"],
 ] as const;
 
+/** The recorded voice: on or off (the learner chose recordings, the same on every device). */
+function RecordedVoice() {
+  const p = useProgress();
+  return (
+    <div class="stack" style={{ gap: "4px" }}>
+      <label class="row ui small">
+        <input id="recorded" type="checkbox" checked={p.settings.recorded !== false} onChange={(e) => update((x) => void (x.settings.recorded = (e.target as HTMLInputElement).checked))} />
+        Recorded voice for the lessons' sentences, the stories, the rules' examples and every word
+      </label>
+      <span class="small muted">
+        {recordedCount} texts read once by a neural voice with the classical sounds: the same voice on every device. Everything else (new
+        sentences, messages) is read by this device's voice.
+      </span>
+      <div>
+        <button id="test-recorded" class="btn ghost small" onClick={() => void speak("Discipulus est amīcus meus.", { id: "test-recorded" })}>Hear it</button>
+      </div>
+    </div>
+  );
+}
+
+/** How to get a better voice on each kind of device: premium, enhanced and natural voices are free and far better. */
+function BetterVoice() {
+  return (
+    <details class="small better-voice">
+      <summary class="ui">Get a better voice on this device (free)</summary>
+      <ul>
+        <li><strong>iPhone, iPad:</strong> Settings › Accessibility › Spoken Content › Voices › Spanish › download a voice marked Premium or Enhanced (Mónica, Paulina, Jorge…).</li>
+        <li><strong>Mac:</strong> System Settings › Accessibility › Spoken Content › System voice › Manage Voices › Spanish › a Premium or Enhanced voice.</li>
+        <li><strong>Android:</strong> Settings › Accessibility (or System) › Text-to-speech › Speech Services by Google › Install voice data › Spanish (Spain) › pick a voice.</li>
+        <li><strong>Windows:</strong> in Microsoft Edge the Spanish "Online (Natural)" voices appear by themselves and are the best free ones; or Settings › Time &amp; language › Speech › Add voices › Spanish.</li>
+      </ul>
+      <p class="muted">Then reload the page: the best voice is chosen by itself (Premium first, then Enhanced, then Natural).</p>
+    </details>
+  );
+}
+
 function AudioSettings() {
   const p = useProgress();
   useVoices();
@@ -188,7 +225,8 @@ function AudioSettings() {
     return (
       <div class="stack" style={{ gap: "6px" }}>
         <span class="eyebrow">Audio</span>
-        <p class="small muted">This browser cannot read text aloud. Try Chrome, Edge or Safari.</p>
+        <RecordedVoice />
+        <p class="small muted">This browser cannot read other text aloud. Try Chrome, Edge or Safari.</p>
       </div>
     );
   }
@@ -198,8 +236,9 @@ function AudioSettings() {
   return (
     <div class="stack" style={{ gap: "8px" }}>
       <span class="eyebrow">Audio</span>
+      <RecordedVoice />
       <label class="stack ui small" style={{ gap: "4px" }} for="voice">
-        Voice
+        This device's voice
         <select
           id="voice"
           class="select"
@@ -225,12 +264,10 @@ function AudioSettings() {
       </label>
       {!hasLatinVoice() && (
         <p class="small well">
-          No Spanish or Italian voice was found on this device, so audio buttons are hidden. Add a Spanish voice, then reload the page.
-          iPhone / iPad: Settings › Accessibility › Spoken Content › Voices › Spanish. Mac: System Settings › Accessibility › Spoken Content ›
-          System voice › Manage Voices › Spanish. Windows: Settings › Time &amp; language › Speech › Add voices › Spanish. Android: Settings ›
-          Text-to-speech › Google › install Spanish.
+          No Spanish or Italian voice was found on this device: only the recorded texts can be heard. Add a Spanish voice (below), then reload the page.
         </p>
       )}
+      <BetterVoice />
       <p class="small muted">
         Latin is read by a Spanish voice with the classical rules applied: hard c and g, v as w, ae as "eye", and the Latin stress. An
         Italian voice works too but guesses the stress. It is close to the videos' pronunciation, not identical.

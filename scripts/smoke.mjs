@@ -221,6 +221,40 @@ async function run(name, viewport, colorScheme) {
 // Audio, with fake Italian and Spanish voices (headless Chromium has none): speaker
 // buttons appear, clicks speak the respelled Latin (Spanish preferred, stress marked
 // with acute accents only), listening exercises play by themselves.
+/**
+ * The recorded voice: a lesson's sentence plays from its pack (loaded beside the
+ * page, played with Web Audio), not with the device's voice, and the speakers
+ * show for recorded texts even on a device with no Spanish or Italian voice.
+ */
+async function recorded() {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addInitScript((data) => localStorage.getItem("tabula-latina-progress-v1") || localStorage.setItem("tabula-latina-progress-v1", data), SEED);
+  await ctx.addInitScript(() => {
+    window.__spoken = [];
+    window.__played = [];
+    const voices = [{ name: "Samantha", lang: "en-US", voiceURI: "samantha", localService: true, default: true }];
+    Object.defineProperty(window, "speechSynthesis", { value: { getVoices: () => voices, speak: (u) => { window.__spoken.push(u.text); setTimeout(() => u.onend && u.onend(), 100); }, cancel: () => {}, addEventListener: () => {} }, configurable: true });
+    window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; } };
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      window.__played.push(args);
+      return start.apply(this, args);
+    };
+  });
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => errors.push(`recorded: ${e.message}`));
+  await p.goto(`file://${page}#lesson-2`);
+  await p.waitForTimeout(800);
+  const speakers = await p.locator(".ex-line .speak").count();
+  if (speakers < 10) errors.push(`recorded: with no Spanish voice, only ${speakers} speakers for the recorded sentences`);
+  await p.locator(".ex-line .speak").first().click();
+  await p.waitForTimeout(2500);
+  const state = await p.evaluate(() => ({ packs: Object.keys(window.__tabulaAudio ?? {}), played: window.__played.length, spoken: window.__spoken.length }));
+  if (!state.packs.includes("lesson-2")) errors.push(`recorded: the lesson's pack did not load (${JSON.stringify(state)})`);
+  if (state.played < 1 || state.spoken > 0) errors.push(`recorded: the sentence was not played from its recording (${JSON.stringify(state)})`);
+  await ctx.close();
+}
+
 async function audio() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   // the earlier mistake to come back is a listening one: it plays by itself
@@ -228,6 +262,8 @@ async function audio() {
     if (localStorage.getItem("tabula-latina-progress-v1")) return;
     const p = JSON.parse(data);
     p.mistakes = [{ at: 1000, kind: "listen", prompt: "Listen", answer: "a", expected: "Amīcum videō.", skills: ["n2.acc.sg"], notes: [], words: ["amicus", "video"] }];
+    // the device's voice is what this part checks: the recorded one is checked on its own (recorded())
+    p.settings = { ...(p.settings ?? {}), recorded: false };
     localStorage.setItem("tabula-latina-progress-v1", JSON.stringify(p));
   }, SEED);
   await ctx.addInitScript(() => {
@@ -1089,7 +1125,7 @@ async function ownWords() {
   await ctx.close();
 }
 
-// SMOKE_ONLY=messenger npm run smoke: just one part
+// SMOKE_ONLY=messenger npm run smoke: just one part (messenger, ownWords, learn, stories, conversations, chatScroll, askClaude, audio, recorded, pages)
 const only = process.env.SMOKE_ONLY;
 const parts = {
   messenger: () => messenger(),
@@ -1103,6 +1139,7 @@ const parts = {
   chatScroll: () => chatScroll(),
   askClaude: () => askClaude(),
   audio: () => audio(),
+  recorded: () => recorded(),
   pages: async () => {
     await run("desktop-light", { width: 1280, height: 900 }, "light");
     await run("desktop-dark", { width: 1280, height: 900 }, "dark");

@@ -1,5 +1,5 @@
 // The speaker button that sits next to Latin text.
-import { audioSupported, hasLatinVoice, speak, stopSpeaking, useSpeaking, useVoices } from "../audio/speech";
+import { audioSupported, hasLatinVoice, recordedFor, speak, stopSpeaking, useSpeaking, useVoices } from "../audio/speech";
 import { Icon } from "./components";
 import { getProgress } from "./store";
 
@@ -11,7 +11,8 @@ export function audioReady(): boolean {
 export function Speak({ text, id, big, label = "Listen" }: { text: string; id?: string; big?: boolean; label?: string }) {
   useVoices();
   const speaking = useSpeaking();
-  if (!audioReady()) return null;
+  // a text with a recording can be heard on any device; others need a Latin voice on this one
+  if (!audioReady() && !recordedFor(text)) return null;
   const key = id ?? text;
   const on = speaking === key;
   return (

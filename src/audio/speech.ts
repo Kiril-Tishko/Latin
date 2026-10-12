@@ -3,6 +3,8 @@
 // is the fallback.
 import { useEffect, useState } from "preact/hooks";
 import { respell } from "./pronounce";
+import { speakable } from "./speakable";
+import { hasRecording, playRecorded, stopRecorded } from "./recorded";
 
 export const audioSupported = () => typeof window !== "undefined" && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 
@@ -24,7 +26,8 @@ if (audioSupported()) {
   setTimeout(loadVoices, 2500);
 }
 
-const QUALITY = /(natural|neural|premium|enhanced|online|google|siri)/i;
+/** Better voices say so in their names: Apple's Premium and Enhanced, Microsoft's Natural (online), Google's. */
+const QUALITY: [RegExp, number][] = [[/premium/i, 16], [/enhanced|verbessert|mejorad/i, 13], [/natural|neural|online/i, 11], [/google/i, 7], [/siri/i, 5]];
 /** Apple's playful and robotic voices (they come in every language): no good for Latin. */
 const NOVELTY = /^(eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|pipe organ|superstar|trinoids|whisper|wobble|zarvox|deranged|hysterical|princess|ralph|fred|junior|kathy)\b/i;
 
@@ -32,7 +35,7 @@ function score(v: SpeechSynthesisVoice): number {
   const lang = v.lang.toLowerCase().replace("_", "-");
   let s = lang.startsWith("es") ? 100 : lang.startsWith("it") ? 60 : 0;
   if (!s || NOVELTY.test(v.name.trim())) return 0;
-  if (QUALITY.test(v.name)) s += 10;
+  s += QUALITY.find(([re]) => re.test(v.name))?.[1] ?? 0;
   if (lang === "es-es" || lang === "it-it") s += 2;
   return s;
 }
@@ -81,6 +84,8 @@ export function useVoices(): SpeechSynthesisVoice[] {
 export interface SpeechPrefs {
   voice?: string;
   rate: number;
+  /** Play the recorded voice where a text has one (default on). */
+  recorded?: boolean;
 }
 
 let prefs: SpeechPrefs = { rate: 0.85 };
@@ -105,20 +110,7 @@ export function useSpeaking(): string | null {
   return speakingId;
 }
 
-/**
- * Only Latin words and plain punctuation reach the voice: reading hints go,
- * and separators (the · of a word list, slashes, arrows) become a short pause,
- * so a voice never reads them out as extra words ("punto", "barra").
- */
-export function speakable(latin: string): string {
-  return latin
-    .replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "")
-    .replace(/\s*(?:[·•|/→←+=]|\.\.\.|…)\s*/g, ", ")
-    .replace(/[()[\]{}«»"“”‘’*_]/g, "")
-    .replace(/(?:,\s*)+/g, ", ")
-    .replace(/\s+/g, " ")
-    .replace(/^[,\s]+|[,\s]+$/g, "");
-}
+export { speakable };
 
 /** What the voice will actually read for this Latin text. */
 export function spokenText(latin: string, voice: SpeechSynthesisVoice | null): string {
@@ -131,12 +123,43 @@ export function spokenText(latin: string, voice: SpeechSynthesisVoice | null): s
 
 let generation = 0;
 
-/** Reads Latin aloud. Resolves when it ends (or is stopped); `false` when it could not play. */
-export function speak(latin: string, opts: { id?: string; rate?: number; pitch?: number; g?: "m" | "f" } = {}): Promise<boolean> {
-  if (!audioSupported()) return Promise.resolve(false);
+type SpeakOpts = { id?: string; rate?: number; pitch?: number; g?: "m" | "f" };
+
+/** Whether a text will be read by the recorded voice (a person's own voice in the messenger never is). */
+export const recordedFor = (latin: string, opts: SpeakOpts = {}) => prefs.recorded !== false && !opts.g && opts.pitch === undefined && hasRecording(latin);
+
+/**
+ * Reads Latin aloud: the recorded voice where the text has one (the same on
+ * every device), else the device's voice. Resolves when it ends (or is
+ * stopped); `false` when it could not play.
+ */
+export function speak(latin: string, opts: SpeakOpts = {}): Promise<boolean> {
+  if (recordedFor(latin, opts)) {
+    const mine = ++generation;
+    if (audioSupported()) speechSynthesis.cancel();
+    setSpeaking(opts.id ?? latin);
+    // the recordings are at a learner's pace already: the usual rate (0.85) plays them as they are
+    return playRecorded(latin, (opts.rate ?? prefs.rate) / 0.85).then((ok) => {
+      if (generation !== mine) return false;
+      // no recording could play (no Web Audio, the pack did not load): the device's voice reads it
+      if (ok === null) return speakDevice(latin, opts);
+      setSpeaking(null);
+      return ok;
+    });
+  }
+  return speakDevice(latin, opts);
+}
+
+/** Reads Latin with the device's own voice. */
+function speakDevice(latin: string, opts: SpeakOpts): Promise<boolean> {
+  if (!audioSupported()) {
+    setSpeaking(null);
+    return Promise.resolve(false);
+  }
   // a voice message: a man's or a woman's voice if there is one, else the pitch moved towards it
   const voice = opts.g ? voiceFor(opts.g) : pickVoice(prefs.voice);
   const mine = ++generation;
+  stopRecorded();
   speechSynthesis.cancel();
   return new Promise((resolve) => {
     const u = new SpeechSynthesisUtterance(spokenText(latin, voice));
@@ -168,6 +191,7 @@ export function speak(latin: string, opts: { id?: string; rate?: number; pitch?:
 
 export function stopSpeaking() {
   generation++;
+  stopRecorded();
   if (audioSupported()) speechSynthesis.cancel();
   setSpeaking(null);
 }

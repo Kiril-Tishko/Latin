@@ -72,6 +72,8 @@ export interface Settings {
   voice?: string;
   /** Speech rate, 0.6-1.1. */
   rate: number;
+  /** The recorded voice for the texts that have one (unset: on). */
+  recorded?: boolean;
   /** Read Latin prompts aloud as soon as they appear. */
   autoplay: boolean;
   /** The coach: Ask Claude, the checks of answers, Answer in Latin. */

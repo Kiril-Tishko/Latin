@@ -49,7 +49,7 @@ function UnreadBadge() {
 export function App() {
   const route = useRoute();
   const p = useProgress();
-  setSpeechPrefs({ voice: p.settings.voice, rate: p.settings.rate });
+  setSpeechPrefs({ voice: p.settings.voice, rate: p.settings.rate, recorded: p.settings.recorded !== false });
   const [settings, setSettings] = useState(false);
   // what is on screen, for Ask Claude (each page and dialog says more about itself)
   useScreen("app", PAGE_NAME[route.page], () => `The ${PAGE_NAME[route.page]} page.`);

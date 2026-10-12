@@ -606,6 +606,36 @@ learner is there, also when something below grows (fonts, a card, Check's note).
 
 ## Audio
 
+Two voices, as the learner chose. **The recorded voice** reads every fixed text
+(the videos' sentences, phrases and stories, the stories of Lectiōnēs, the rules'
+examples, the sayings, the open questions, every word: `fixedTexts` in
+src/audio/fixed.ts): recorded once with Piper, an open-source neural voice
+(es_MX-claude-high, the clearest in a speech-recognizer test against
+es_ES-davefx), from the Spanish respelling below, with two Latin touches on
+the phonemes: a hard b, and the h Spanish leaves silent (habet). A hard d and g
+were tried and dropped («videō» came out as "cuidado"). The same voice on every
+device. `scripts/audio/record.py` (a venv with piper-tts, a model from
+huggingface.co/rhasspy/piper-voices) writes src/content/audio/<pack>-<hash>.js,
+small scripts setting `window.__tabulaAudio[pack]` to an MP3 in base64 (one
+pack per lesson, per step of stories, the rules, the words; files beside the
+page, `MEDIA` in the build), and src/audio/recorded-index.json (key → pack,
+start, length; `audioKey` in src/audio/key.ts: lower case, no long marks or
+punctuation). The page loads a pack the first time a clip of it is needed and
+plays the clip with Web Audio (`playRecorded` in src/audio/recorded.ts: started
+inside the tap, `navigator.audioSession.type = "playback"` so an iPhone's silent
+switch does not mute it, the device's voice when it cannot start, a timer when
+its end never comes). `speak()` uses it whenever a text has a recording
+(Settings: "Recorded voice", on by default; never for a person's voice message),
+and a speaker shows for a recorded text even on a device with no Spanish voice.
+`tests/recorded.test.ts` fails when a fixed text has no recording or the texts
+or their respelling changed since (`fingerprint`): run the script again (after
+adding a lesson too). The smoke test's `recorded` part plays one.
+
+**The device's voice** reads everything else (new sentences, messages). Settings
+lists only Spanish and Italian voices, picks the best by name (Premium, then
+Enhanced, then Natural / Online, then Google), and "Get a better voice on this
+device" says how to install a free premium voice on each kind of device.
+
 No browser has a Latin voice. `src/audio/pronounce.ts` respells Latin for a
 Spanish voice (Italian as fallback) so the device's own speech engine reads it
 with classical sounds: c and g hard (Spanish qu / gu, Italian ch / gh), v as w

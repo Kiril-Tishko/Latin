@@ -2,6 +2,7 @@
 // it: every word one the learner knows, in a form of a rule they have seen, the
 // sentence built only with constructions they have met, and the grammar right
 // (the engine's own checks). Also puts back long marks Claude left out.
+import { splitCodes, withoutEmoji } from "./emoji";
 import { annotate, Lexicon } from "../latin/analyze";
 import { checkAnswer } from "../latin/facts";
 import { capitalize, plain } from "../latin/text";
@@ -40,7 +41,9 @@ function readingAllowed(a: NonNullable<ReturnType<Lexicon["analyze"]>[number]>, 
  * Vets one message against the learner's words (`lex`: the messenger's lexicon,
  * only words the learner knows plus chat words and names) and the rules seen.
  */
-export function vetMessage(text: string, lex: Lexicon, seen: Set<string>): Vet {
+export function vetMessage(message: string, lex: Lexicon, seen: Set<string>): Vet {
+  // the Roman emoji are not words
+  const text = withoutEmoji(message);
   const issues: string[] = [];
   const unknown: string[] = [];
   for (const s of sentences(text)) {
@@ -78,6 +81,9 @@ const rankOf = (key: string) => (ORDER.includes(key) ? ORDER.indexOf(key) : key.
  * place (in silva → in silvā) and after ad the goal; otherwise as written.
  */
 export function withMacrons(text: string, lex: Lexicon): string {
+  // the codes of the Roman emoji (":lupa:") stay exactly as they are
+  const parts = splitCodes(text);
+  if (parts.length > 1) return parts.map((p, i) => (i % 2 ? p : withMacrons(p, lex))).join("");
   const tokens = annotate(text, lex);
   const words = tokens.filter((t) => t.isWord);
   return tokens

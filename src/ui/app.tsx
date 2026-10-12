@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { AskDrawer, onPractice, openAsk } from "./ask";
+import { AddWordHost } from "./addword";
 import { Hedera, Icon, Toaster } from "./components";
 import { roman } from "../latin/text";
 import { go, Route, useRoute } from "./nav";
@@ -150,6 +151,7 @@ export function App() {
       </nav>
 
       <AskDrawer />
+      <AddWordHost />
       <Toaster />
       {p.settings.me && <ArrivalNotice current={route.page === "messenger" ? route.thread ?? null : null} />}
       {settings && <Settings onClose={() => setSettings(false)} />}

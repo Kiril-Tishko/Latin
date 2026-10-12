@@ -1,4 +1,5 @@
 // The learner's saved state and the pure functions that update it.
+import type { OwnWord } from "./own";
 import { PARTS } from "../content/parts";
 
 export interface SkillStat {
@@ -100,6 +101,8 @@ export interface Progress {
   /** Discover cards opened (seen) and added to the dictionary. */
   revealed: string[];
   added: string[];
+  /** Words the learner added to their dictionary themselves (Claude filled them in). */
+  own: OwnWord[];
   /** Exercises done per day, keyed YYYY-MM-DD (local time). */
   days: Record<string, { done: number; right: number }>;
   mistakes: Mistake[];
@@ -133,6 +136,7 @@ export function newProgress(): Progress {
     words: {},
     revealed: [],
     added: [],
+    own: [],
     days: {},
     mistakes: [],
     stories: {},
@@ -153,6 +157,7 @@ export function migrate(raw: unknown): Progress {
     words: p.words ?? {},
     revealed: p.revealed ?? [],
     added: p.added ?? [],
+    own: Array.isArray(p.own) ? p.own : [],
     days: p.days ?? {},
     mistakes: p.mistakes ?? [],
     rulesShown: p.rulesShown ?? {},

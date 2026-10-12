@@ -26,6 +26,15 @@ export interface Msg {
   src?: "reply" | "own" | "routine" | "first";
 }
 
+/** The coach's check of a message the learner wrote. */
+export type Check = NonNullable<Msg["check"]>;
+
+/** The coach's window beside a chat: checks of the learner's messages, and questions about them with the answers. */
+export type CoachTurn =
+  | { kind: "check"; draft: string; res: Check; at: number }
+  | { kind: "q"; text: string; at: number }
+  | { kind: "a"; text: string; at: number };
+
 export interface Thread {
   /** A person's id, "amici" (the group) or a stranger's id. */
   id: string;

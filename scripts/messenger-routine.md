@@ -12,7 +12,7 @@ You are the phone side of the messenger (Nūntiī) of "Tabula Latina", a Latin t
 
 3. Decide, as life would, whether anyone writes now. Often nobody does. Usually one person writes one to three short messages; now and then two or three friends talk in the group (chat id "amici"). Someone writes only when awake (not "asleep") and with a reason: their mood and what is going on for them (moods can be extreme, and the hour and what others said shift them), news, a question, a follow-up to the last conversation, missing the learner, the hour (good morning, good night). Do not write into a chat that already has unseen messages from that person, unless hours have passed. Two chats at most. The brief (/tmp/nuntii/data/users/me/messenger/brief/now.json) has who everyone is (people[].sheet), the learner (learner) and the language rules (language).
 
-4. Write the messages in character, following the brief's language exactly: ONLY the words and forms it lists, with long marks. Real texting: short, emoji welcome; never correct the learner and never mention lessons, rules, AI or phones. Check them all with `python3 /tmp/nuntii.py check /tmp/nuntii "<message 1>" "<message 2>"` and rewrite any that is not OK until all are. Then save each as its own new document in collection "data/users/me/messenger/inbox" (ArtifactData set; doc_id "r" + the time in base 36 + three random letters) with data {"chat": <chat id>, "from": <person id>, "la": <the Latin>, "en": <English translation>, "at": <now in ms (date +%s%3N), a few seconds apart within a burst>}. The page moves them into the chats. Also write the same list as JSON to /tmp/nuntii/new.json.
+4. Write the messages in character, following the brief's language exactly: ONLY the words and forms it lists, with long marks. Real texting: short, emoji welcome (also the Roman ones the language lists, written as codes like :lupa:); never correct the learner and never mention lessons, rules, AI or phones. Check them all with `python3 /tmp/nuntii.py check /tmp/nuntii "<message 1>" "<message 2>"` and rewrite any that is not OK until all are. Then save each as its own new document in collection "data/users/me/messenger/inbox" (ArtifactData set; doc_id "r" + the time in base 36 + three random letters) with data {"chat": <chat id>, "from": <person id>, "la": <the Latin>, "en": <English translation>, "at": <now in ms (date +%s%3N), a few seconds apart within a burst>}. The page moves them into the chats. Also write the same list as JSON to /tmp/nuntii/new.json.
 
 5. Run `python3 /tmp/nuntii.py notify /tmp/nuntii /tmp/nuntii/new.json` (without the last argument if you wrote nothing). Your final message is exactly the one line it prints, nothing else: it becomes the phone notification.
 
@@ -116,11 +116,19 @@ def plain(w):
     return "".join(c for c in unicodedata.normalize("NFD", w) if unicodedata.category(c) != "Mn").lower()
 
 
+# the hand-drawn Roman emoji, written as codes (":lupa:"), and a plain emoji for each in a notification
+ROMAN_EMOJI = {"spqr": "🏛️", "laurus": "🌿", "aquila": "🦅", "lupa": "🐺", "gladius": "🗡️", "galea": "🪖", "scutum": "🛡️", "colosseum": "🏟️", "columna": "🏛️", "lucerna": "🪔", "tabula": "✍️", "lyra": "🎶", "aureus": "🪙", "canis": "🐕"}
+CODE = re.compile(r":([a-z]{3,12}):")
+
+
 def check(d, msgs):
     _, brief, _ = docs(d)
     forms = set(brief.get("forms", [])) if brief else set()
     for msg in msgs:
-        bad = [w for w in re.findall(r"[^\W\d_]+", msg) if plain(w) not in forms and not re.fullmatch(r"(ha)+e?", plain(w))]
+        unknown = [c for c in CODE.findall(msg) if c not in ROMAN_EMOJI]
+        words = CODE.sub(" ", msg)
+        bad = [w for w in re.findall(r"[^\W\d_]+", words) if plain(w) not in forms and not re.fullmatch(r"(ha)+e?", plain(w))]
+        bad += [f":{c}: (no such emoji)" for c in unknown]
         print(msg, "->", "OK" if not bad else "NOT ALLOWED: " + ", ".join(bad))
 
 
@@ -137,7 +145,8 @@ def notify(d, new_path=None):
         return
     n = names(brief)
     last = msgs[-1]
-    line = f"{n.get(last.get('from'), last.get('from'))}: {last.get('la')}" + (f" ({last['en']})" if last.get("en") else "")
+    shown = lambda t: CODE.sub(lambda m: ROMAN_EMOJI.get(m.group(1), m.group(0)), t or "")
+    line = f"{n.get(last.get('from'), last.get('from'))}: {shown(last.get('la'))}" + (f" ({shown(last['en'])})" if last.get("en") else "")
     others = [n.get(m.get("from"), m.get("from")) for m in msgs[:-1]]
     if others:
         who = ", ".join(dict.fromkeys(others))

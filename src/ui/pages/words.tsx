@@ -14,9 +14,10 @@ import { wordExamples } from "../../trainer/discover";
 import { dueWords, strength } from "../../trainer/srs";
 import { openAsk } from "../ask";
 import { Icon, Modal, Mosaic } from "../components";
-import { LatinTokens } from "../latin";
+import { LatinText, LatinTokens } from "../latin";
 import { go } from "../nav";
-import { derived, useProgress } from "../store";
+import { derived, update, useProgress } from "../store";
+import { openAddWord } from "../addword";
 import { startSession } from "./train";
 import { Speak } from "../speak";
 import { Sayings } from "../saying";
@@ -33,7 +34,7 @@ const PN_ROWS: [PN, string][] = [
   ["3pl", "they"],
 ];
 
-function Forms({ e }: { e: Entry }) {
+export function Forms({ e }: { e: Entry }) {
   const k = derived().knowledge;
   if (e.kind === "noun" || e.kind === "adj") {
     const genders: Gender[] = e.kind === "adj" ? ["m", "f", "n"] : [e.gender];
@@ -155,16 +156,61 @@ export function WordModal({ e, onClose }: { e: Entry; onClose: () => void }) {
             ))}
           </div>
         )}
+        {!examples.length && !!e.story?.examples?.length && (
+          <div class="stack" style={{ gap: "2px" }}>
+            <span class="eyebrow" style={{ color: "var(--ink-2)" }}>Examples</span>
+            {e.story.examples.map((x) => (
+              <div key={x.la} class="ex-line">
+                <LatinText text={x.la} />
+                <span class="muted">{x.en}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <Sayings wordId={e.id} max={2} />
         {card && <p class="small"><span class="eyebrow" style={{ marginRight: "8px" }}>Remember</span>{card.hook}</p>}
+        {e.story && <OwnStory e={e} />}
         <InEnglish e={e} onMore={() => { onClose(); go({ page: "english" }); }} />
         <div class="row">
           <button class="btn ghost small" onClick={() => openAsk({ label: `Word: ${dictionaryForm(e)}`, detail: `The learner opened the dictionary entry ${dictionaryForm(e)} (${e.en}).` }, "How is this word used? Give me two short examples with words I know.")}>
             <Icon.quill /> Ask Claude about it
           </button>
+          {"own" in e.source && (
+            <button
+              class="btn ghost small"
+              onClick={() => {
+                if (!confirm(`Remove «${latinHeadword(e)}» from your words?`)) return;
+                update((p) => void (p.own = p.own.filter((w) => w.id !== e.id)));
+                onClose();
+              }}
+            >
+              Remove from my words
+            </button>
+          )}
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** A word the learner added: where it comes from and its story, as Claude told it. */
+function OwnStory({ e }: { e: Entry }) {
+  const st = e.story!;
+  const family = (r?: { en?: string[]; ru?: string[]; uk?: string[] }) => [...(r?.en ?? []), ...(r?.ru ?? []), ...(r?.uk ?? [])].join(", ");
+  const from = family(st.from);
+  const kin = family(st.kin);
+  return (
+    <div class="small stack" style={{ gap: "4px" }}>
+      {st.origin && <p class="labelled"><span class="label">Origin</span> {st.origin}</p>}
+      {st.history && <p class="labelled"><span class="label">History</span> {st.history}</p>}
+      {(from || kin) && (
+        <p class="labelled">
+          <span class="label">Family</span> {from}
+          {kin && <span class="muted">{from ? " · " : ""}same ancient root: {kin}</span>}
+        </p>
+      )}
+      <p class="muted">You added this word; Claude wrote its card.</p>
+    </div>
   );
 }
 
@@ -206,7 +252,7 @@ function matches(e: Entry, q: string, formHits: Set<string>): boolean {
 export function Words() {
   const p = useProgress();
   const d = derived();
-  const [filter, setFilter] = useState<number | "deck" | "all" | "chat">("all");
+  const [filter, setFilter] = useState<number | "deck" | "own" | "all" | "chat">("all");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Entry | null>(null);
   const vocab = d.words.filter((w) => w.kind !== "fixed" && !STORY_ONLY.has(w.id));
@@ -215,26 +261,33 @@ export function Words() {
   // typing any form finds its word: puellam -> puella, labōrant -> labōrō
   const formHits = new Set(q ? d.lexicon.analyze(q).map((a) => a.entry.id) : []);
   const shown = vocab.filter(
-    (w) => (filter === "all" || (filter === "deck" ? "deck" in w.source : filter !== "chat" && "lesson" in w.source && w.source.lesson === filter)) && matches(w, q, formHits),
+    (w) =>
+      (filter === "all" || (filter === "deck" ? "deck" in w.source : filter === "own" ? "own" in w.source : filter !== "chat" && "lesson" in w.source && w.source.lesson === filter)) &&
+      matches(w, q, formHits),
   );
   useScreen("page", "Words", () => {
-    const which = filter === "all" ? "all words" : filter === "deck" ? "the words added from Discover" : filter === "chat" ? "the chat words of the messenger" : `the words of Lesson ${filter}`;
+    const which = filter === "all" ? "all words" : filter === "deck" ? "the words added from Discover" : filter === "own" ? "the words the learner added themselves" : filter === "chat" ? "the chat words of the messenger" : `the words of Lesson ${filter}`;
     const list = shown.slice(0, 40).map((w) => `${headword(w)} (${w.en})`).join(", ");
     return `The learner's dictionary: ${vocab.length} words, ${due} due for review. Showing ${which}${q ? `, searching "${q}"` : ""}: ${shown.length} word${shown.length === 1 ? "" : "s"}${shown.length ? `: ${list}${shown.length > 40 ? ", …" : ""}` : ""}.`;
   });
   return (
     <div class="stack">
-      <input
-        id="word-search"
-        class="search"
-        type="search"
-        value={query}
-        placeholder="Quaere… search Latin (any form) or English"
-        autocomplete="off"
-        autocapitalize="off"
-        spellcheck={false}
-        onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-      />
+      <div class="row word-search-row">
+        <input
+          id="word-search"
+          class="search"
+          type="search"
+          value={query}
+          placeholder="Quaere… search Latin (any form) or English"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck={false}
+          onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+        />
+        <button id="add-word" class="btn gold" onClick={() => openAddWord(q && !shown.length ? q : "", "words")} title="Add any Latin word to your dictionary: Claude fills in its card">
+          <Icon.plus /> Add a word
+        </button>
+      </div>
       <div class="spread">
         <div class="seg" role="group" aria-label="Filter words">
           <button aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All</button>
@@ -242,6 +295,7 @@ export function Words() {
             <button key={l.n} aria-pressed={filter === l.n} onClick={() => setFilter(l.n)}>{roman(l.n)}</button>
           ))}
           <button aria-pressed={filter === "deck"} onClick={() => setFilter("deck")}>Discovered ({d.added.length})</button>
+          <button aria-pressed={filter === "own"} onClick={() => setFilter("own")} title="Words you added yourself">Yours ({d.own.length})</button>
           <button aria-pressed={filter === "chat"} onClick={() => setFilter("chat")} title="Words for chatting in Nūntiī">Chat ({CHAT_WORD_LIST.length})</button>
         </div>
         <button class="btn" disabled={!due} onClick={() => startSession({ kind: "words" }) && go({ page: "train" })}>
@@ -270,7 +324,11 @@ export function Words() {
           </button>
         ))}
       </div>
-      {!shown.length && filter !== "chat" && <p class="muted">{q ? `Nothing found for "${q}".` : "No words here yet. Open some cards in Discover."}</p>}
+      {!shown.length && filter !== "chat" && (
+        <p class="muted">
+          {q ? <>Nothing found for "{q}". <button class="linkish" onClick={() => openAddWord(q, "words")}>Add «{q}» to your words</button></> : filter === "own" ? "No words of your own yet: add one with Add a word." : "No words here yet. Open some cards in Discover."}
+        </p>
+      )}
       {open && <WordModal e={open} onClose={() => setOpen(null)} />}
     </div>
   );

@@ -28,9 +28,10 @@
   --c-voc: #a8356f;
   --c-verb: #0b6f6a;
 
-  --f-display: "Cinzel", "Trajan Pro", "Times New Roman", serif;
-  --f-text: "Alegreya", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --f-ui: "Alegreya Sans", "Gill Sans", "Segoe UI", system-ui, sans-serif;
+  /* "Roman Emoji" draws only the messenger's hand-drawn emoji (its own characters), so it goes first */
+  --f-display: "Roman Emoji", "Cinzel", "Trajan Pro", "Times New Roman", serif;
+  --f-text: "Roman Emoji", "Alegreya", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --f-ui: "Roman Emoji", "Alegreya Sans", "Gill Sans", "Segoe UI", system-ui, sans-serif;
 
   --step--1: 0.875rem;
   --step-0: 1rem;
@@ -705,6 +706,10 @@ table.paradigm td .latin { font-size: 1.08rem; }
 .msg.assistant { align-self: flex-start; border: 1px solid var(--rule); }
 .msg.assistant ul, .msg.assistant ol { margin: 0.4em 0; padding-left: 1.3em; }
 .msg.assistant p + p { margin-top: 0.55em; }
+/* a word card's lines: the word in bold, then Origin, History, Family, Use */
+p.headline { font-weight: 600; }
+p.labelled .label { font-family: var(--f-display); font-size: 0.78em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); margin-right: 0.3em; }
+.msg.assistant p.labelled + p.labelled { margin-top: 0.35em; }
 .ask-input { display: flex; gap: 8px; }
 .ask-input textarea {
   flex: 1;
@@ -1576,12 +1581,42 @@ main.page.msgr-page { padding-block: 14px; }
 .check-note.wrong { border-left-color: var(--bad); }
 .check-verdict { font-weight: 600; font-size: 0.85rem; }
 .check-better { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-family: var(--f-text); font-size: 1.04rem; }
+.check-ask { align-self: flex-start; margin-top: 2px; font-size: 0.8rem; }
+
+/* the coach's window above the message box: checks and questions, open until closed */
+.coach-panel {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 10px;
+  max-height: min(46vh, 440px);
+  border: 1px solid var(--m-line);
+  border-radius: 10px;
+  background: var(--m-field);
+  box-shadow: 0 10px 22px -18px rgba(60, 40, 20, 0.7);
+  overflow: hidden;
+}
+.coach-head { display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 14px; border-bottom: 1px solid var(--m-line-soft); }
+.coach-title { display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-ui); font-weight: 600; font-size: 0.9rem; color: var(--gold); }
+.coach-title svg { width: 15px; height: 15px; }
+.coach-hint { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coach-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.coach-check { display: flex; flex-direction: column; gap: 3px; }
+.coach-draft { font-family: var(--f-ui); }
+.coach-panel .check-note { margin: 0; max-width: none; background: var(--m-panel); }
+.coach-q { align-self: flex-end; max-width: 85%; margin: 0; padding: 6px 12px; border-radius: 12px 12px 3px 12px; background: var(--m-mine); border: 1px solid var(--m-line-soft); font-family: var(--f-ui); font-size: 0.92rem; }
+.coach-a { font-family: var(--f-ui); font-size: 0.95rem; line-height: 1.45; }
+.coach-a p { margin: 0 0 6px; }
+.coach-a > :last-child, .coach-a p:last-child { margin-bottom: 0; }
+.coach-a ul, .coach-a ol { margin: 0 0 6px; padding-left: 20px; }
+.coach-ask-row { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--m-line-soft); }
+.coach-ask { flex: 1; min-width: 0; border: 1px solid var(--m-line); border-radius: 18px; padding: 7px 14px; font-family: var(--f-ui); font-size: 0.95rem; background: var(--m-panel); color: var(--ink); }
+.coach-ask:focus { outline: none; border-color: var(--gold-soft); }
 .bad { color: var(--bad); }
 .chat-error { align-self: center; margin-top: 8px; }
 
 /* the box: emoji, the message, Check, send */
 .composer { position: relative; border-top: 1px solid var(--m-line); padding: 14px 18px 16px; }
-.composer-row { display: flex; align-items: flex-end; gap: 12px; }
+.composer-row { position: relative; display: flex; align-items: flex-end; gap: 12px; }
 .plus-btn {
   flex: none;
   width: 48px;
@@ -1649,20 +1684,30 @@ main.page.msgr-page { padding-block: 14px; }
 .send-btn:disabled { opacity: 0.55; cursor: default; }
 .emoji-pop {
   position: absolute;
-  left: 16px;
-  bottom: calc(100% - 4px);
+  left: 0;
+  bottom: calc(100% + 8px);
   z-index: 5;
-  display: grid;
-  grid-template-columns: repeat(8, 42px);
-  gap: 4px;
-  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 10px;
   background: var(--m-panel);
   border: 1px solid var(--m-line);
   border-radius: 12px;
   box-shadow: 0 16px 34px -14px rgba(40, 25, 10, 0.5);
 }
+.emoji-tabs { display: flex; gap: 4px; margin-bottom: 6px; border-bottom: 1px solid var(--m-line-soft); }
+.emoji-tabs button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 7px; border: 0; border-bottom: 2px solid transparent; background: none; font-family: var(--f-ui); font-size: 0.9rem; color: var(--ink-2); cursor: pointer; }
+.emoji-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--gold); }
+.emoji-tab-icon { font-size: 1.15rem; }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 42px); gap: 4px; max-height: 236px; overflow-y: auto; }
 .emoji-btn { width: 42px; height: 42px; border: 0; background: none; font-size: 1.5rem; border-radius: 8px; cursor: pointer; }
+.emoji-btn.roman { font-size: 1.75rem; }
 .emoji-btn:hover { background: var(--panel-2); }
+
+/* a message of emoji alone: big, without its bubble */
+.bubble.emoji-only { background: none; border-color: transparent; filter: none; padding-inline: 2px; }
+.bubble.emoji-only::after { display: none; }
+.bubble.emoji-only .bubble-text { font-size: 2.6rem; line-height: 1.15; }
 
 .words-sheet { display: flex; flex-direction: column; gap: 4px; }
 .words-sheet-row { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; border-bottom: 1px dotted var(--rule); padding-bottom: 4px; }
@@ -1738,7 +1783,27 @@ main.page.msgr-page { padding-block: 14px; }
   .composer-box { min-height: 46px; padding: 11px 16px; font-size: 1.04rem; border-radius: 23px; }
   .check-btn { height: 46px; padding: 0 12px; }
   .check-label { display: none; }
+  .coach-panel { max-height: 44vh; }
+  .coach-hint { display: none; }
+  .coach-head { justify-content: space-between; }
   .send-btn { width: 46px; height: 46px; }
-  .emoji-pop { left: 8px; right: 8px; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); }
+  .emoji-pop { left: 0; right: 0; }
+  .emoji-grid { grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); max-height: 210px; }
   .arrival { right: 12px; left: 12px; max-width: none; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* adding a word to the learner's own dictionary */
+.word-search-row { flex-wrap: nowrap; gap: 10px; align-items: stretch; }
+.word-search-row .search { flex: 1; min-width: 0; }
+.word-search-row .btn { flex: none; white-space: nowrap; }
+.word-search-row .btn svg, .add-from-answer svg, #add-word-confirm svg { width: 16px; height: 16px; }
+.add-word-ask { flex-wrap: nowrap; gap: 8px; }
+.add-word-ask .input { flex: 1; min-width: 0; }
+.word-preview { gap: 8px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel-2); }
+.word-preview p.labelled, .stack > p.labelled { margin: 0; }
+.add-from-answer { margin-top: 8px; }
+.word-card-add { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 3px 10px; border-radius: 12px; background: var(--gold); color: var(--panel); font-family: var(--f-ui); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+.word-card-add svg { width: 13px; height: 13px; }
+@media (max-width: 760px) {
+  .word-search-row .btn { padding-inline: 12px; }
 }

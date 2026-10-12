@@ -1,6 +1,6 @@
 // Small shared pieces: icons, mosaic progress, case chips, dialogs, toast.
 import { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useState } from "preact/hooks";
 import { Case, CASE_NAMES } from "../latin/types";
 import { roman } from "../latin/text";
 import { useScreen } from "./screen";
@@ -77,7 +77,8 @@ export function CaseChip({ c, label }: { c: Case | "verb"; label?: string }) {
 /** A dialog. `screen` names it for Ask Claude (default: the label), which also reads its text. */
 export function Modal({ onClose, children, label, wide, className = "", screen }: { onClose: () => void; children: ComponentChildren; label: string; wide?: boolean; className?: string; screen?: string }) {
   useScreen("dialog", screen ?? label);
-  useEffect(() => {
+  // registered before the dialog is painted, so an Escape pressed at once still closes it
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

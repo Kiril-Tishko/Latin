@@ -7,22 +7,26 @@
 import { Fragment } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { ENGRAVINGS } from "../../content/engravings";
+import { ROMAN_EMOJI } from "../../content/roman-emoji";
+import { emojiCodes, onlyEmoji, showEmoji } from "../../chat/emoji";
 import { GROUP, PEOPLE } from "../../content/people";
 import { PORTRAIT_BY_ID } from "../../content/portraits";
 import { localTime, moodText, statusAt } from "../../chat/life";
-import { arrived, membersOf, Msg, Thread, unreadCount, Who, whoOf } from "../../chat/model";
+import { arrived, Check, CoachTurn, membersOf, Msg, Thread, unreadCount, Who, whoOf } from "../../chat/model";
 import { allowedWords, CHAT_WORD_LIST, headword } from "../../chat/words";
 import { Analysis, annotate } from "../../latin/analyze";
 import { plain, roman } from "../../latin/text";
 import { CASE_NAMES, Entry, PN, PN_NAMES } from "../../latin/types";
 import { Icon, Modal } from "../components";
 import { LatinText } from "../latin";
-import { Inline } from "../markup";
+import { Inline, Markup } from "../markup";
+import { fixRequest, GrammarCheck } from "../ask";
 import { go } from "../nav";
 import { useScreen } from "../screen";
 import {
   allThreads,
   answer,
+  askCoach,
   chatWords,
   check,
   composing,
@@ -43,6 +47,7 @@ import {
 import { derived, update, useProgress } from "../store";
 import { storage } from "../platform";
 import { WordModal } from "./words";
+import { knownWord, openAddWord } from "../addword";
 
 // ---------------------------------------------------------------- pieces
 
@@ -293,7 +298,7 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
                     ) : last ? (
                       <>
                         {(t.kind === "group" || last.from === "me") && <span>{nameOf(last.from)}: </span>}
-                        <span lang="la">{last.la}</span>
+                        <span lang="la">{showEmoji(last.la)}</span>
                       </>
                     ) : (
                       <span>{who ? `${who.job}, ${who.city}` : PEOPLE.map((x) => x.name).join(", ")}</span>
@@ -347,23 +352,28 @@ function Finding({ onStop }: { onStop: () => void }) {
 
 // ------------------------------------------------------------------ chat
 
-/** What a tapped word is: "librum — accusative singular of liber (book)". */
-function wordNote(a: Analysis, text: string): { text: string; entry?: Entry } {
+/** What a tapped word is: "librum — accusative singular of liber (book)"; a word not among the learner's words can be added. */
+function wordNote(a: Analysis, text: string): { text: string; entry?: Entry; add?: string } {
   const e = a.entry;
   const name = e.tags.includes("name");
-  const openable = !("chat" in e.source) && !name ? e : undefined;
+  const mine = !!knownWord(headword(e));
+  if (!mine && !name && !("chat" in e.source)) return { ...wordNoteText(a, text, e, name), add: headword(e) };
+  return { ...wordNoteText(a, text, e, name), entry: !("chat" in e.source) && !name ? e : undefined };
+}
+
+function wordNoteText(a: Analysis, text: string, e: Entry, name: boolean): { text: string } {
   if (e.kind === "noun" || e.kind === "adj") {
     const [c, n] = a.key.split(".");
     const caseName = c === "voc" ? "calling form" : `${CASE_NAMES[c as keyof typeof CASE_NAMES]} ${n === "pl" ? "plural" : "singular"}`;
-    return { text: `${text} — ${caseName} of ${headword(e)}${name ? " (a name)" : ` (${e.en})`}`, entry: openable };
+    return { text: `${text} — ${caseName} of ${headword(e)}${name ? " (a name)" : ` (${e.en})`}` };
   }
   if (e.kind === "verb") {
     const head = headword(e);
-    if (a.key === "inf") return { text: `${text} — infinitive of ${head} (to ${e.env.base})`, entry: openable };
+    if (a.key === "inf") return { text: `${text} — infinitive of ${head} (to ${e.env.base})` };
     const pn = a.key.split(".")[1] as PN;
-    return { text: `${text} — the "${PN_NAMES[pn] ?? pn}" form of ${head} (${e.env.base})`, entry: openable };
+    return { text: `${text} — the "${PN_NAMES[pn] ?? pn}" form of ${head} (${e.env.base})` };
   }
-  return { text: `${text} — ${name ? "a name" : e.en}`, entry: openable };
+  return { text: `${text} — ${name ? "a name" : e.en}` };
 }
 
 function ChatView({ id, now }: { id: string; now: number }) {
@@ -463,10 +473,10 @@ function ChatView({ id, now }: { id: string; now: number }) {
   /** The word card for a message, if one of its words was tapped. */
   const cardOf = (m: Msg) => {
     if (card?.msg !== m.id) return null;
-    const tok = annotate(m.la, lex).filter((x) => x.isWord)[card.index];
+    const tok = annotate(showEmoji(m.la), lex).filter((x) => x.isWord)[card.index];
     const a = tok?.analysis ?? tok?.readings?.[0];
     if (!tok) return null;
-    return a ? wordNote(a, tok.text) : { text: `${tok.text} — a word you have not learned yet` };
+    return a ? wordNote(a, tok.text) : { text: `${tok.text} — a word you have not learned yet`, add: tok.text };
   };
 
   let lastDay = "";
@@ -567,12 +577,12 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     ) : (
                       <span class="bubble-face" />
                     ))}
-                  <div class={`bubble${mine ? " mine" : ""}${firstOfRun ? " tail" : ""}${current === m.id ? " hit" : hits.includes(m.id) ? " found" : ""}`} onClick={(e) => onBubble(m, e as unknown as MouseEvent)}>
+                  <div class={`bubble${mine ? " mine" : ""}${firstOfRun ? " tail" : ""}${onlyEmoji(m.la) ? " emoji-only" : ""}${current === m.id ? " hit" : hits.includes(m.id) ? " found" : ""}`} onClick={(e) => onBubble(m, e as unknown as MouseEvent)}>
                     {group && sender && firstOfRun && <span class="bubble-name" lang="la">{sender.name}</span>}
                     <span class="bubble-text">
-                      <LatinText text={m.la} lex={lex} />
+                      <LatinText text={showEmoji(m.la)} lex={lex} />
                     </span>
-                    {(allEn || openEn.includes(m.id)) && m.en && <span class="bubble-en">{m.en}</span>}
+                    {(allEn || openEn.includes(m.id)) && m.en && <span class="bubble-en">{showEmoji(m.en)}</span>}
                     {m.newWords && (allEn || openEn.includes(m.id)) && <span class="bubble-en small">New to you: {m.newWords.join(", ")}</span>}
                     <span class="bubble-meta">
                       {clock(m.at)}
@@ -582,14 +592,20 @@ function ChatView({ id, now }: { id: string; now: number }) {
                 </div>
                 {note && (
                   <div class={`word-card-row${mine ? " mine" : ""}`}>
-                    <button class="word-card" onClick={() => note.entry && setWordOpen(note.entry)} disabled={!note.entry} aria-label={note.entry ? `${note.text}: open the word` : note.text}>
+                    <button
+                      class="word-card"
+                      onClick={() => (note.entry ? setWordOpen(note.entry) : note.add && openAddWord(note.add, "messenger"))}
+                      disabled={!note.entry && !note.add}
+                      aria-label={note.entry ? `${note.text}: open the word` : note.add ? `${note.text}: add it to my words` : note.text}
+                    >
                       <Icon.book />
                       <span class="word-card-text">{note.text}</span>
                       {note.entry && <span class="word-card-go"><Icon.chevron /></span>}
+                      {note.add && <span class="word-card-add"><Icon.plus /> Add</span>}
                     </button>
                   </div>
                 )}
-                {mine && (m.check || m.id === lastMine || openEn.includes(m.id)) && <Checked m={m} id={id} />}
+                {mine && !onlyEmoji(m.la) && (m.check || m.id === lastMine || openEn.includes(m.id)) && <Checked m={m} id={id} />}
               </Fragment>
             );
           })}
@@ -645,7 +661,7 @@ function Intro({ who }: { who: Who }) {
 function Checked({ m, id }: { m: Msg; id: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  if (m.check) return <CheckNote c={m.check} />;
+  if (m.check) return <CheckNote c={m.check} onAsk={() => askAbout(id, m.la, m.check!)} />;
   return (
     <div class="check-row">
       {err && <span class="small bad">{err} </span>}
@@ -666,19 +682,158 @@ function Checked({ m, id }: { m: Msg; id: string }) {
   );
 }
 
-function CheckNote({ c, onUse }: { c: NonNullable<Msg["check"]>; onUse?: (s: string) => void }) {
+function CheckNote({ c, onUse, onAsk }: { c: Check; onUse?: (s: string) => void; onAsk?: () => void }) {
   const lex = chatWords().lex;
   return (
     <div class={`check-note ${c.verdict}`} role="note">
       <span class="check-verdict">{c.verdict === "good" ? "✓ Good Latin" : c.verdict === "almost" ? "Almost" : "Not quite"}</span>
       {c.better && (
         <span class="check-better">
-          <LatinText text={c.better} lex={lex} />
-          {onUse && <button class="linkish small" onClick={() => onUse(c.better!)}>Use this</button>}
+          <LatinText text={showEmoji(c.better)} lex={lex} />
+          {onUse && <button class="linkish small" onClick={() => onUse(showEmoji(c.better!))}>Use this</button>}
         </span>
       )}
-      {c.note && <span class="check-text small"><Inline text={c.note} /></span>}
+      {c.note && <span class="check-text small"><Inline text={showEmoji(c.note)} /></span>}
+      {onAsk && <button class="linkish small check-ask" onClick={onAsk}>Ask the coach about it</button>}
     </div>
+  );
+}
+
+// ------------------------------------------------------------ the coach
+
+// The coach's window above the message box: checks of the learner's Latin and
+// questions about them, kept per chat (also over a reload) until it is closed.
+const COACH_KEY = (id: string) => `tabula-latina-coach-${id}`;
+const coachTurns = new Map<string, CoachTurn[]>();
+const coachListeners = new Set<() => void>();
+
+function coachOf(id: string): CoachTurn[] {
+  if (!coachTurns.has(id)) {
+    let turns: unknown = [];
+    try {
+      turns = JSON.parse(storage.get(COACH_KEY(id)) ?? "[]");
+    } catch {
+      /* nothing kept */
+    }
+    coachTurns.set(id, Array.isArray(turns) ? (turns as CoachTurn[]) : []);
+  }
+  return coachTurns.get(id)!;
+}
+
+function setCoach(id: string, turns: CoachTurn[]) {
+  const kept = turns.slice(-30);
+  coachTurns.set(id, kept);
+  if (kept.length) storage.set(COACH_KEY(id), JSON.stringify(kept));
+  else storage.remove(COACH_KEY(id));
+  coachListeners.forEach((l) => l());
+}
+
+function useCoach(id: string): CoachTurn[] {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const l = () => tick((x) => x + 1);
+    coachListeners.add(l);
+    return () => void coachListeners.delete(l);
+  }, []);
+  return coachOf(id);
+}
+
+/** Opens the coach's window on a check (one shown under a sent message), ready for a question. */
+function askAbout(id: string, draft: string, res: Check) {
+  const turns = coachOf(id);
+  const last = turns.at(-1);
+  if (!(last?.kind === "check" && last.draft === draft)) setCoach(id, [...turns, { kind: "check", draft, res, at: Date.now() }]);
+  requestAnimationFrame(() => document.getElementById("coach-ask")?.focus());
+}
+
+/** The coach's window: the checks and the questions so far, and a box to ask the next one. */
+function CoachPanel({ id, draft, checking, onUse }: { id: string; draft: string; checking: boolean; onUse: (s: string) => void }) {
+  const turns = useCoach(id);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ q: string; error: string } | null>(null);
+  const ctl = useRef<AbortController | null>(null);
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => () => ctl.current?.abort(), []);
+  // the newest entry in view (the window is small)
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [turns.length, busy !== null, checking, failed]);
+  if (!turns.length && !checking) return null;
+
+  const ask = async (question: string, shown = question) => {
+    const text = question.trim();
+    if (!text || busy !== null) return;
+    setFailed(null);
+    const before = coachOf(id);
+    const asked: CoachTurn = { kind: "q", text: shown.trim(), at: Date.now() };
+    setCoach(id, [...before, asked]);
+    setQ("");
+    setBusy("");
+    ctl.current = new AbortController();
+    const res = await askCoach(id, emojiCodes(text), before, emojiCodes(draft), (t) => setBusy(t), ctl.current.signal);
+    ctl.current = null;
+    setBusy(null);
+    if ("error" in res) {
+      if (res.error === "Stopped.") return;
+      // the question goes back into the box; Try again asks it once more
+      setFailed({ q: text, error: res.error });
+      setCoach(id, coachOf(id).filter((t) => t !== asked));
+      setQ(shown);
+      return;
+    }
+    setCoach(id, [...coachOf(id), { kind: "a", text: res.text, at: Date.now() }]);
+  };
+
+  return (
+    <section class="coach-panel" aria-label="The coach">
+      <header class="coach-head">
+        <span class="coach-title"><Icon.check /> Coach</span>
+        <span class="small muted coach-hint">Your Latin checked; ask anything about it</span>
+        <button class="btn ghost small coach-close" aria-label="Close the coach" onClick={() => { ctl.current?.abort(); setCoach(id, []); setFailed(null); }}>
+          <Icon.close />
+        </button>
+      </header>
+      <div class="coach-body" ref={body}>
+        {turns.map((t, i) =>
+          t.kind === "check" ? (
+            <div key={i} class="coach-check">
+              <span class="coach-draft small muted">You wrote <LatinText text={showEmoji(t.draft)} lex={chatWords().lex} /></span>
+              <CheckNote c={t.res} onUse={onUse} />
+            </div>
+          ) : t.kind === "q" ? (
+            <p key={i} class="coach-q">{t.text}</p>
+          ) : (
+            <div key={i} class="coach-a">
+              <Markup text={showEmoji(t.text)} />
+              <GrammarCheck text={t.text} canFix={i === turns.length - 1 && busy === null} onFix={(found) => void ask(fixRequest(found), "Please correct that.")} />
+            </div>
+          ),
+        )}
+        {checking && <p class="coach-a muted small">Checking…</p>}
+        {busy !== null && <div class="coach-a">{busy ? <Markup text={showEmoji(busy)} /> : <span class="muted small">Thinking…</span>}</div>}
+        {failed && (
+          <p class="small bad">
+            {failed.error} <button class="linkish" onClick={() => void ask(failed.q)}>Try again</button>
+          </p>
+        )}
+      </div>
+      <form
+        class="coach-ask-row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void ask(q);
+        }}
+      >
+        <input id="coach-ask" class="coach-ask" value={q} placeholder="Ask the coach… (why -m? what does it mean?)" autocomplete="off" onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
+        {busy !== null ? (
+          <button type="button" class="btn ghost small" onClick={() => ctl.current?.abort()}>Stop</button>
+        ) : (
+          <button type="submit" class="btn small" disabled={!q.trim()}>Ask</button>
+        )}
+      </form>
+    </section>
   );
 }
 
@@ -690,23 +845,63 @@ const DRAFT_KEY = (id: string) => `tabula-latina-draft-${id}`;
 const inserts = new Map<string, (s: string) => void>();
 const insertIntoComposer = (id: string, s: string) => inserts.get(id)?.(s);
 
-const EMOJI = [
-  "😊", "😂", "🙂", "😉", "😍", "🥰", "😘", "😎", "🤔", "😴", "😩", "😢", "😭", "😡", "😱", "🤗",
-  "👍", "👋", "🙏", "💪", "❤️", "💔", "🔥", "✨", "⭐", "🌙", "☀️", "🌧️", "🍷", "🍇", "🍞", "🧀",
-  "🐐", "🐂", "🐈", "🦉", "🏛️", "📜", "✍️", "📚", "⚔️", "🛡️", "🏺", "🌿", "🌹", "🎶", "🎭", "🏇",
+/** Real emoji with a Roman feel, after the hand-drawn ones. */
+const ROMAN_REAL = [
+  "🏛️", "🏟️", "⚔️", "🗡️", "🛡️", "🪖", "🏹", "🦅", "🐺", "🐎", "🐘", "🦁", "🌋", "🔱", "⚡", "🦉",
+  "🕊️", "🦚", "🪔", "🏺", "⚱️", "🪙", "⚖️", "👑", "📜", "🪶", "🎭", "♨️", "⛲", "🛣️", "🌉", "⛵",
+  "🫒", "🍇", "🍷", "🍯", "🦪", "🫓", "🌾", "🌿", "🐓", "🐍", "🌕", "☀️",
 ];
+const EVERYDAY = [
+  "😊", "😂", "🙂", "😉", "😍", "🥰", "😘", "😎", "🤔", "😴", "😩", "😢", "😭", "😡", "😱", "🤗",
+  "👍", "👋", "🙏", "💪", "❤️", "💔", "🔥", "✨", "⭐", "🌙", "🌧️", "🍞", "🧀", "🐐", "🐂", "🐈",
+  "✍️", "📚", "🌹", "🎶", "🏇", "🙈", "🥲", "😅", "🤨", "😤", "🥳", "💤", "🎉", "👀", "💯", "🤝",
+];
+
+/** The ＋'s emoji: the Roman ones (drawn for this site, then real ones) and everyday faces and things. */
+function EmojiPicker({ onPick, onClose }: { onPick: (s: string) => void; onClose: () => void }) {
+  const [tab, setTab] = useState<"roman" | "everyday">(() => (storage.get("tabula-latina-emoji-tab") === "everyday" ? "everyday" : "roman"));
+  // a tap anywhere else closes it (the ＋ itself toggles it)
+  useEffect(() => {
+    const away = (e: PointerEvent) => !(e.target as HTMLElement).closest?.(".emoji-pop, .plus-btn") && onClose();
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, []);
+  const choose = (t: "roman" | "everyday") => {
+    setTab(t);
+    storage.set("tabula-latina-emoji-tab", t);
+  };
+  return (
+    <div class="emoji-pop" role="dialog" aria-label="Emoji">
+      <div class="emoji-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === "roman"} onClick={() => choose("roman")}>
+          <span class="emoji-tab-icon">{ROMAN_EMOJI[0].char}</span> Roman
+        </button>
+        <button role="tab" aria-selected={tab === "everyday"} onClick={() => choose("everyday")}>
+          <span class="emoji-tab-icon">😊</span> Everyday
+        </button>
+      </div>
+      <div class="emoji-grid">
+        {tab === "roman" && ROMAN_EMOJI.map((e) => (
+          <button key={e.code} class="emoji-btn roman" onClick={() => onPick(e.char)} aria-label={`Add ${e.en}`} title={e.en}>{e.char}</button>
+        ))}
+        {(tab === "roman" ? ROMAN_REAL : EVERYDAY).map((e) => (
+          <button key={e} class="emoji-btn" onClick={() => onPick(e)} aria-label={`Add ${e}`}>{e}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function Composer({ id }: { id: string }) {
   const [text, setText] = useState(() => storage.get(DRAFT_KEY(id)) ?? "");
-  const [result, setResult] = useState<NonNullable<Msg["check"]> | null>(null);
   const [checking, setChecking] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [emoji, setEmoji] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
+  // typing never closes the coach's window: the learner fixes the message with the correction in view
   const change = (v: string) => {
     setText(v);
     storage.set(DRAFT_KEY(id), v);
-    setResult(null);
   };
   /** Puts something in at the cursor (an emoji), or after what is written (a word). */
   const put = (s: string, atCursor: boolean) => {
@@ -728,32 +923,27 @@ function Composer({ id }: { id: string }) {
   });
   const doSend = () => {
     if (!text.trim()) return;
-    send(id, text);
+    send(id, emojiCodes(text));
     change("");
     setEmoji(false);
     box.current?.focus();
   };
   const doCheck = async () => {
-    if (!text.trim()) return;
+    const draft = emojiCodes(text.trim());
+    if (!draft) return;
     setChecking(true);
     setErr(null);
-    const res = await check(id, text.trim());
+    const res = await check(id, draft);
     setChecking(false);
     if (res && "error" in res) setErr(res.error);
-    else if (res) setResult(res);
+    else if (res) setCoach(id, [...coachOf(id), { kind: "check", draft, res, at: Date.now() }]);
   };
   return (
     <div class="composer">
-      {result && <CheckNote c={result} onUse={(s) => change(s)} />}
+      <CoachPanel id={id} draft={text} checking={checking} onUse={(s) => change(s)} />
       {err && <p class="small bad">{err}</p>}
-      {emoji && (
-        <div class="emoji-pop" role="dialog" aria-label="Emoji">
-          {EMOJI.map((e) => (
-            <button key={e} class="emoji-btn" onClick={() => put(e, true)} aria-label={`Add ${e}`}>{e}</button>
-          ))}
-        </div>
-      )}
       <div class="composer-row">
+        {emoji && <EmojiPicker onPick={(e) => put(e, true)} onClose={() => setEmoji(false)} />}
         <button class="plus-btn" aria-label="Emoji" aria-expanded={emoji} onClick={() => setEmoji(!emoji)}>
           <Icon.plus />
         </button>
@@ -931,7 +1121,7 @@ export function ArrivalNotice({ current }: { current: string | null }) {
       {who && <Avatar who={who} size={34} />}
       <span class="stack" style={{ gap: 0, minWidth: 0 }}>
         <b class="ui small" lang="la">{who?.name ?? nameOf(shown.m.from)}{shown.t.kind === "group" ? ` · ${GROUP.name}` : ""}</b>
-        <span class="arrival-text" lang="la">{shown.m.la}</span>
+        <span class="arrival-text" lang="la">{showEmoji(shown.m.la)}</span>
       </span>
     </button>
   );

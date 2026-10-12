@@ -22,6 +22,10 @@ published as a private claude.ai artifact.
   Latin Lessons" playlist (PLjqqMkeHFt1FjCaUrdcdMxF15sKUk9rHs) where they differ.
 - Wants to be asked questions before something big is built (AskUserQuestion),
   then left to build.
+- Loves etymology and related words: every answer about a word tells where it
+  comes from and one interesting bit of history; a word sent alone gets a word
+  card (they chose the card over a little story). Adds words of their own to
+  the dictionary (from the Words page, Ask Claude and the messenger).
 - Committed to the messenger (Nūntiī) as a main feature: people who feel real
   and natural, text on their own at their own hours, a group chat, someone
   random at the press of a button, portraits, the best model, phone
@@ -38,7 +42,7 @@ npm test            # engine, content and exercise self-tests (vitest)
 npm run typecheck
 npm run build       # -> dist/tabula-latina.html (the artifact page) and dist/preview.html
 npm run smoke       # clicks through the built page in Chromium, saves screenshots to dist/screens
-SMOKE_ONLY=messenger npm run smoke   # one part only (messenger, learn, stories, conversations, chatScroll, askClaude, audio, pages)
+SMOKE_ONLY=messenger npm run smoke   # one part only (messenger, ownWords, learn, stories, conversations, chatScroll, askClaude, audio, pages)
 node scripts/build.mjs --dev   # unminified build for debugging
 ```
 
@@ -71,8 +75,17 @@ Runtime capabilities used:
   where the word comes from, which words are related to it, a memory trick,
   and a comparison with Russian / Ukrainian. A question about origins or
   relatives carries the site's checked relatives of each word in its facts
-  (borrowed vs. same root vs. look-alike, from `wordInEnglish`), so Claude does
-  not invent etymologies. A failed answer shows plain advice, Try again,
+  (borrowed vs. same root vs. look-alike, from `wordInEnglish`; `relativesFact`
+  in src/content/english.ts), so Claude does not invent etymologies; any
+  question naming a word carries that word's relatives, as every word question
+  gets its origin and a bit of history (`INSTRUCTIONS`). A word sent alone
+  (`bareWord`: Latin, English, Russian or Ukrainian, or a dictionary line) is
+  read as Latin even when it is also English ("aqua"), carries the note
+  "[Just a word: answer with its word card.]", and the answer is a word card:
+  a bold headline, then **Origin:**, **History:**, **Family:**, **Use:** lines,
+  which `Markup` shows one per line with small gold labels (`p.labelled`). Under
+  such a card, a word the learner does not have yet gets "Add «gladius» to my
+  words" (`AddFromAnswer`, the headline's word: `cardWord`). A failed answer shows plain advice, Try again,
   and the error code under "Details" (ask the learner for it when debugging).
   Keep the sample function in state as `setSample(() => fn)`: Preact calls a
   function given to a state setter, which once broke every question.
@@ -268,6 +281,36 @@ seen come back as fresh exercises of the same kind on the same rules and words;
 a right answer marks one fixed (`Mistake.fixed`), a wrong one never duplicates
 it. Home and the practice chooser show how many wait.
 
+## Words the learner adds
+
+"+ Add a word" on the Words page (and the "Add" of a word card in Ask Claude or
+in the messenger) opens one window (src/ui/addword.tsx, `openAddWord`): the
+learner types a Latin word in any form, or an English, Russian or Ukrainian
+one. A word they have already (any form; lesson words, cards, chat words) is
+shown as it is; a Discover card not added yet is added as the card; anything
+else Claude fills in (`lookupPrompt` in src/trainer/own.ts, the coach's model:
+dictionary line with long marks, meaning, English verb forms, tags from
+`NOUN_TAGS`, for a verb the tags of nouns that make sense as its object,
+relatives borrowed / same root, origin, history, two examples). The grammar
+engine builds the word from the dictionary line (`fromClaude` → `ownEntry`:
+noun / verb / adj / adj3 / fixed) and refuses what it cannot read yet
+(deponent and irregular verbs). The learner sees the card (forms of the rules
+learned, a ? for the rest, origin, history, family, examples) before "Add to
+my words". A line typed by hand ("hasta, hastae, f. = spear", `fromLine`)
+needs no Claude but is for reading and reviews only (`practice: false`).
+
+Saved in `Progress.own` (`OwnWord`; ids kept apart from other words with
+`freeId`: līber next to liber is "liber-adj"); `derived()` builds them into
+`own`, `words` and the lexicon, and practice (`buildKnowledge`) uses those
+with `practice`. Made-up sentences stay sensible: an added noun goes by its
+tags, an added verb takes only objects of the tags Claude named and none when
+it named none (`objectsOf` in src/latin/generate.ts), and endings not learned
+keep a word out (a third-declension noun waits for its lesson). The Words page
+lists them under "Yours", their dialog shows the story (`OwnStory`) and
+"Remove from my words"; Ask Claude gets an added word's story as its facts
+(Claude's notes, marked as not checked by hand); the people in the messenger
+may use them. `tests/own.test.ts` covers all of this.
+
 ## Nūntiī: the messenger
 
 `#nuntii`, `#nuntii-<chat>` (src/ui/pages/messenger.tsx, state and sync in
@@ -293,11 +336,22 @@ menu), laurel day lines in Latin for today and yesterday (Hodiē, Heri), bubbles
 with tails and a face at the start of each run (a new run after someone else, a
 new day, the "New" line or ten minutes), a word tapped shows a card under its
 message ("librum — accusative singular of liber (book)", opening the word), and
-the composer's ＋ gives emoji only. Avatar sizes come from where they sit
+the composer's ＋ gives emoji only: a Roman tab (the hand-drawn Roman emoji,
+then real emoji with a Roman feel) and an Everyday tab. The hand-drawn ones
+(src/content/roman-emoji.ts, generated by scripts/content/roman_emoji.py: SPQR,
+a laurel wreath, the legion's eagle, the she-wolf with the twins, a gladius, a
+crested helmet, a scutum, the Colosseum, a column, an oil lamp, a wax tablet, a
+lyre, a gold coin, cave canem) are a small COLR color font ("Roman Emoji",
+first in every font stack, loaded in main.tsx) drawing characters U+E100…:
+they behave like real emoji in the message box. Messages keep them as codes
+(":lupa:", src/chat/emoji.ts: `showEmoji` to show, `emojiCodes` to keep and
+send); the people may use them (listed in the language block), vetting and
+`withMacrons` leave codes alone, made-up codes are dropped, and a phone
+notification shows a plain emoji instead. A message of emoji alone shows big. Avatar sizes come from where they sit
 (`--av`, smaller on a phone). The chat stays at its newest message while the
 learner is there, also when something below grows (fonts, a card, Check's note).
 
-- Words: the learner's own (lesson words and added cards, no story-only ones),
+- Words: the learner's own (lesson words, added cards and their own words, no story-only ones),
   in the forms of the rules seen (`formsFor`), plus the chat words (`CHAT_WORDS`:
   salvē, valē, ita, minimē, quid, quis, ubi, quō, cūr, hodiē, crās, quoque, male,
   optimē, grātiās, heu, euge, ecce, ō, hahae, agō for "quid agis?"; shown on the
@@ -321,14 +375,23 @@ learner is there, also when something below grows (fonts, a card, Check's note).
 - Claude is asked only on the learner's actions: Send (one answer per burst:
   2.5 s pause; answers still on their way are taken back and written again),
   opening the messenger (at most every 3 hours, `writeOwn`: what they write on
-  their own in the next three hours, each at its time), Someone new, and Check
-  (the coach: verdict, corrected Latin, a note). Prompts: src/chat/prompts.ts
+  their own in the next three hours, each at its time), Someone new, Check
+  (the coach: verdict, corrected Latin, a note), and a question to the coach.
+  The coach's window (`CoachPanel` above the message box) collects the checks
+  and the learner's questions about them (`askCoach`, `coachPrompt`: short,
+  «Latin», a word's origin and story when asked about a word); it stays open
+  while the learner types (they fix the message with the correction in view)
+  and over a reload (localStorage per chat) until closed; a check under a sent
+  message has "Ask the coach about it". The coach judges the Latin, never the
+  vocabulary: any word is welcome and never pointed out as new unless asked
+  (`ANY_WORD`; the engine's unknown-word note is no longer sent). Prompts: src/chat/prompts.ts
   (who they are, their day and mood now, the learner, the conversation, when the
   answer arrives, how to be real, and the strict language block).
 - Feels real: typing dots (from reading, while Claude writes, until each
   message), read ticks, "online" / "last seen", day separators, a "New" line,
   a notice for a message arriving elsewhere in the app, an unread count (Roman
-  numerals) on the tab. Tap a message for its English, a word for what it is.
+  numerals) on the tab. Tap a message for its English, a word for what it is
+  (a word not among the learner's words, or unknown, gets "+ Add").
 - Phone notifications: a Claude Code routine (trigger "Nūntiī: Roman friends
   write", trig_01QU7TocqJanmp7LVdamvvdJ, a fresh session per run, push
   notifications, CRON_TZ=Europe/Kyiv at 8:51, 11:51, 14:51, 17:51 and 20:51) follows scripts/messenger-routine.md (with

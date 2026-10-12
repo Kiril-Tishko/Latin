@@ -367,6 +367,17 @@ async function askClaude() {
   if (!(await lastAsked()).includes("The site's grammar engine found a mistake")) errors.push("ask: Fix this answer did not ask Claude to correct it");
   if (!(await p.locator(".msg-fix").count())) errors.push("ask: the fix request is not shown as a note");
   if ((await p.locator(".grammar-note").count()) !== 1) errors.push("ask: the corrected answer still gets a grammar note");
+  // just a word: Claude is asked for its word card (with the checked relatives), which shows as labelled lines
+  await p.evaluate(() => {
+    window.__reply = "**aqua, aquae (f) · water**\n**Origin:** an old Italic word.\n**History:** Rome had eleven aqueducts.\n**Family:** aquārius; English aquarium.\n**Use:** «Aquam bibō.» I drink water.";
+  });
+  await p.locator("#ask-input").fill("aqua");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(400);
+  const word = await lastAsked();
+  if (!word.includes("[Just a word: answer with its word card.]") || !word.includes("Relatives (checked)")) errors.push("ask: a word sent alone does not ask for its word card with its relatives");
+  if ((await p.locator(".msg.assistant").last().locator("p.labelled").count()) !== 4) errors.push("ask: the word card's lines are not shown one by one");
+  await p.screenshot({ path: `${out}/ask-word-card.png` });
   await p.evaluate(() => { window.__reply = null; });
   await p.keyboard.press("Escape");
   const askHere = async (q) => {
@@ -719,7 +730,12 @@ async function messenger() {
   const runtime = () => {
     const prompts = [];
     window.__prompts = prompts;
-    const sample = async () => ({ text: "", truncated: false });
+    const sample = async (prompt) => {
+      prompts.push(prompt);
+      await new Promise((r) => setTimeout(r, 300));
+      if (String(prompt).includes("small window beside a beginner's chat")) return { text: "**-um** marks the object: «librum».", truncated: false };
+      return { text: "", truncated: false };
+    };
     sample.json = async (prompt) => {
       prompts.push(prompt);
       await new Promise((r) => setTimeout(r, 300));
@@ -798,6 +814,17 @@ async function messenger() {
   await p.click("#composer-check");
   await p.waitForTimeout(900);
   if (!(await p.locator(".composer .check-note", { hasText: "Librum legō" }).count())) errors.push("messenger: Check shows no correction");
+  // the coach's window stays while the learner types, and answers a question asked in it
+  await p.fill("#composer", "Salve Iulia! Librum lego. Tu?");
+  if (!(await p.locator(".coach-panel .check-note").count())) errors.push("messenger: typing closed the coach's window");
+  await p.fill("#coach-ask", "Why -um?");
+  await p.press("#coach-ask", "Enter");
+  await p.waitForTimeout(700);
+  if (!(await p.locator(".coach-a", { hasText: "marks the object" }).count())) errors.push("messenger: the coach does not answer in its window");
+  const coachPrompts = await p.evaluate(() => window.__prompts.filter((x) => String(x).includes("kind Latin coach")).join("\n"));
+  if (/Not in the learner's words/.test(coachPrompts)) errors.push("messenger: the check still points out words the learner has not learned");
+  await p.screenshot({ path: `${out}/messenger-coach.png` });
+  await p.fill("#composer", "Salve Iulia! Librum lego.");
   await p.click("#composer-send");
   await p.waitForTimeout(3500);
   // she is free at 12:30: she reads it within minutes and answers
@@ -859,10 +886,92 @@ async function messenger() {
   await ctx.close();
 }
 
+// Own words: the Words page adds a word Claude fills in (shown before it is added, then under
+// "Yours", with its story and a way to remove it); a word card in Ask Claude offers to add its word.
+async function ownWords() {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await seed(ctx);
+  await ctx.addInitScript(() => {
+    window.__asked = [];
+    const card = (dict, en, kind, extra = {}) => ({
+      found: true, kind, dict, en, alt: [], tags: ["thing", "weapon", "long"],
+      origin: "Probably borrowed from the Celts.", history: "Legionaries carried it.",
+      from: { en: ["gladiator", "gladiolus"], ru: ["гладиатор"], uk: ["гладіатор"] }, kin: { en: [], ru: [], uk: [] },
+      examples: [{ la: "Gladium teneō.", en: "I hold a sword." }], ...extra,
+    });
+    const sample = (input, opts) => {
+      window.__asked.push(input);
+      const text = "**pīlum, pīlī (n) · javelin**\n**Origin:** perhaps from pīla.\n**History:** each legionary carried two.\n**Family:** English pile.\n**Use:** «Pīlum teneō.» I hold a javelin.";
+      opts?.onText?.({ text });
+      return Promise.resolve({ text, truncated: false });
+    };
+    sample.json = async (prompt) => {
+      window.__asked.push(prompt);
+      await new Promise((r) => setTimeout(r, 200));
+      if (prompt.includes('They typed: "lucerna"')) return card("lucerna, lucernae, f.", "lamp", "noun");
+      if (prompt.includes('They typed: "pīlum"')) return card("pīlum, pīlī, n.", "javelin", "noun");
+      return { found: false, why: "Not a word." };
+    };
+    window.claude = { use: async (name) => (name === "sample" ? sample : null) };
+  });
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => errors.push(`own words: ${e.message}`));
+  await p.goto(`file://${page}#words`);
+  await p.waitForTimeout(700);
+  await p.click("#add-word");
+  await p.fill("#add-word-input", "lucerna");
+  await p.press("#add-word-input", "Enter");
+  await p.waitForTimeout(600);
+  const preview = (await p.locator(".word-preview").textContent().catch(() => "")) ?? "";
+  if (!preview.includes("lucerna") || !preview.includes("Origin") || !preview.includes("gladiator")) errors.push(`own words: no card before adding (${preview.slice(0, 120)})`);
+  if (!(await p.locator(".word-preview .paradigm").count())) errors.push("own words: the card shows no forms");
+  await p.screenshot({ path: `${out}/own-word-card.png` });
+  await p.click("#add-word-confirm");
+  await p.waitForTimeout(300);
+  await p.locator(".seg button", { hasText: "Yours" }).click();
+  const tiles = await p.locator(".word-tile .head").allTextContents();
+  if (!tiles.includes("lucerna")) errors.push(`own words: the added word is not under Yours (${JSON.stringify(tiles)})`);
+  await p.locator(".word-tile", { hasText: "lucerna" }).click();
+  if (!(await p.locator(".modal", { hasText: "Origin" }).count()) || !(await p.locator(".modal button", { hasText: "Remove from my words" }).count())) errors.push("own words: the word dialog lacks its story or Remove");
+  await p.screenshot({ path: `${out}/own-word-dialog.png` });
+  await p.keyboard.press("Escape");
+  // a known word is not looked up again (any form; a lesson word too)
+  await p.click("#add-word");
+  await p.fill("#add-word-input", "lucernam");
+  await p.press("#add-word-input", "Enter");
+  await p.waitForTimeout(300);
+  if (!(await p.locator(".modal", { hasText: "is in your words already" }).count())) errors.push("own words: a word already added is not recognised in another form");
+  await p.keyboard.press("Escape");
+  await p.click("#add-word");
+  await p.fill("#add-word-input", "gladius");
+  await p.press("#add-word-input", "Enter");
+  await p.waitForTimeout(300);
+  if (!(await p.locator(".modal", { hasText: "is in your words already" }).count())) errors.push("own words: a lesson word is offered for adding");
+  await p.keyboard.press("Escape");
+  // Ask Claude: a word sent alone gets its card, and a button adds it
+  await p.locator(".ask-btn").click();
+  await p.locator("#ask-input").fill("pīlum");
+  await p.locator("#ask-input").press("Enter");
+  await p.waitForTimeout(400);
+  const addBtn = p.locator(".add-from-answer", { hasText: "pīlum" });
+  if (!(await addBtn.count())) errors.push("own words: the word card in Ask Claude offers no Add");
+  else {
+    await addBtn.click();
+    await p.waitForTimeout(600);
+    await p.click("#add-word-confirm");
+    await p.waitForTimeout(300);
+    if (await p.locator(".add-from-answer").count()) errors.push("own words: the Add button stays after the word was added");
+  }
+  const own = await p.evaluate(() => JSON.parse(localStorage.getItem("tabula-latina-progress-v1")).own.map((w) => w.dict));
+  if (own.join("|") !== "lucerna, lucernae, f.|pīlum, pīlī, n.") errors.push(`own words: saved ${JSON.stringify(own)}`);
+  await ctx.close();
+}
+
 // SMOKE_ONLY=messenger npm run smoke: just one part
 const only = process.env.SMOKE_ONLY;
 const parts = {
   messenger: () => messenger(),
+  ownWords: () => ownWords(),
   learn: async () => {
     await learnFlow("learn-desktop", { width: 1280, height: 900 }, true);
     await learnFlow("learn-phone", { width: 390, height: 844 }, false);

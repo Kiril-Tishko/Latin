@@ -153,4 +153,11 @@ export const storage = {
       /* storage blocked: the account copy still works */
     }
   },
+  remove(key: string) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* storage blocked */
+    }
+  },
 };

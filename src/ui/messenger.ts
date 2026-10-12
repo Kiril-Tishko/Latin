@@ -11,10 +11,13 @@ import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
 import { checkDraft, Deps, meetStranger, refreshLives, timingFor, writeOwn, writeReply } from "../chat/engine";
 import { deviceZone, hashRand } from "../chat/life";
-import { membersOf, Meta, Msg, msgId, newMeta, newThread, Thread, unreadCount } from "../chat/model";
-import { PromptCtx } from "../chat/prompts";
+import { CoachTurn, membersOf, Meta, Msg, msgId, newMeta, newThread, Thread, unreadCount } from "../chat/model";
+import { coachPrompt, PromptCtx } from "../chat/prompts";
 import { allowedWords, chatEntries, chatLexicon, nameEntry } from "../chat/words";
+import { relativesFact } from "../content/english";
+import { withoutEmoji } from "../chat/emoji";
 import { Lexicon } from "../latin/analyze";
+import { engineFacts } from "../latin/facts";
 import { Entry } from "../latin/types";
 import { chatOpts, coachOpts } from "./models";
 import { DocCollection, DocRef, DocSnap, LiveDoc, messengerStore, sampleErrorText, sampler, storage } from "./platform";
@@ -467,6 +470,36 @@ export async function check(id: string, draft: string, msg?: string): Promise<Ms
     }
     return res;
   } catch (e) {
+    return { error: errorText(e) };
+  }
+}
+
+/**
+ * A question to the coach in the window beside a chat, about the learner's
+ * messages or anything Latin. The answer comes as it is written (onText).
+ */
+export async function askCoach(id: string, question: string, turns: CoachTurn[], draft: string, onText?: (text: string) => void, signal?: AbortSignal): Promise<{ text: string } | { error: string }> {
+  const ctx = promptCtx();
+  if (!ctx) return { error: "Tell the people your name first." };
+  const sample = await sampler();
+  if (!sample) return { error: "Asking the coach works when this page is open on claude.ai." };
+  const t = getThread(id);
+  const lex = chatWords().lex;
+  const shown = t.messages.filter((m) => m.at <= Date.now()).slice(-4);
+  const facts = engineFacts(
+    // (the Roman emoji's codes are not words)
+    [question, draft, ...turns.slice(-4).map((x) => (x.kind === "check" ? x.draft : x.text)), ...shown.map((m) => m.la)].map((text) => ({ text: withoutEmoji(text), mixed: true })),
+    lex,
+    ctx.seen,
+    10,
+    relativesFact,
+  );
+  try {
+    const res = await sample(coachPrompt(question, turns, draft, t, meta, ctx, facts), { ...coachOpts(), cache: false, signal, onText: ({ text }: { text: string }) => onText?.(text) });
+    return { text: res.text.trim() };
+  } catch (e) {
+    const err = (e ?? {}) as { code?: string; text?: string };
+    if (err.text?.trim()) return { text: `${err.text.trim()}\n\n*(The answer was cut off.)*` };
     return { error: errorText(e) };
   }
 }

@@ -90,10 +90,23 @@ interface EntryBase {
   alt?: string[];
   /** Semantic tags: person, animal, place, thing, food, building, nature, abstract… */
   tags: string[];
-  /** Where the word came from: a lesson number, the Discover deck, or the messenger's chat words. */
-  source: { lesson: number } | { deck: true } | { chat: true };
+  /** Where the word came from: a lesson number, the Discover deck, the messenger's chat words, or the learner (added to their own dictionary). */
+  source: { lesson: number } | { deck: true } | { chat: true } | { own: true };
   /** Short note shown on the word card (e.g. "masculine, even though it ends in -a"). */
   note?: string;
+  /** A word the learner added: its story as Claude told it when it was added. */
+  story?: WordStory;
+}
+
+/** Where a word comes from and what it is related to, with examples (the learner's own words carry one). */
+export interface WordStory {
+  origin?: string;
+  history?: string;
+  /** Words borrowed from it, in English, Russian and Ukrainian. */
+  from?: { en?: string[]; ru?: string[]; uk?: string[] };
+  /** Words of the same ancient root, not borrowed. */
+  kin?: { en?: string[]; ru?: string[]; uk?: string[] };
+  examples?: { la: string; en: string }[];
 }
 
 export interface NounEntry extends EntryBase {
@@ -135,6 +148,8 @@ export interface VerbEntry extends EntryBase {
   altv?: EnVerb[];
   /** dūc, dīc, fac, fer: imperative singular without -e. */
   shortImp?: boolean;
+  /** A word the learner added: the tags of nouns that make sense as its object (none: it takes no object in made-up sentences). */
+  objects?: string[];
 }
 
 /** Words that never change: prepositions, conjunctions, adverbs, question words. */

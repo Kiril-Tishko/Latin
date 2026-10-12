@@ -104,11 +104,19 @@ def plain(w):
     return "".join(c for c in unicodedata.normalize("NFD", w) if unicodedata.category(c) != "Mn").lower()
 
 
+# the hand-drawn Roman emoji, written as codes (":lupa:"), and a plain emoji for each in a notification
+ROMAN_EMOJI = {"spqr": "🏛️", "laurus": "🌿", "aquila": "🦅", "lupa": "🐺", "gladius": "🗡️", "galea": "🪖", "scutum": "🛡️", "colosseum": "🏟️", "columna": "🏛️", "lucerna": "🪔", "tabula": "✍️", "lyra": "🎶", "aureus": "🪙", "canis": "🐕"}
+CODE = re.compile(r":([a-z]{3,12}):")
+
+
 def check(d, msgs):
     _, brief, _ = docs(d)
     forms = set(brief.get("forms", [])) if brief else set()
     for msg in msgs:
-        bad = [w for w in re.findall(r"[^\W\d_]+", msg) if plain(w) not in forms and not re.fullmatch(r"(ha)+e?", plain(w))]
+        unknown = [c for c in CODE.findall(msg) if c not in ROMAN_EMOJI]
+        words = CODE.sub(" ", msg)
+        bad = [w for w in re.findall(r"[^\W\d_]+", words) if plain(w) not in forms and not re.fullmatch(r"(ha)+e?", plain(w))]
+        bad += [f":{c}: (no such emoji)" for c in unknown]
         print(msg, "->", "OK" if not bad else "NOT ALLOWED: " + ", ".join(bad))
 
 
@@ -125,7 +133,8 @@ def notify(d, new_path=None):
         return
     n = names(brief)
     last = msgs[-1]
-    line = f"{n.get(last.get('from'), last.get('from'))}: {last.get('la')}" + (f" ({last['en']})" if last.get("en") else "")
+    shown = lambda t: CODE.sub(lambda m: ROMAN_EMOJI.get(m.group(1), m.group(0)), t or "")
+    line = f"{n.get(last.get('from'), last.get('from'))}: {shown(last.get('la'))}" + (f" ({shown(last['en'])})" if last.get("en") else "")
     others = [n.get(m.get("from"), m.get("from")) for m in msgs[:-1]]
     if others:
         who = ", ".join(dict.fromkeys(others))

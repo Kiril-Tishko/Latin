@@ -1,5 +1,6 @@
 // App state: the learner's progress (saved to the claude.ai account when
 // available, and to this browser), plus derived knowledge for the engine.
+import { OwnWord, ownEntry } from "../trainer/own";
 import { useEffect, useState } from "preact/hooks";
 import { CARD_BY_ID, DECK_CARDS } from "../content/deck";
 import { CHAT_WORDS, FIXED_NAMES } from "../chat/words";
@@ -129,9 +130,11 @@ interface Derived {
   /** Every word, but only the rules of the parts the learner has seen: what practice uses. */
   seenKnowledge: Knowledge;
   lexicon: Lexicon;
-  /** Words in the learner's dictionary: lesson words plus added cards. */
+  /** Words in the learner's dictionary: lesson words, added cards and their own words. */
   words: Entry[];
   added: Entry[];
+  /** The words the learner added themselves. */
+  own: Entry[];
 }
 
 let derivedCache: Derived | null = null;
@@ -140,13 +143,19 @@ export function derived(): Derived {
   if (derivedCache) return derivedCache;
   const p = progress;
   const added = p.added.map((id) => CARD_BY_ID.get(id)?.entry).filter(Boolean) as Entry[];
+  // the learner's own words (one the engine cannot read any more is left out, not lost)
+  const ownWords = p.own.map((w) => ({ w, e: ownEntry(w) })).filter((x): x is { w: OwnWord; e: Entry } => !("error" in x.e));
+  const own = ownWords.map((x) => x.e);
+  // made-up sentences use only the own words Claude said what they go with
+  const practised = [...added, ...ownWords.filter((x) => x.w.practice).map((x) => x.e)];
   derivedCache = {
-    knowledge: buildKnowledge(p.lessonsDone, added, p.settings.silly),
-    seenKnowledge: buildKnowledge(p.lessonsDone, added, p.settings.silly, seenSkills(p)),
+    knowledge: buildKnowledge(p.lessonsDone, practised, p.settings.silly),
+    seenKnowledge: buildKnowledge(p.lessonsDone, practised, p.settings.silly, seenSkills(p)),
     // the chat words and the messenger's names too, so they are read (and colored) everywhere
-    lexicon: fullLexicon([...DECK_CARDS.map((c) => c.entry), ...CHAT_WORDS, ...FIXED_NAMES]),
-    words: [...lessonWords(p.lessonsDone), ...added],
+    lexicon: fullLexicon([...DECK_CARDS.map((c) => c.entry), ...CHAT_WORDS, ...FIXED_NAMES, ...own]),
+    words: [...lessonWords(p.lessonsDone), ...added, ...own],
     added,
+    own,
   };
   return derivedCache;
 }

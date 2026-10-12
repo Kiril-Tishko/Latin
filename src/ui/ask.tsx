@@ -4,11 +4,11 @@
 // Conversations are saved (see chats.ts) and can be continued on any device;
 // what is typed in the box survives a reload.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
-import { wordInEnglish } from "../content/english";
+import { relativesFact } from "../content/english";
 import { LESSONS } from "../content/lessons";
 import { Part, PartQuestion, PARTS } from "../content/parts";
+import { annotate } from "../latin/analyze";
 import { checkAnswer, engineFacts, Finding } from "../latin/facts";
-import { Entry } from "../latin/types";
 import { dictionaryForm } from "../latin/morph";
 import { SKILL_BY_ID, SKILLS } from "../latin/skills";
 import { Exercise, Result } from "../trainer/exercises";
@@ -20,7 +20,8 @@ import { Inline, Markup } from "./markup";
 import { SampleFn, sampleErrorText, sampler, storage } from "./platform";
 import { currentScreen, Screen, sharedByDefault, useScreenLabel } from "./screen";
 import { coachOpts, tierName } from "./models";
-import { derived, getProgress } from "./store";
+import { derived, getProgress, useProgress } from "./store";
+import { knownWord, openAddWord } from "./addword";
 
 export interface AskContext {
   /** Short label shown in the drawer: "Exercise: Translate into Latin". */
@@ -120,11 +121,19 @@ How to answer:
 - Give a longer, more open answer only when the learner asks for one ("tell me more", "explain in detail", "tell me about…") or wants to chat generally (history, culture, how a word came into English). Keep even that in short paragraphs or bullets, under about 250 words.
 - Stay inside what the learner knows (lessons, words and skills below). If you must use a word or form they have not learned, mark it "(new)" and keep it to a minimum.
 - Write every Latin word, form or sentence inside «guillemets», for example «puellam». For a form that could be read two ways, add #case.number inside the guillemets: «puellae#gen.sg», «discipulī#nom.pl». The page colors the endings. Use «» for Latin only: quote English, Russian and Ukrainian words with "double quotes".
-- Use **bold** only for the key point. No tables and no headings.
+- Use **bold** only for the key point (and for the labels of a word card). No tables and no headings.
 - If the question is about a mistake, first name the wrong ending and the right one, then the rule that decides it.
 - Be exact. The rules under "Skills met" are this site's rules and they are correct: follow them. Check every Latin form before you write it. Never invent a grammar rule or pattern, and give only memory tricks that are true (an English relative, a real pattern). When there is no reliable way to tell (which infinitive a verb has, for example), say so plainly and suggest learning the pair («discō, discere»).
 - A question may end with [Facts from the site's grammar engine]: every Latin word in it, what each form can be, and its word's gender, group and forms. These facts are certain. Build your answer on them, never contradict them, and don't mention the note.
-- Where a word comes from and what it is related to: use the relatives in the facts, which are checked. Say which kind each is: borrowed (English, Russian or Ukrainian took it from Latin) or same ancient root (cousins from the common Indo-European ancestor, not borrowed). Never call a look-alike related, and never invent a relative; if the facts have none, say what you know and that it is less certain. Keep it short: the origin in one bold line, then the relatives as a short list.
+- Words and their stories: the learner loves etymology and history. Whenever a question is about a word (what it means, a form of it, how to use it), also say briefly where the word comes from and one interesting bit of history about it or about what it names: a sentence or two, after answering the question itself. Leave it out only for a quick question about an ending in an exercise.
+- A message that is just a word (Latin, English, Russian or Ukrainian, perhaps with a question mark) asks for its word card. Answer with exactly these lines, each on its own line, about 60-120 words in all:
+  **<the dictionary form, e.g. gladius, gladiī (m)> · <meaning>**
+  **Origin:** where the word comes from: its root, the language it was borrowed from, how its meaning grew.
+  **History:** one interesting historical fact about the word or about what it names.
+  **Family:** related words: Latin relatives first, then English, Russian and Ukrainian ones, saying which are borrowed and which are cousins of the same ancient root.
+  **Use:** two short example sentences in «», each with its English, with the learner's words and rules where possible.
+  For an English, Russian or Ukrainian word, the card is about the Latin word for it (name it in the first line); if the word itself comes from Latin, the Origin line tells how.
+- Where a word comes from and what it is related to: use the relatives in the facts, which are checked. Say which kind each is: borrowed (English, Russian or Ukrainian took it from Latin) or same ancient root (cousins from the common Indo-European ancestor, not borrowed). Never call a look-alike related. For words without checked relatives, use only what you know well and say "probably" where scholars are not sure. Never invent an etymology, a relative or a historical story; tell a legend as a legend.
 - Easy to get wrong: an adjective agrees with its noun in gender, case and number, not in the look of the ending. «agricola» and «poēta» are masculine, so «agricola timidus», «poēta pulcher», «agricolam timidum».
 - If the learner says they are just curious, or asks about something other than the exercise, answer that alone and do not lead back to the exercise.
 - If a short drill would help, end with one final line exactly like: PRACTICE: skill-id, skill-id (1-3 ids from the skill list below). Otherwise leave that line out.
@@ -291,37 +300,31 @@ function toMessages(chat: Chat): { role: "user" | "assistant"; content: string }
   // the grammar engine's facts about every Latin word in play: the question, the screen, the last answer
   const facts = factsFor(hist[latest], general ? null : chat.context, hist.slice(0, latest).reverse().find((t) => t.role === "assistant"));
   if (facts) msgs[latest] = { ...msgs[latest], content: `${msgs[latest].content}\n\n${facts}` };
+  if (bareWord(hist[latest].content)) msgs[latest] = { ...msgs[latest], content: `${msgs[latest].content}\n\n[Just a word: answer with its word card.]` };
   msgs[0] = { role: "user", content: [INSTRUCTIONS, profile(), general ? "" : openedFrom(chat.context, !!hist[0].screen), msgs[0].content].filter(Boolean).join("\n\n") };
   return msgs;
 }
 
+/** Just a word (or a dictionary entry such as "gladius, gladiī"), perhaps with a question mark: the learner wants its word card. */
+export const bareWord = (q: string) => {
+  const t = q.trim();
+  return t.length <= 48 && /^[\p{L}\p{M}'’-]+(?:\s*,\s*[\p{L}\p{M}'’.-]+){0,3}\s*[?!.]?$/u.test(t);
+};
+
 /** A question about where a word comes from or what it is related to. */
 const ORIGIN = /etymolog|\bcomes? from|origin|relat(ed|ive)|\broots?\b|cognate|borrow|deriv|english|russian|ukrainian|kin\b/i;
 
-/** The site's checked relatives of a word: borrowed ones, cousins of the same root, a look-alike to avoid. */
-function relatives(e: Entry): string | undefined {
-  const w = wordInEnglish(e.id);
-  if (!w) return undefined;
-  const list = (r?: { en?: string[]; ru?: string[]; uk?: string[] }) =>
-    r ? [r.en?.length ? `English ${r.en.join(", ")}` : "", r.ru?.length ? `Russian ${r.ru.join(", ")}` : "", r.uk?.length ? `Ukrainian ${r.uk.join(", ")}` : ""].filter(Boolean).join("; ") : "";
-  const from = list(w.from);
-  const kin = list(w.kin);
-  return [
-    "Relatives (checked):",
-    from ? `borrowed from Latin: ${from}.` : "",
-    kin ? `Same ancient root, not borrowed: ${kin}.` : "",
-    w.trap ? `Looks related but is not: ${w.trap}.` : "",
-    w.note ? `Note: ${w.note}` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
 
 function factsFor(question: ChatTurn, context: AskContext | null, lastAnswer?: ChatTurn): string {
   const d = derived();
+  // the words the question names get their checked relatives (every word question gets its story);
+  // a question about origins gets them for every word in play
+  const named = new Set(annotate(question.content, d.lexicon).flatMap((t) => t.readings?.map((r) => r.entry.id) ?? []));
+  const origins = ORIGIN.test(question.content);
   return engineFacts(
     [
-      { text: question.content, mixed: true },
+      // a word sent alone is the Latin word, even one that is also English ("aqua")
+      { text: question.content, mixed: !bareWord(question.content) },
       ...(lastAnswer ? [{ text: lastAnswer.content, quoted: true }] : []),
       ...(question.screen?.detail ? [{ text: question.screen.detail, mixed: true }] : []),
       ...(context?.detail ? [{ text: context.detail, mixed: true }] : []),
@@ -329,12 +332,12 @@ function factsFor(question: ChatTurn, context: AskContext | null, lastAnswer?: C
     d.lexicon,
     d.seenKnowledge.skills,
     10,
-    ORIGIN.test(question.content) ? relatives : undefined,
+    (e) => (origins || named.has(e.id) ? relativesFact(e) : undefined),
   );
 }
 
 /** A request to put right what the grammar check found in the last answer. */
-function fixRequest(found: Finding[]): string {
+export function fixRequest(found: Finding[]): string {
   return `The site's grammar engine found a mistake in your last answer:\n${found.map((f) => `- ${f.message}`).join("\n")}\nPlease give the corrected answer, short, without apologising at length.`;
 }
 
@@ -714,6 +717,7 @@ export function AskDrawer() {
                 {t.role === "assistant" && (
                   <GrammarCheck text={t.content} canFix={i === turns.length - 1 && !busy} onFix={(found) => void fix(found)} />
                 )}
+                {t.role === "assistant" && <AddFromAnswer question={turns[i - 1]?.role === "user" ? turns[i - 1].content : ""} answer={t.content} />}
                 {t.role === "assistant" && t.tier && <div class="msg-meta">{tierName(t.tier)}</div>}
                 {t.role === "user" && t.screen && <div class="msg-meta" title="What was on your screen when you asked">on {t.screen.label}</div>}
                 {t.role === "user" && t.noScreen && <div class="msg-meta" title="Asked with screen sharing switched off">screen not shared</div>}
@@ -828,7 +832,7 @@ export function AskDrawer() {
  * that does not match its noun, a verb that does not match its subject…), with
  * the right forms, and a button that asks Claude to correct the answer.
  */
-function GrammarCheck({ text, canFix, onFix }: { text: string; canFix: boolean; onFix: (found: Finding[]) => void }) {
+export function GrammarCheck({ text, canFix, onFix }: { text: string; canFix: boolean; onFix: (found: Finding[]) => void }) {
   const found = useMemo(() => checkAnswer(text, derived().lexicon), [text]);
   if (!found.length) return null;
   // a long mark alone is worth a note, not a new answer
@@ -847,6 +851,27 @@ function GrammarCheck({ text, canFix, onFix }: { text: string; canFix: boolean; 
         </button>
       )}
     </div>
+  );
+}
+
+/** The Latin word a word card is about: the first word of its bold headline ("gladius" from "**gladius, gladiī (m) · sword**"). */
+export function cardWord(answer: string): string | null {
+  const m = answer.match(/^\s*\*\*([^*]+)\*\*/);
+  if (!m) return null;
+  const w = m[1].split(/[·—(]/)[0].split(/[,\s]+/).find(Boolean)?.replace(/[«»]/g, "");
+  return w && /^[\p{L}\p{M}]+$/u.test(w) ? w : null;
+}
+
+/** Under the word card of a word the learner does not have yet: add it to their words. */
+function AddFromAnswer({ question, answer }: { question: string; answer: string }) {
+  useProgress();
+  if (!bareWord(question)) return null;
+  const word = cardWord(answer) ?? question.trim().replace(/[?!.]$/, "").split(/\s*,/)[0];
+  if (!word || knownWord(word)) return null;
+  return (
+    <button class="btn small add-from-answer" onClick={() => openAddWord(word, "ask")}>
+      <Icon.plus /> Add «{word}» to my words
+    </button>
   );
 }
 

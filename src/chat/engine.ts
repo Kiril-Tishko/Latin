@@ -4,6 +4,7 @@
 // rules (one rewrite is asked for when something slips), long marks are put
 // back, and each message gets the moment it arrives (reading, typing, pauses,
 // sleep). The sampler is passed in, so tests can play Claude.
+import { knownEmojiOnly, withoutEmoji } from "./emoji";
 import { GROUP, PERSON_BY_ID } from "../content/people";
 import { Lexicon } from "../latin/analyze";
 import { checkAnswer } from "../latin/facts";
@@ -58,7 +59,8 @@ interface Draft {
   en: string;
 }
 
-const clean = (s: unknown) => String(s ?? "").replace(/\s+/g, " ").trim();
+// (a Roman emoji code Claude made up is dropped)
+const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+/g, " ").trim());
 
 /**
  * Vets drafts; asks once for the ones that slipped to be written again; what
@@ -205,15 +207,15 @@ export async function meetStranger(meta: Meta, ctx: PromptCtx, deps: Deps): Prom
 // ---------------------------------------------------------------- checks
 
 /** What the engine itself sees in the learner's message: unknown words and grammar slips. */
-export function engineNotes(draft: string, lex: Lexicon, seen: Set<string>): string[] {
-  const v = vetMessage(draft, lex, seen);
-  const notes = v.unknown.length ? [`Not in the learner's words: ${v.unknown.join(", ")}.`] : [];
-  for (const f of checkAnswer(`«${draft}»`, lex)) if (f.kind !== "spelling") notes.push(f.message.replace(/«|»/g, ""));
-  return notes;
+/** What the grammar engine finds wrong in a draft (words the learner has not learned are fine: the coach judges Latin, not vocabulary). */
+export function engineNotes(draft: string, lex: Lexicon): string[] {
+  return checkAnswer(`«${withoutEmoji(draft)}»`, lex)
+    .filter((f) => f.kind !== "spelling")
+    .map((f) => f.message.replace(/«|»/g, ""));
 }
 
 export async function checkDraft(draft: string, thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps): Promise<NonNullable<Msg["check"]>> {
-  const out = await deps.ask<{ verdict?: string; better?: string; note?: string }>(checkPrompt(draft, thread, meta, ctx, engineNotes(draft, deps.lex, ctx.seen)), { ...(deps.coach ?? deps.opts), cache: false });
+  const out = await deps.ask<{ verdict?: string; better?: string; note?: string }>(checkPrompt(draft, thread, meta, ctx, engineNotes(draft, deps.lex)), { ...(deps.coach ?? deps.opts), cache: false });
   const verdict = out?.verdict === "good" || out?.verdict === "almost" || out?.verdict === "wrong" ? out.verdict : "almost";
   const better = clean(out?.better);
   return { verdict, ...(better && verdict !== "good" ? { better: withMacrons(better, deps.lex) } : {}), note: clean(out?.note) };

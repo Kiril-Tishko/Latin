@@ -4,6 +4,7 @@
 // Relatives follow the deck's rule (see deck.ts): from = borrowed from the
 // Latin word (directly or through French, Italian…), kin = the same ancient
 // root, never borrowed; a trap is a look-alike that is not related.
+import type { WordStory } from "../latin/types";
 import { CARD_BY_ID, Relatives } from "./deck";
 
 export interface WordInEnglish {
@@ -716,4 +717,36 @@ export function wordInEnglish(id: string): WordInEnglish | undefined {
 /** English words that come from a word, plain enough to quiz ("dormitory" → dormiō). */
 export function quizWords(id: string): string[] {
   return (wordInEnglish(id)?.from.en ?? []).filter((w) => /^[a-z]{4,}$/.test(w));
+}
+
+/** The site's checked relatives of a word, as a line of facts for Claude: borrowed ones, cousins of the same root, a look-alike to avoid. */
+export function relativesFact(e: { id: string; story?: WordStory }): string | undefined {
+  const list = (r?: { en?: string[]; ru?: string[]; uk?: string[] }) =>
+    r ? [r.en?.length ? `English ${r.en.join(", ")}` : "", r.ru?.length ? `Russian ${r.ru.join(", ")}` : "", r.uk?.length ? `Ukrainian ${r.uk.join(", ")}` : ""].filter(Boolean).join("; ") : "";
+  // a word the learner added: what Claude said when it was added (not checked by hand)
+  if (e.story) {
+    const st = e.story;
+    return [
+      "The learner added this word themselves; from its card (Claude's notes, not checked by hand):",
+      st.origin ? `origin: ${st.origin}` : "",
+      st.history ? `history: ${st.history}` : "",
+      list(st.from) ? `borrowed from Latin: ${list(st.from)}.` : "",
+      list(st.kin) ? `same ancient root, not borrowed: ${list(st.kin)}.` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  const w = wordInEnglish(e.id);
+  if (!w) return undefined;
+  const from = list(w.from);
+  const kin = list(w.kin);
+  return [
+    "Relatives (checked):",
+    from ? `borrowed from Latin: ${from}.` : "",
+    kin ? `Same ancient root, not borrowed: ${kin}.` : "",
+    w.trap ? `Looks related but is not: ${w.trap}.` : "",
+    w.note ? `Note: ${w.note}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }

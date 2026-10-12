@@ -2,11 +2,12 @@
 // their day and mood right now, the learner, the conversation, and the strict
 // limits of the learner's Latin. Plain functions of plain data, so the same
 // text serves the page and the brief the phone routine reads.
+import { emojiList } from "./emoji";
 import { GROUP, PEOPLE } from "../content/people";
 import { SKILLS } from "../latin/skills";
 import type { Me } from "../trainer/progress";
 import { Life, localTime, moodText, partOfDay, statusAt } from "./life";
-import { Meta, Msg, Thread, Who, membersOf, whoOf } from "./model";
+import { CoachTurn, Meta, Msg, Thread, Who, membersOf, whoOf } from "./model";
 import type { Stranger } from "./strangers";
 import type { AllowedWord } from "./words";
 
@@ -53,6 +54,7 @@ export function languageBlock(ctx: PromptCtx): string {
 - Write in Latin with long marks (ā ē ī ō ū) exactly as in the lists.
 - Use ONLY the words and forms listed here. Nothing else, not even small common words (est, sunt, cum, mihi, tibi, hic, iam, sī, ut, valdē…) unless they are listed. Names from the list are fine; other names only if a person's own.
 - If you cannot say something with these words, say something simpler, leave it out, or let an emoji say it. Emoji are welcome and carry feelings the words cannot.
+- Roman emoji drawn for this tabula, written as codes exactly like this, never inside a word: ${emojiList()}. Use them now and then, when they fit, like any emoji.
 - Real texting: short messages, usually 1-8 words; sometimes one word, an interjection or only an emoji.
 
 ${vocabularyBlock(ctx.words)}
@@ -237,6 +239,16 @@ export function repairPrompt(bad: { la: string; en: string; issues: string[] }[]
   ].join("\n\n");
 }
 
+/** The rules the learner has met, for the coach to explain with. */
+function knownRules(seen: Set<string>): string {
+  const met = SKILLS.filter((s) => seen.has(s.id)).map((s) => `- ${s.title}: ${s.hint}`);
+  return `The rules the learner has met (explain with these; name a later rule plainly when it is needed):\n${met.join("\n") || "- almost nothing yet"}`;
+}
+
+/** The coach judges Latin, not vocabulary: any word is welcome. */
+const ANY_WORD =
+  "The learner may use any Latin word, also words they have not learned yet: that is fine and never a mistake. Judge only whether the Latin is correct and says what they mean. Never point out that a word is new, unknown or not in their words, unless they ask about it.";
+
 /** The coach's check of a message the learner is about to send (or sent). */
 export function checkPrompt(draft: string, thread: Thread, meta: Meta, ctx: PromptCtx, engine: string[]): string {
   const members = membersOf(thread.id, meta);
@@ -246,9 +258,47 @@ export function checkPrompt(draft: string, thread: Thread, meta: Meta, ctx: Prom
     `«${draft}»`,
     `The chat so far (last messages):\n${conversationBlock(thread, meta, ctx, tz, 6)}`,
     engine.length ? `The site's grammar engine found: ${engine.join(" ")}` : "The site's grammar engine found nothing wrong.",
-    `The learner (${ctx.me.name}, a ${gender(ctx.me.g)}) knows only these words and rules. A correction should use them; if the learner needs a word they do not know, keep theirs and say so.`,
-    languageBlock(ctx),
-    `Decide: "good" (correct Latin that says what they mean; missing long marks are fine), "almost" (one small slip), or "wrong". If they wrote English or a mix, give the Latin they could send.
-Reply with only JSON: {"verdict": "good" | "almost" | "wrong", "better": "<the corrected Latin with long marks; empty when good>", "note": "<one or two short, friendly sentences in English; Latin inside «»>"}`,
+    `The learner: ${ctx.me.name}, a ${gender(ctx.me.g)}. ${ANY_WORD}`,
+    knownRules(ctx.seen),
+    `Decide: "good" (correct Latin that says what they mean; missing long marks are fine), "almost" (one small slip), or "wrong". If they wrote English or a mix, give the Latin they could send. In a correction keep their own words and change only what is wrong.
+Reply with only JSON: {"verdict": "good" | "almost" | "wrong", "better": "<the corrected Latin with long marks; empty when good>", "note": "<one or two short, friendly sentences in English about what was wrong or right; Latin inside «»>"}`,
   ].join("\n\n");
+}
+
+/** The coach's window: what was checked and asked so far, for the next question. */
+function coachLog(turns: CoachTurn[]): string {
+  return turns
+    .slice(-12)
+    .map((t) =>
+      t.kind === "check"
+        ? `- They checked «${t.draft}»: ${t.res.verdict}${t.res.better ? `; better «${t.res.better}»` : ""}. ${t.res.note}`
+        : t.kind === "q"
+          ? `- They asked: ${t.text}`
+          : `- You answered: ${t.text}`,
+    )
+    .join("\n");
+}
+
+/** A question the learner asks the coach in the window beside a chat. */
+export function coachPrompt(question: string, turns: CoachTurn[], draft: string, thread: Thread, meta: Meta, ctx: PromptCtx, facts: string): string {
+  const members = membersOf(thread.id, meta);
+  const tz = members[0]?.tz ?? "Europe/Rome";
+  return [
+    `You are a kind Latin coach in a small window beside a beginner's chat in a Latin messenger, where they text with ${thread.kind === "group" ? "friends in a group chat" : members[0]?.name}. They ask you about their messages and about Latin. The learner speaks English, Russian and Ukrainian; explain in English.`,
+    `How to answer:
+- Short: one to four sentences, or a few short lines. Longer only when they ask for more.
+- Answer exactly what they ask. If they ask about a word, also give where it comes from and one interesting bit of history about it (briefly; say "probably" where scholars are not sure, and never invent a relative or a story).
+- Write every Latin word or sentence inside «guillemets» («puellam»); quote English, Russian and Ukrainian with "double quotes". Use **bold** only for the key point. No headings, no tables, no greeting.
+- Be exact: check every Latin form you write. Never invent a grammar rule.
+- ${ANY_WORD}`,
+    `The learner: ${ctx.me.name}, a ${gender(ctx.me.g)}.`,
+    knownRules(ctx.seen),
+    `The chat so far (last messages):\n${conversationBlock(thread, meta, ctx, tz, 8)}`,
+    draft.trim() ? `In their message box now: «${draft.trim()}»` : "",
+    turns.length ? `This window so far:\n${coachLog(turns)}` : "",
+    `Their question: ${question}`,
+    facts,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }

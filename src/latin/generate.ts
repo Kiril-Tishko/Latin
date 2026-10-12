@@ -445,16 +445,25 @@ const OBJECTS: Record<string, (n: NounEntry) => boolean> = {
   disco: isThing,
 };
 
+/**
+ * What a verb sensibly acts on: the rules above, or for a verb the learner
+ * added, the kinds of nouns Claude named (none named: no object at all).
+ */
+function objectsOf(verb: VerbEntry): ((n: NounEntry) => boolean) | undefined {
+  if ("own" in verb.source) return (n) => !!verb.objects?.some((t) => n.tags.includes(t));
+  return OBJECTS[verb.id];
+}
+
 /** Whether a noun makes sense as what a verb acts on: what one reads, drinks, carries… (for the learner's own sentences). */
 export function sensibleObject(k: Knowledge, verb: VerbEntry, noun: NounEntry): boolean {
   if (verb.id === "bibo") return noun.tags.includes("drink");
   if (!takesObject(k, verb)) return false;
-  return OBJECTS[verb.id]?.(noun) ?? true;
+  return objectsOf(verb)?.(noun) ?? true;
 }
 
 function objectFor(k: Knowledge, r: Rand, verb: VerbEntry, exclude: string[], possChance?: number): NP | null {
   if (verb.id === "bibo") return makeNP(k, r, { case: "acc", num: "sg", require: tagged("drink"), exclude, adjChance: 0.15, possChance });
-  const fits = OBJECTS[verb.id];
+  const fits = objectsOf(verb);
   return makeNP(k, r, { case: "acc", num: "sg", ...(k.silly === 0 && fits ? { require: fits } : { prefer: fits }), exclude, possChance });
 }
 

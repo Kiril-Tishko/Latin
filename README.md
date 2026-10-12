@@ -48,9 +48,18 @@ published as a private claude.ai artifact.
   hours, moods and happenings that change at random, text first now and then,
   type, read and answer when awake; a scheduled routine lets them write while
   the page is closed and notifies your phone. Tap a message for its English, a
-  word for what it is; Check asks the coach about your Latin. It looks like an
+  word for what it is; Check asks the coach about your Latin, and you can ask
+  the coach anything about it right there. Hand-drawn Roman emoji (SPQR, the
+  she-wolf, the legion's eagle, a laurel wreath…) sit beside the usual ones. It looks like an
   old Roman letter desk: parchment panels among real engravings (Piranesi's
   Forum, Corinthian columns, Livy's bust), laurels and big faces.
+- **Your own words**: add any Latin word (or look one up by its English,
+  Russian or Ukrainian meaning) from the Words page, Ask Claude or the
+  messenger; Claude fills in its card (forms, origin, history, relatives,
+  examples), the grammar engine checks every form, and the word joins your
+  exercises once its endings are learned.
+- **Word stories**: ask Claude about a word and you also hear where it comes
+  from and a bit of its history; send just a word for its word card.
 - **Claude settings**: the model (Haiku, Sonnet, Opus) and how hard it thinks,
   chosen separately for the coach and for the people in the messenger.
 - **Fix my mistakes**: your mistakes come back later as new exercises on the

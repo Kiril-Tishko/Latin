@@ -56,6 +56,20 @@ export function Markup({ text }: { text: string }) {
         list = { ordered, items: [] };
       }
       list.items.push((bullet ?? numbered)![1]);
+    } else if (/^\*\*[^*]{1,40}:\*\*/.test(line.trim()) || /^\*\*[^*]+\*\*$/.test(line.trim())) {
+      // a labelled line ("**Origin:** …") or a bold line of its own (a word card's head) stands alone
+      flushPara();
+      flushList();
+      const labelled = line.trim().match(/^\*\*([^*]{1,40}):\*\*\s*(.*)$/);
+      blocks.push(
+        labelled ? (
+          <p key={blocks.length} class="labelled">
+            <span class="label">{labelled[1]}</span> <Inline text={labelled[2]} />
+          </p>
+        ) : (
+          <p key={blocks.length} class="headline"><Inline text={line.trim()} /></p>
+        ),
+      );
     } else {
       flushList();
       para.push(line.trim());

@@ -20,6 +20,7 @@ import { useScreen } from "../screen";
 import { Speak } from "../speak";
 import { update, useProgress } from "../store";
 import { startSession } from "./train";
+import { NO_CORRECTION } from "../keyboard";
 
 /** "Rule 2.1", the way the site names a part. */
 export const partName = (part: Part) => `Rule ${part.id}`;
@@ -257,8 +258,7 @@ function Question({ part, q, n, onNext, last, autoFocus }: { part: Part; q: Part
           value={text}
           disabled={!!result || busy}
           placeholder="In your own words: English, Russian or Ukrainian…"
-          spellcheck={false}
-          autocomplete="off"
+          {...NO_CORRECTION}
           onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {

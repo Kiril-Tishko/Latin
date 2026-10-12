@@ -30,6 +30,7 @@ import { speak, stopSpeaking } from "../../audio/speech";
 import { audioReady, Speak } from "../speak";
 import { useScreen } from "../screen";
 import { PartDots, partName, PartRecap, rightWords } from "./learn";
+import { NO_CORRECTION } from "../keyboard";
 
 /** What a round practises: a rule (Continue), everything (Continue, all learned), some rules (Ask Claude's "practise this"), the words due (Verba), a lesson's or a story's sentences, or questions to answer in Latin. */
 export type Mode =
@@ -614,9 +615,8 @@ function Runner({ s }: { s: Session }) {
                   rows={2}
                   value={answer}
                   disabled={!!res}
-                  autocomplete="off"
+                  {...NO_CORRECTION}
                   autocapitalize="off"
-                  spellcheck={false}
                   lang={isLatinAnswer ? "la" : "en"}
                   placeholder={
                     ex.kind === "listen" ? "Write what you hear, in Latin…"
@@ -772,9 +772,8 @@ function GapInput({ box, wide, label }: { box: AnswerBox; wide?: boolean; label:
       ref={box.ref as never}
       value={box.value}
       aria-label={label}
-      autocomplete="off"
+      {...NO_CORRECTION}
       autocapitalize="off"
-      spellcheck={false}
       enterkeyhint="done"
       lang="la"
       placeholder={wide ? "…" : "?"}

@@ -22,6 +22,7 @@ import { currentScreen, Screen, sharedByDefault, useScreenLabel } from "./screen
 import { coachOpts, tierName } from "./models";
 import { derived, getProgress, useProgress } from "./store";
 import { knownWord, openAddWord } from "./addword";
+import { NO_CORRECTION } from "./keyboard";
 
 export interface AskContext {
   /** Short label shown in the drawer: "Exercise: Translate into Latin". */
@@ -799,6 +800,7 @@ export function AskDrawer() {
                 rows={2}
                 value={input}
                 placeholder="Why… / How… / What does…"
+                {...NO_CORRECTION}
                 onInput={(e) => setInput((e.target as HTMLTextAreaElement).value)}
                 enterkeyhint={enterSends() ? "send" : "enter"}
                 onKeyDown={(e) => {

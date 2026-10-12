@@ -2,6 +2,7 @@ import { render } from "preact";
 import "./styles.css";
 import { ROMAN_EMOJI_FONT } from "./content/roman-emoji";
 import { App } from "./ui/app";
+import { watchKeyboard } from "./ui/keyboard";
 
 // the messenger's hand-drawn Roman emoji: a color font for its own characters only
 try {
@@ -12,5 +13,6 @@ try {
   /* a browser without FontFace shows the emoji as small boxes */
 }
 
+watchKeyboard();
 const root = document.getElementById("app");
 if (root) render(<App />, root);

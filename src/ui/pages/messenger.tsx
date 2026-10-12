@@ -52,6 +52,7 @@ import { derived, update, useProgress } from "../store";
 import { storage } from "../platform";
 import { WordModal } from "./words";
 import { knownWord, openAddWord } from "../addword";
+import { NO_CORRECTION } from "../keyboard";
 
 // ---------------------------------------------------------------- pieces
 
@@ -220,7 +221,7 @@ function Setup() {
       </p>
       <label class="stack" style={{ gap: "6px" }}>
         <span class="ui"><b>What should they call you?</b></span>
-        <input id="me-name" class="input" value={name} maxLength={24} placeholder="Your name" onInput={(e) => setName((e.target as HTMLInputElement).value)} />
+        <input id="me-name" class="input" value={name} maxLength={24} placeholder="Your name" {...NO_CORRECTION} onInput={(e) => setName((e.target as HTMLInputElement).value)} />
       </label>
       <div class="stack" style={{ gap: "6px" }}>
         <span class="ui"><b>Latin words about you end in…</b></span>
@@ -283,7 +284,7 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
       <p class="msgr-date" lang="la" title={todayLine(now).en}>{todayLine(now).la}</p>
       <label class="list-search">
         <Icon.search />
-        <input id="chat-search" type="search" value={query} placeholder="Quaere nūntiōs…" aria-label="Search chats and messages" autocomplete="off" spellcheck={false} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
+        <input id="chat-search" type="search" value={query} placeholder="Quaere nūntiōs…" aria-label="Search chats and messages" {...NO_CORRECTION} autocapitalize="off" onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
       </label>
       {finding && <Finding onStop={() => finding.ctl.abort()} />}
       {error && <p class="small well list-note">{error}</p>}
@@ -544,6 +545,8 @@ function ChatView({ id, now }: { id: string; now: number }) {
             value={search}
             placeholder="Find in this chat (Latin or English)…"
             autoFocus
+            {...NO_CORRECTION}
+            autocapitalize="off"
             onInput={(e) => { setSearch((e.target as HTMLInputElement).value); setHit(0); }}
             onKeyDown={(e) => {
               if (e.key === "Enter") setHit(hit + (e.shiftKey ? -1 : 1));
@@ -934,7 +937,7 @@ function CoachPanel({ id, draft, checking, onUse }: { id: string; draft: string;
           void ask(q);
         }}
       >
-        <input id="coach-ask" class="coach-ask" value={q} placeholder="Ask the coach… (why -m? what does it mean?)" autocomplete="off" onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
+        <input id="coach-ask" class="coach-ask" value={q} placeholder="Ask the coach… (why -m? what does it mean?)" {...NO_CORRECTION} onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
         {busy !== null ? (
           <button type="button" class="btn ghost small" onClick={() => ctl.current?.abort()}>Stop</button>
         ) : (
@@ -1068,6 +1071,7 @@ function Composer({ id }: { id: string }) {
           rows={1}
           lang="la"
           placeholder="Write in Latin…"
+          {...NO_CORRECTION}
           value={text}
           onInput={(e) => change((e.target as HTMLTextAreaElement).value)}
           enterkeyhint={enterSends() ? "send" : "enter"}

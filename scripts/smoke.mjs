@@ -149,6 +149,8 @@ async function run(name, viewport, colorScheme) {
   if (!key) errors.push(`${name}: the first open question is not about you (${question})`);
   if (!((await p.locator(".answer-gloss").textContent()) ?? "").includes("=")) errors.push(`${name}: the question word is not explained`);
   await p.locator("#answer-input").fill(key ? ANSWERS[key] : "x");
+  const corrects = await p.locator("#answer-input").evaluate((el) => el.spellcheck || el.getAttribute("autocorrect") !== "off");
+  if (corrects) errors.push(`${name}: the answer box spellchecks or autocorrects`);
   await p.screenshot({ path: `${out}/${name}-answer-q.png` });
   await p.locator("#answer-input").press("Enter");
   await p.waitForTimeout(200);
@@ -899,6 +901,10 @@ async function messenger() {
   await p.waitForTimeout(2500);
   if (!(await p.locator(".chat-head-name").textContent())?.trim() || (await p.locator(".chat-row").count()) !== 7) errors.push("messenger: someone new did not open a chat");
   await p.screenshot({ path: `${out}/messenger-stranger.png` });
+  // with a mouse and a real keyboard the bars stay while typing
+  await p.focus("#composer");
+  if (await p.evaluate(() => document.documentElement.classList.contains("kb-open"))) errors.push("messenger: the bars step aside on a computer");
+  await p.locator("#composer").blur();
   // the other device sees the same chats
   const other = await device("messenger-phone", { width: 390, height: 844 }, "2026-10-12T11:30:00Z");
   await other.p.waitForTimeout(1200);
@@ -913,6 +919,43 @@ async function messenger() {
   await other.p.keyboard.type("Iūlia");
   if ((await other.p.inputValue("#composer")) !== "Salvē\nIūlia" || (await other.p.locator(".bubble.mine").count()) !== mine) errors.push(`messenger: on a phone Enter did not make a new line (${JSON.stringify(await other.p.inputValue("#composer"))})`);
   await other.p.fill("#composer", "");
+  // no spellcheck or autocorrect: a tap on an underlined word would open suggestions, not move the cursor
+  const box = await other.p.evaluate(() => {
+    const el = document.querySelector("#composer");
+    return { spell: el.spellcheck, auto: el.getAttribute("autocorrect"), complete: el.getAttribute("autocomplete") };
+  });
+  if (box.spell !== false || box.auto !== "off" || box.complete !== "off") errors.push(`messenger: the message box corrects what is typed (${JSON.stringify(box)})`);
+  // while the phone's keyboard is up the top bar and the tabs step aside, and come back when it goes,
+  // also when the field keeps its focus (the page growing back, as with Android's back button)
+  const bars = async () => ({
+    kb: await other.p.evaluate(() => document.documentElement.classList.contains("kb-open")),
+    top: await other.p.locator(".topbar").isVisible(),
+    tabs: await other.p.locator(".bottomnav").isVisible(),
+  });
+  await other.p.focus("#composer");
+  await other.p.keyboard.type("Quid agis?");
+  await other.p.setViewportSize({ width: 390, height: 500 });
+  await other.p.waitForTimeout(150);
+  let b = await bars();
+  if (!b.kb || b.top || b.tabs) errors.push(`messenger: the bars stay while typing on a phone (${JSON.stringify(b)})`);
+  const room = await other.p.evaluate(() => [document.querySelector(".composer")?.getBoundingClientRect().bottom ?? 0, innerHeight]);
+  if (room[0] > room[1] + 1) errors.push(`messenger: the message box is below the keyboard (${room})`);
+  await other.p.screenshot({ path: `${out}/messenger-phone-typing.png` });
+  await other.p.setViewportSize({ width: 390, height: 844 });
+  await other.p.waitForTimeout(150);
+  b = await bars();
+  if (b.kb || !b.top || !b.tabs) errors.push(`messenger: the bars do not return when the keyboard closes (${JSON.stringify(b)})`);
+  await other.p.setViewportSize({ width: 390, height: 500 });
+  await other.p.waitForTimeout(150);
+  if (!(await bars()).kb) errors.push("messenger: the bars do not step aside when the keyboard opens again");
+  await other.p.locator("#composer").blur();
+  await other.p.waitForTimeout(150);
+  b = await bars();
+  if (b.kb || !b.top || !b.tabs) errors.push(`messenger: the bars do not come back after typing (${JSON.stringify(b)})`);
+  await other.p.setViewportSize({ width: 390, height: 844 });
+  await other.p.fill("#composer", "");
+  await other.p.locator("#composer").blur();
+  await other.p.waitForTimeout(150);
   await other.p.screenshot({ path: `${out}/messenger-phone-chat.png` });
   await other.p.click(".chat-back");
   await other.p.screenshot({ path: `${out}/messenger-phone-list.png` });

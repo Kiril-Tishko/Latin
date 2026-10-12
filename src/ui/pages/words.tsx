@@ -26,6 +26,7 @@ import { Speak } from "../speak";
 import { Sayings } from "../saying";
 import { wordInEnglish } from "../../content/english";
 import { useScreen } from "../screen";
+import { NO_CORRECTION } from "../keyboard";
 
 const CASE_ORDER: Case[] = ["nom", "acc", "gen", "abl", "dat", "voc"];
 const PN_ROWS: [PN, string][] = [
@@ -298,9 +299,8 @@ export function Words() {
           value={query}
           placeholder="Quaere… Latin or English"
           aria-label="Search your words: Latin in any form, or English"
-          autocomplete="off"
+          {...NO_CORRECTION}
           autocapitalize="off"
-          spellcheck={false}
           onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
         />
         <button id="add-word" class="btn gold" onClick={() => openAddWord(q && !count ? q : "", "words")} title="Add any Latin word to your dictionary: Claude fills in its card">

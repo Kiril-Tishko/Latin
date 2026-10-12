@@ -7,6 +7,7 @@ import { updatePath } from "../trainer/path";
 import { audioSupported, hasLatinVoice, latinVoices, pickVoice, speak, useVoices } from "../audio/speech";
 import { ModelChoice } from "../trainer/progress";
 import { EFFORTS, TIERS } from "./models";
+import { NO_CORRECTION } from "./keyboard";
 
 export function Settings({ onClose }: { onClose: () => void }) {
   const p = useProgress();
@@ -116,6 +117,7 @@ function MessengerSettings() {
           value={me.name}
           maxLength={24}
           aria-label="Your name in the messenger"
+          {...NO_CORRECTION}
           onChange={(e) => {
             const name = (e.target as HTMLInputElement).value.trim();
             if (name) update((x) => void (x.settings.me = { ...me, name }));

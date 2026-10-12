@@ -182,6 +182,15 @@ Latin names (English in the tooltip; `TABS` in src/ui/app.tsx, routes in nav.ts)
   word grid. `#discover` lands here.
 - **Nūntiī**: the messenger (below).
 
+Typing on a phone (src/ui/keyboard.ts), as the learner asked: while a text
+field is focused on a touch screen the keyboard is taken to be up, `<html>` gets
+`kb-open`, and the top bar and the tabs step aside (the chat then fills the
+screen; notices come from the top). A keyboard closed with the field still
+focused (Android's back button) shows as the page growing back, and the bars
+return (`watchKeyboard`). Every text field has `NO_CORRECTION` (no spellcheck,
+autocorrect or autocomplete): a tap on a Latin word underlined as wrong opened
+suggestions instead of moving the cursor. The smoke test checks both on a phone.
+
 Latin in English is a reader (`src/ui/pages/english.tsx`, the screens built by
 `englishSteps` in src/content/english-steps.ts): one short screen at a time (a
 text, a table, a list, the learner's own words, a quick question with three

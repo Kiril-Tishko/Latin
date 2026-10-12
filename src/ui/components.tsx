@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Case, CASE_NAMES } from "../latin/types";
 import { roman } from "../latin/text";
 import { useScreen } from "./screen";
+import { touchScreen } from "./keyboard";
 
 const P = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -213,7 +214,7 @@ export function useSwipeAway(onGone: () => void, onTap?: () => void) {
 }
 
 /** On a phone (a touch screen, no hover) Enter makes a new line and the button sends; with a keyboard, Enter sends. */
-export const enterSends = () => typeof matchMedia === "undefined" || !matchMedia("(hover: none) and (pointer: coarse)").matches;
+export const enterSends = () => !touchScreen();
 
 let showToastFn: ((t: string) => void) | null = null;
 export const toast = (t: string) => showToastFn?.(t);

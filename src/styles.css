@@ -225,6 +225,20 @@ main.page.wide { max-width: 1272px; padding-block: clamp(10px, 2.2vh, 24px) clam
   body { font-size: 16px; }
 }
 
+/* a phone's keyboard is up (keyboard.ts): the top bar and the tabs step aside,
+   and notices come from the top, clear of the message box */
+html.kb-open .topbar,
+html.kb-open .bottomnav { display: none; }
+html.kb-open .msgr { height: calc(100dvh - 38px); }
+html.kb-open .toast,
+html.kb-open .arrival { top: calc(env(safe-area-inset-top, 0px) + 10px); bottom: auto; }
+@media (max-width: 760px) {
+  html.kb-open main.page.wide { padding-bottom: 16px; }
+  html.kb-open main.page.msgr-page { padding-bottom: 0; }
+  html.kb-open .msgr { height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+  html.kb-open .ex-next { bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+}
+
 /* -------------------------------------------------------- typography */
 
 h1, h2, h3 { text-wrap: balance; margin: 0; }

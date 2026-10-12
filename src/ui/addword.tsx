@@ -18,6 +18,7 @@ import { coachOpts } from "./models";
 import { sampleErrorText, sampler } from "./platform";
 import { derived, update, useProgress } from "./store";
 import { Forms, WordModal } from "./pages/words";
+import { NO_CORRECTION } from "./keyboard";
 
 type Via = "words" | "ask" | "messenger";
 let state: { open: boolean; input: string; via: Via } = { open: false, input: "", via: "words" };
@@ -175,9 +176,8 @@ function AddWord({ start }: { start: string }) {
             class="input"
             value={text}
             placeholder="A Latin word, or an English, Russian, Ukrainian one"
-            autocomplete="off"
+            {...NO_CORRECTION}
             autocapitalize="off"
-            spellcheck={false}
             onInput={(e) => setText((e.target as HTMLInputElement).value)}
           />
           <button type="submit" class="btn" disabled={!text.trim() || busy}>{busy ? "Looking…" : "Look it up"}</button>

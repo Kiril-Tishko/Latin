@@ -5,7 +5,8 @@
 // the phone-notification routine agree on what may be written.
 import { OTHER_NAMES, PEOPLE } from "../content/people";
 import { STORY_ONLY } from "../content/words";
-import { Lexicon } from "../latin/analyze";
+import { showEmoji } from "./emoji";
+import { annotate, Lexicon } from "../latin/analyze";
 import { conjugate, declineAdj, declineNoun, fixed, noun, verb } from "../latin/morph";
 import { adjDecl, nounSkill } from "../latin/skills";
 import { stripMarks } from "../latin/text";
@@ -167,7 +168,6 @@ export interface AllowedWord {
   name: boolean;
 }
 
-/** The dictionary headword: labōrō for a verb, the nominative for the rest. */
 /** Common English words that are no Latin word (a, in, is, an, do are left out: they are Latin too). */
 const ENGLISH = new Set("i you he she we they the am are was to how what why does my your and of for with love want say this that be not can have know like".split(" "));
 
@@ -179,6 +179,28 @@ export function notLatin(text: string): boolean {
   return english > 0 && english / words.length >= 0.25;
 }
 
+/**
+ * The words of a message the chat's dictionary cannot read: the learner's own
+ * new words (cor, timēs), each once, so they can be added. Nothing for a
+ * message in English; emoji codes (:lupa:) are not words.
+ */
+export function strangeWords(text: string, lex: Lexicon): string[] {
+  if (notLatin(text)) return [];
+  const tokens = annotate(showEmoji(text).replace(/:[a-z]{3,12}:/g, " "), lex);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  tokens.forEach((t, i) => {
+    if (!t.isWord || t.readings?.length || t.text.length < 2) return;
+    // a capital that only starts a sentence goes («Cor!» → cor); one inside a sentence is a name
+    const before = tokens.slice(0, i).map((x) => x.text).join("");
+    const word = !before.trim() || /[.!?…]\s*$/.test(before) ? t.text.toLowerCase() : t.text;
+    const key = stripMarks(word).toLowerCase();
+    if (!seen.has(key)) out.push(word), seen.add(key);
+  });
+  return out;
+}
+
+/** The dictionary headword: labōrō for a verb, the nominative for the rest. */
 export const headword = (e: Entry) => (e.kind === "verb" ? e.pp[0] : e.lemma);
 
 export function allowedWords(entries: Entry[], seen: Set<string>): AllowedWord[] {

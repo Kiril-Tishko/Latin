@@ -22,6 +22,8 @@ import { currentScreen, Screen, sharedByDefault, useScreenLabel } from "./screen
 import { coachOpts, tierName } from "./models";
 import { derived, getProgress, useProgress } from "./store";
 import { knownWord, openAddWord } from "./addword";
+import { CHAT_WORD_LIST } from "../chat/words";
+import { bareWord, cardWord, newWordsIn } from "./answer-words";
 import { NO_CORRECTION } from "./keyboard";
 
 export interface AskContext {
@@ -161,6 +163,7 @@ function profile(): string {
       .map((x) => `${x.id} ${x.title}${state === "practising" ? ` (${partRight(p, x)} of ${PART_GOAL} right answers)` : ""}`)
       .join("; ") || "none";
   const words = d.words.map((w) => `${dictionaryForm(w)} = ${w.en}`).join("; ");
+  const chat = CHAT_WORD_LIST.map((w) => `${dictionaryForm(w)} = ${w.en}`).join("; ");
   const mistakes = p.mistakes.slice(0, 8).map((m) => `- "${m.prompt}" | wrote: ${m.answer} | expected: ${m.expected}${m.notes.length ? ` | ${m.notes.join(" ")}` : ""}`);
   return [
     `Lessons watched: ${lessons.join("; ")}. The learner remembers the words of these lessons but had forgotten most of the rules, so they learn the rules again in small parts, one at a time: a very simple explanation, two open questions, then exercises from simple to harder: each right answer on the rule adds one, and ten make it learned. Exercises use only the rules of the parts seen.`,
@@ -168,6 +171,7 @@ function profile(): string {
     "Explain with the rules met so far unless the learner asks about later ones, and remind them of a rule plainly rather than assuming they remember it.",
     `Skills met, with the rule as this site teaches it (ids for PRACTICE):\n${skills.join("\n") || "none yet"}`,
     `Words known: ${words}`,
+    `Words for chatting, which the site teaches for the messenger (when the learner asks how to say yes, no, hello, goodbye, thanks, why, where…, give these first): ${chat}`,
     mistakes.length ? `Recent mistakes:\n${mistakes.join("\n")}` : "No recent mistakes recorded.",
   ].join("\n\n");
 }
@@ -307,12 +311,6 @@ function toMessages(chat: Chat): { role: "user" | "assistant"; content: string }
   msgs[0] = { role: "user", content: [INSTRUCTIONS, profile(), general ? "" : openedFrom(chat.context, !!hist[0].screen), msgs[0].content].filter(Boolean).join("\n\n") };
   return msgs;
 }
-
-/** Just a word (or a dictionary entry such as "gladius, gladiī"), perhaps with a question mark: the learner wants its word card. */
-export const bareWord = (q: string) => {
-  const t = q.trim();
-  return t.length <= 48 && /^[\p{L}\p{M}'’-]+(?:\s*,\s*[\p{L}\p{M}'’.-]+){0,3}\s*[?!.]?$/u.test(t);
-};
 
 /** A question about where a word comes from or what it is related to. */
 const ORIGIN = /etymolog|\bcomes? from|origin|relat(ed|ive)|\broots?\b|cognate|borrow|deriv|english|russian|ukrainian|kin\b/i;
@@ -860,24 +858,33 @@ export function GrammarCheck({ text, canFix, onFix }: { text: string; canFix: bo
   );
 }
 
-/** The Latin word a word card is about: the first word of its bold headline ("gladius" from "**gladius, gladiī (m) · sword**"). */
-export function cardWord(answer: string): string | null {
-  const m = answer.match(/^\s*\*\*([^*]+)\*\*/);
-  if (!m) return null;
-  const w = m[1].split(/[·—(]/)[0].split(/[,\s]+/).find(Boolean)?.replace(/[«»]/g, "");
-  return w && /^[\p{L}\p{M}]+$/u.test(w) ? w : null;
-}
-
-/** Under the word card of a word the learner does not have yet: add it to their words. */
+/**
+ * Under an answer: the words it brings that the learner does not have yet,
+ * one tap from their dictionary. A word card offers its own word; any other
+ * answer the words it marks as new (the Latin for "how do I say…").
+ */
 function AddFromAnswer({ question, answer }: { question: string; answer: string }) {
   useProgress();
-  if (!bareWord(question)) return null;
-  const word = cardWord(answer) ?? question.trim().replace(/[?!.]$/, "").split(/\s*,/)[0];
-  if (!word || knownWord(word)) return null;
+  if (bareWord(question)) {
+    const word = cardWord(answer) ?? question.trim().replace(/[?!.]$/, "").split(/\s*,/)[0];
+    if (!word || knownWord(word)) return null;
+    return (
+      <button class="btn small add-from-answer" onClick={() => openAddWord(word, "ask")}>
+        <Icon.plus /> Add «{word}» to my words
+      </button>
+    );
+  }
+  const fresh = newWordsIn(answer).filter((w) => !knownWord(w)).slice(0, 3);
+  if (!fresh.length) return null;
   return (
-    <button class="btn small add-from-answer" onClick={() => openAddWord(word, "ask")}>
-      <Icon.plus /> Add «{word}» to my words
-    </button>
+    <div class="new-words" role="note">
+      <span class="small muted">New words here:</span>
+      {fresh.map((w) => (
+        <button key={w} class="chip new-word" lang="la" onClick={() => openAddWord(w, "ask")} title={`Add «${w}» to your words`}>
+          <Icon.plus /> {w}
+        </button>
+      ))}
+    </div>
   );
 }
 

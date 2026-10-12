@@ -16,7 +16,7 @@ import { arrived, Check, CoachTurn, membersOf, Msg, preview, Thread, unreadCount
 import { romanDate, romeDay, todayLine } from "../../chat/calendar";
 import { PHOTO_BY_ID, photoSrc } from "../../content/photos";
 import { speak, stopSpeaking, useSpeaking, useVoices } from "../../audio/speech";
-import { allowedWords, CHAT_WORD_LIST, headword, notLatin } from "../../chat/words";
+import { allowedWords, CHAT_WORD_LIST, headword, notLatin, strangeWords } from "../../chat/words";
 import { Analysis, annotate } from "../../latin/analyze";
 import { plain, roman } from "../../latin/text";
 import { CASE_NAMES, Entry, PN, PN_NAMES } from "../../latin/types";
@@ -636,6 +636,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
                   </div>
                 )}
                 {mine && !onlyEmoji(m.la) && (m.check || m.id === lastMine || openEn.includes(m.id)) && <Checked m={m} id={id} />}
+                {mine && m.id === lastMine && <NewWords m={m} />}
               </Fragment>
             );
           })}
@@ -764,6 +765,27 @@ function Intro({ who }: { who: Who }) {
       </p>
       {who.stranger && <p class="small muted">{who.about}</p>}
       <p class="small muted">Say «Salvē!»</p>
+    </div>
+  );
+}
+
+/**
+ * Under the learner's last message: the words in it the site does not know
+ * yet, each one tap from their dictionary (Claude fills in the card). Once
+ * added, the friends may use them back, and practice reviews them.
+ */
+function NewWords({ m }: { m: Msg }) {
+  useProgress();
+  const fresh = strangeWords(m.la, chatWords().lex).filter((w) => !knownWord(w)).slice(0, 4);
+  if (!fresh.length) return null;
+  return (
+    <div class="new-words" role="note">
+      <span class="small muted">New words:</span>
+      {fresh.map((w) => (
+        <button key={w} class="chip new-word" lang="la" onClick={() => openAddWord(w, "messenger")} title={`Add «${w}» to your words: then your friends can use it too`}>
+          <Icon.plus /> {w}
+        </button>
+      ))}
     </div>
   );
 }

@@ -831,9 +831,12 @@ async function messenger() {
   const coachPrompts = await p.evaluate(() => window.__prompts.filter((x) => String(x).includes("kind Latin coach")).join("\n"));
   if (/Not in the learner's words/.test(coachPrompts)) errors.push("messenger: the check still points out words the learner has not learned");
   await p.screenshot({ path: `${out}/messenger-coach.png` });
-  await p.fill("#composer", "Salve Iulia! Librum lego.");
+  await p.fill("#composer", "Salve Iulia! Librum lego. Cor!");
   await p.click("#composer-send");
   await p.waitForTimeout(3500);
+  // a word the site does not know (cor) is offered under the message, one tap from the learner's words
+  if (!(await p.locator(".new-words .chip.new-word", { hasText: "cor" }).count())) errors.push("messenger: a new word in the learner's message is not offered to add");
+  await p.screenshot({ path: `${out}/messenger-new-words.png` });
   // she is free at 12:30: she reads it within minutes and answers
   await ctx.clock.fastForward("20:00");
   await p.waitForTimeout(800);

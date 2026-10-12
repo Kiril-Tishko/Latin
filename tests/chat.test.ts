@@ -9,7 +9,7 @@ import { literalReading } from "../src/latin/facts";
 import { languageBlock, PromptCtx, replyPrompt } from "../src/chat/prompts";
 import { LINKS, rollStranger } from "../src/chat/strangers";
 import { vetMessage, withMacrons } from "../src/chat/vet";
-import { allowedWords, calendarEntry, CHAT_WORDS, chatEntries, chatLexicon, formsFor, nameEntry, notLatin, vocativeOf } from "../src/chat/words";
+import { allowedWords, calendarEntry, CHAT_WORDS, chatEntries, chatLexicon, formsFor, nameEntry, notLatin, strangeWords, vocativeOf } from "../src/chat/words";
 import { LESSONS } from "../src/content/lessons";
 import { PARTS } from "../src/content/parts";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../src/content/people";
@@ -411,5 +411,17 @@ describe("Check on English: how do I say it in Latin", () => {
   it("tells English, Russian and Ukrainian from Latin", () => {
     for (const t of ["I love you", "Salve Iulia, how are you?", "how to say because I love", "я тебе люблю", "Як справи?"]) expect(notLatin(t), t).toBe(true);
     for (const t of ["Ego amo te", "Puella est pulchra", "Salvē, Marce! Quid agis?", "In silvā ambulō.", "Ego volo tu"]) expect(notLatin(t), t).toBe(false);
+  });
+});
+
+describe("New words stick: the words of a message the site does not know", () => {
+  it("finds the learner's own new words, each once", () => {
+    expect(strangeWords("Iūlia, cor timet! Cor!", lex)).toEqual(["cor", "timet"]);
+    expect(strangeWords("Cor meum! In Londīniō sum.", lex)).toEqual(["cor", "Londīniō"]);
+    expect(strangeWords("Salvē, Marce! Quid agis? Ego in silvā ambulō.", lex)).toEqual([]);
+  });
+  it("leaves out English messages, emoji codes and single letters", () => {
+    expect(strangeWords("how do I say heart?", lex)).toEqual([]);
+    expect(strangeWords("Salvē :lupa: :laurus: :laurea: ō", lex)).toEqual([]);
   });
 });

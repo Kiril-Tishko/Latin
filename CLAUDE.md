@@ -102,7 +102,11 @@ Runtime capabilities used:
   (`WordStory.link`) look for one real link: a name, a modern word, a term of
   science, a brand, a place; never a look-alike. Under
   such a card, a word the learner does not have yet gets "Add «gladius» to my
-  words" (`AddFromAnswer`, the headline's word: `cardWord`). A failed answer shows plain advice, Try again,
+  words" (`AddFromAnswer`, the headline's word: `cardWord`); any other answer
+  offers the words it marks «…» (new) as "New words here" chips (`newWordsIn`;
+  these helpers live in src/ui/answer-words.ts, where the tests reach them).
+  The profile lists the chat words, so "how do I say yes?" gets «ita», the
+  site's word, not «sīc». A failed answer shows plain advice, Try again,
   and the error code under "Details" (ask the learner for it when debugging).
   Keep the sample function in state as `setSample(() => fn)`: Preact calls a
   function given to a state setter, which once broke every question.
@@ -522,7 +526,11 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   a notice for a message arriving elsewhere in the app, an unread count (Roman
   numerals) on the tab. Tap a message for its English, a word for what it is
   (with a speaker to hear it; a word not among the learner's words, or unknown,
-  gets "+ Add"). The notice of a message arriving elsewhere (and any toast) can
+  gets "+ Add"). Words the learner wrote that the site does not know (cor,
+  timēs) show under their last message as "New words" chips (`strangeWords` in
+  src/chat/words.ts: a capital that only starts a sentence goes), one tap from
+  Add a word; once added, the friends may write them back and practice reviews
+  them. The notice of a message arriving elsewhere (and any toast) can
   be swiped away like a phone notification (`useSwipeAway`); a tap opens the
   chat. On a phone Enter makes a new line in the message box and in Ask Claude,
   and the arrow sends (`enterSends`); the box grows with its lines.

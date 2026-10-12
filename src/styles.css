@@ -1564,6 +1564,11 @@ main.page.msgr-page { padding-block: 14px; }
 .check-note.almost { border-left-color: var(--almost); }
 .check-note.wrong { border-left-color: var(--bad); }
 .check-note.say { border-left-color: var(--gold); }
+/* words the learner wrote or was given that they don't have yet: one tap to add */
+.new-words { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 6px; justify-content: flex-end; }
+.drawer .new-words, .ask-answer .new-words { justify-content: flex-start; }
+.chip.new-word { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-family: var(--f-text); font-size: 0.95rem; }
+.chip.new-word svg { width: 13px; height: 13px; }
 .composer-hint { margin: 0 0 6px 52px; color: var(--ink-2); }
 .check-verdict { font-weight: 600; font-size: 0.85rem; }
 .check-better { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-family: var(--f-text); font-size: 1.04rem; }

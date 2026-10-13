@@ -77,7 +77,7 @@ interface Session {
 }
 
 /** Exercises in the round: those made, and those a part's round will still make. */
-const roundSize = (s: Session) => s.items.length + Math.max(0, (s.plan ?? 0) - (s.made ?? 0)) + (s.finale ? 1 : 0);
+const roundSize = (s: Session) => s.items.length + Math.max(0, (s.plan ?? 0) - (s.made ?? 0)) + (s.extras?.length ?? 0) + (s.finale ? 1 : 0);
 /** Exercises of a round on one part. */
 const PART_ROUND = 12;
 
@@ -760,7 +760,16 @@ function Runner({ s }: { s: Session }) {
               />
             )}
             <div class="spread ex-next">
-              <button id="ex-why" class="btn ghost" aria-expanded={why} onClick={() => setWhy(!why)}>
+              <button
+                id="ex-why"
+                class="btn ghost"
+                aria-expanded={why}
+                onClick={() => {
+                  setWhy(!why);
+                  // the box opens above the Next bar: bring it into view
+                  if (!why) requestAnimationFrame(() => document.querySelector(".why-box")?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+                }}
+              >
                 {why ? "Less" : "Why?"}
               </button>
               <button class="btn big" ref={nextRef} onClick={next}>
@@ -1037,9 +1046,9 @@ function oneFix(ex: Exercise, res: Result, answer: string): { want: string; give
 }
 
 /**
- * After an answer, short: the verdict (with the word to fix), the right
- * sentence and its English, one line why, and whether the rule's count went
- * up (children). The rest waits under Why? (WhyBox).
+ * After an answer, short: the verdict (with the word to fix) and whether the
+ * rule's count went up (children), the right sentence and its English, one
+ * line why. The rest waits under Why? (WhyBox).
  */
 function Feedback({ ex, res, answer, children }: { ex: Exercise; res: Result; answer: string; children?: ComponentChildren }) {
   const v = VERDICT[res.verdict];
@@ -1062,6 +1071,8 @@ function Feedback({ ex, res, answer, children }: { ex: Exercise; res: Result; an
           )}
         </span>
       </div>
+      {/* whether the rule's count went up, right under the verdict (on a phone the end of the card can sit under the Next bar) */}
+      {children}
       <div class="stack answer" style={{ gap: "2px" }}>
         {ex.kind === "answer" && <span class="eyebrow" style={{ color: "var(--ink-2)" }}>{res.coached ? "Your idea, corrected" : "For example"}</span>}
         {ex.kind === "meaning" ? (
@@ -1087,7 +1098,6 @@ function Feedback({ ex, res, answer, children }: { ex: Exercise; res: Result; an
         {meaning && <p class="muted small">{meaning}</p>}
       </div>
       {why && <p class="why-line"><Inline text={why} /></p>}
-      {children}
     </div>
   );
 }
@@ -1214,6 +1224,13 @@ function Summary({ s }: { s: Session }) {
         </div>
       </div>
       <PartProgress s={s} />
+      {/* the way on comes first: the lists below are for looking back */}
+      <div class="row">
+        <button class="btn big" onClick={() => { setSession(null); continueLearning(); }}>
+          <Icon.play /> Continue
+        </button>
+        <button class="btn ghost big" onClick={() => { setSession(null); go({ page: "home" }); }}>Done for now</button>
+      </div>
       {touched.length > 0 && (
         <div class="panel stack">
           <h3>Rules practised</h3>
@@ -1253,12 +1270,6 @@ function Summary({ s }: { s: Session }) {
           </div>
         </div>
       )}
-      <div class="row">
-        <button class="btn big" onClick={() => { setSession(null); continueLearning(); }}>
-          <Icon.play /> Continue
-        </button>
-        <button class="btn ghost big" onClick={() => { setSession(null); go({ page: "home" }); }}>Done for now</button>
-      </div>
     </div>
   );
 }

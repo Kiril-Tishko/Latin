@@ -6,7 +6,7 @@
 import { OTHER_NAMES, PEOPLE } from "../content/people";
 import { STORY_ONLY } from "../content/words";
 import { showEmoji } from "./emoji";
-import { annotate, Lexicon } from "../latin/analyze";
+import { annotate, formsOf, Lexicon } from "../latin/analyze";
 import { conjugate, declineAdj, declineNoun, fixed, noun, verb } from "../latin/morph";
 import { adjDecl, nounSkill } from "../latin/skills";
 import { stripMarks } from "../latin/text";
@@ -175,7 +175,8 @@ const ENGLISH = new Set("i you he she we they the am are was to how what why doe
 /** Text written in English, Russian or Ukrainian rather than Latin: Check then gives it in Latin. */
 export function notLatin(text: string): boolean {
   if (/[а-яёіїєґ]/i.test(text)) return true;
-  const words = text.toLowerCase().match(/[a-z']+/g) ?? [];
+  // (long marks go first: Iūlia is one word, not "i" and "lia")
+  const words = stripMarks(text).toLowerCase().match(/[a-z']+/g) ?? [];
   const english = words.filter((w) => ENGLISH.has(w)).length;
   return english > 0 && english / words.length >= 0.25;
 }
@@ -190,8 +191,13 @@ export function strangeWords(text: string, lex: Lexicon): string[] {
   const tokens = annotate(showEmoji(text).replace(/:[a-z]{3,12}:/g, " "), lex);
   const seen = new Set<string>();
   const out: string[] = [];
+  const near = stemsOf(lex);
   tokens.forEach((t, i) => {
     if (!t.isWord || t.readings?.length || t.text.length < 2) return;
+    // a laugh or a little word of chat is no new word; nor is a known word with a wrong ending (puellum, librom)
+    const plainWord = stripMarks(t.text).toLowerCase();
+    if (/^(?:(?:h?[ae]h)+[ae]?h?|lol|ok|okay|hm+|mm+|ah+|oh+|aw+)$/.test(plainWord)) return;
+    if (misspelt(plainWord, near)) return;
     // a capital that only starts a sentence goes («Cor!» → cor); one inside a sentence is a name
     const before = tokens.slice(0, i).map((x) => x.text).join("");
     const word = !before.trim() || /[.!?…]\s*$/.test(before) ? t.text.toLowerCase() : t.text;
@@ -199,6 +205,28 @@ export function strangeWords(text: string, lex: Lexicon): string[] {
     if (!seen.has(key)) out.push(word), seen.add(key);
   });
   return out;
+}
+
+/** The beginnings of every form the dictionary knows (four letters or more), to tell a slip of an ending from a new word. */
+const stemCache = new WeakMap<Lexicon, Set<string>>();
+function stemsOf(lex: Lexicon): Set<string> {
+  let set = stemCache.get(lex);
+  if (set) return set;
+  set = new Set<string>();
+  for (const e of lex.entries)
+    for (const a of formsOf(e)) {
+      const f = stripMarks(full(a.form)).toLowerCase();
+      for (let n = Math.max(4, f.length - 3); n < f.length; n++) set.add(f.slice(0, n));
+    }
+  stemCache.set(lex, set);
+  return set;
+}
+
+/** A known word written with a wrong ending (puellum for puellam): its beginning is a known form's, its end a little different. */
+function misspelt(w: string, stems: Set<string>): boolean {
+  if (w.length < 5) return false;
+  for (let n = w.length - 1; n >= Math.max(4, w.length - 3); n--) if (stems.has(w.slice(0, n))) return true;
+  return false;
 }
 
 /** The dictionary headword: labōrō for a verb, the nominative for the rest. */

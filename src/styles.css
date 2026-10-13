@@ -2024,3 +2024,8 @@ label.check input { flex: none; width: 18px; height: 18px; margin: 0.2em 0 0; ac
   /* "into view" clears the tab bar at the bottom of a phone */
   html { scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
 }
+
+@media (max-width: 760px) {
+  /* in a round, "into view" also clears the sticky Why? / Next bar above the tab bar */
+  html:has(.ex-next) { scroll-padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+}

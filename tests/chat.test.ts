@@ -426,6 +426,10 @@ describe("New words stick: the words of a message the site does not know", () =>
   it("finds the learner's own new words, each once", () => {
     expect(strangeWords("Iūlia, cor timet! Cor!", lex)).toEqual(["cor", "timet"]);
     expect(strangeWords("Cor meum! In Londīniō sum.", lex)).toEqual(["cor", "Londīniō"]);
+    // a laugh, "ok", or a known word with a slipped ending is no new word
+    expect(strangeWords("Hahaha, ok! Puellum videō et librom legō.", lex)).toEqual([]);
+    // long marks do not make Latin look like English
+    expect(notLatin("Salvē, Iūlia! Amīcam habeō.")).toBe(false);
     expect(strangeWords("Salvē, Marce! Quid agis? Ego in silvā ambulō.", lex)).toEqual([]);
   });
   it("leaves out English messages, emoji codes and single letters", () => {

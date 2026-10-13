@@ -21,7 +21,8 @@ import { derived, useProgress } from "../store";
 import { englishProgress } from "./english";
 import { headword, VerbaSwitch, WordModal } from "./words";
 
-const family = (r: Relatives) => [...(r.en ?? []), ...(r.ru ?? []), ...(r.uk ?? [])];
+// (a word Russian and Ukrainian spell alike shows once)
+const family = (r: Relatives) => [...new Set([...(r.en ?? []), ...(r.ru ?? []), ...(r.uk ?? [])])];
 
 export function Origins() {
   const p = useProgress();
@@ -152,7 +153,7 @@ function FamilyRow({ f, onOpen }: { f: Family; onOpen: () => void }) {
 function StoryModal({ s, onClose, onWord }: { s: CultureStory; onClose: () => void; onWord: (e: Entry) => void }) {
   const d = derived();
   const mine = s.words.map((id) => d.words.find((w) => w.id === id)).filter((w): w is Entry => !!w);
-  const today = [...s.modern.en, ...s.modern.ru, ...s.modern.uk];
+  const today = [...new Set([...s.modern.en, ...s.modern.ru, ...s.modern.uk])];
   return (
     <Modal onClose={onClose} label={s.title}>
       <div class="stack culture-story">

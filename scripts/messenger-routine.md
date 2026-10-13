@@ -199,7 +199,7 @@ def make_picture(prompt, tries=2):
     """One picture of what someone sends: (content type, base64), or None."""
     for _ in range(tries):
         try:
-            job = horde("/generate/async", {"prompt": prompt + STYLE + " ### " + NEGATIVE, "params": {"width": 576, "height": 576, "steps": 25, "n": 1, "sampler_name": "k_euler_a", "cfg_scale": 6}, "models": ["AlbedoBase XL (SDXL)"], "nsfw": False, "censor_nsfw": True, "r2": True})
+            job = horde("/generate/async", {"prompt": prompt + STYLE + " ### " + NEGATIVE, "params": {"width": 576, "height": 576, "steps": 25, "n": 1, "sampler_name": "k_euler_a", "cfg_scale": 6}, "models": ["AlbedoBase XL (SDXL)", "AlbedoBase XL 3.1", "Juggernaut XL", "SDXL 1.0"], "nsfw": False, "censor_nsfw": True, "r2": True})
             t0 = time.time()
             while not horde("/generate/check/" + job["id"]).get("done"):
                 if time.time() - t0 > 900:

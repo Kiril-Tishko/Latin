@@ -5,7 +5,8 @@
 # src/content/photos.ts. The pictures come from AI Horde (aihorde.net), a free
 # crowd of volunteers' image generators that needs no key (anonymous requests
 # wait in a queue, about two minutes each), with its filter on (no nudity).
-# Pictures already made are kept; delete one to make it again.
+# Pictures already made are kept; delete one to make it again (a "seed" in its
+# scene shifts the dice when a picture came out wrong).
 #   python3 -I scripts/content/photos.py [id ...]
 import io, json, os, sys, time, urllib.request, zlib
 from concurrent.futures import ThreadPoolExecutor
@@ -15,7 +16,8 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 OUT = os.path.join(ROOT, "src", "content", "photos")
 API = "https://aihorde.net/api/v2"
 HEAD = {"apikey": os.environ.get("HORDE_KEY", "0000000000"), "Content-Type": "application/json", "Client-Agent": "tabula-latina:1:anon", "User-Agent": "tabula-latina/1.0"}
-MODEL = "AlbedoBase XL (SDXL)"
+# any of these photographic SDXL models: the first free worker takes the job
+MODELS = ["AlbedoBase XL (SDXL)", "AlbedoBase XL 3.1", "Juggernaut XL", "SDXL 1.0"]
 STYLE = ", amateur smartphone photo taken in ancient Rome around AD 100, candid, realistic, natural colours, sharp focus"
 NEGATIVE = "cartoon, painting, drawing, illustration, anime, 3d render, modern clothes, modern buildings, cars, electric light, glasses, text, letters, watermark, logo, signature, nsfw, nude, blood, gore, deformed hands, extra fingers"
 SIZE = 576
@@ -35,8 +37,8 @@ def make(item, tries=3):
         try:
             job = call("/generate/async", {
                 "prompt": item["prompt"] + STYLE + " ### " + NEGATIVE,
-                "params": {"width": SIZE, "height": SIZE, "steps": 25, "n": 1, "sampler_name": "k_euler_a", "cfg_scale": 6, "seed": str(zlib.crc32(item["id"].encode()) % 10**8)},
-                "models": [MODEL], "nsfw": False, "censor_nsfw": True, "r2": True,
+                "params": {"width": SIZE, "height": SIZE, "steps": 25, "n": 1, "sampler_name": "k_euler_a", "cfg_scale": 6, "seed": str(zlib.crc32(item["id"].encode()) % 10**8 + item.get("seed", 0))},
+                "models": MODELS, "nsfw": False, "censor_nsfw": True, "r2": True,
             })
             t0 = time.time()
             while not call("/generate/check/" + job["id"]).get("done"):

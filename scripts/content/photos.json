@@ -113,7 +113,8 @@
  },
  {
   "id": "gaius-goat",
-  "prompt": "selfie of a weathered grey-haired Roman farmer in his fifties with a short grey beard and a rough brown wool tunic, with a white goat, olive grove behind"
+  "prompt": "selfie of a weathered grey-haired Roman farmer in his fifties with a short grey beard and a rough brown wool tunic, cheek to cheek with a white goat, the goat's head big in the foreground, olive grove behind",
+  "seed": 7
  },
  {
   "id": "gaius-goats-tunic",
@@ -149,7 +150,8 @@
  },
  {
   "id": "gaius-pig",
-  "prompt": "a big pig running through a vineyard, a farmer in a tunic chasing it with a stick"
+  "prompt": "a big pink pig running towards the camera between rows of vines, a farmer in a tunic far behind chasing it with a stick",
+  "seed": 7
  },
  {
   "id": "gaius-amphorae",
@@ -213,7 +215,8 @@
  },
  {
   "id": "claudia-charcoal",
-  "prompt": "a white wall with a child's big charcoal drawing of a horse and a ship, a little boy holding charcoal looking guilty"
+  "prompt": "a big messy charcoal scribble of a horse and a ship drawn straight onto a white plaster wall, a little boy in a tunic holding a stick of charcoal, looking guilty",
+  "seed": 7
  },
  {
   "id": "claudia-sea",
@@ -365,7 +368,8 @@
  },
  {
   "id": "any-lion",
-  "prompt": "a lion in a wooden cage on a cart near the Colosseum, roaring, people keeping their distance"
+  "prompt": "a big male lion with a shaggy mane inside a wooden cage on an ox cart, near the Colosseum, roaring, people keeping their distance",
+  "seed": 7
  },
  {
   "id": "any-tavern-fight",
@@ -377,7 +381,8 @@
  },
  {
   "id": "any-wedding",
-  "prompt": "a Roman wedding procession at night with torches, a bride in an orange veil, flute players and laughing guests"
+  "prompt": "a Roman wedding procession at night with torches, a bride in an orange veil, flute players and laughing guests",
+  "seed": 7
  },
  {
   "id": "any-saturnalia",

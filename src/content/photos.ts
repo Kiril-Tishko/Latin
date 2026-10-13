@@ -146,7 +146,7 @@ export const PHOTOS: Photo[] = [
   { id: "any-sleeping-guard", en: "the guard is asleep", who: "any" },
   { id: "any-hairdo", en: "the new hairstyle everyone has", who: "any" },
   { id: "any-goat-roof", en: "a goat on the roof. why", who: "any" },
-  { id: "any-stuck-cart", en: "the cart lost a wheel", who: "any" },
+  { id: "any-stuck-cart", en: "a cart of cabbages blocking the whole street", who: "any" },
   { id: "any-pigeon", en: "a pigeon stole my bread", who: "any" },
   { id: "any-dog-sleep", en: "my neighbour's dog, guarding nothing", who: "any" },
 ];

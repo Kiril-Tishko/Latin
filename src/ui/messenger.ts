@@ -635,6 +635,8 @@ export async function askCoach(id: string, question: string, turns: CoachTurn[],
 
 let actaWriting = false;
 let actaError = "";
+/** The board being written by this page now (a second call waits for it instead of writing another). */
+let actaRun: Promise<void> | null = null;
 
 /** Whether today's board is being written, or why it could not be. */
 export const actaState = () => ({ writing: actaWriting, error: actaError });
@@ -654,12 +656,26 @@ export function actaUnread(now = Date.now()): boolean {
  * account's chats come in first, so a board another device wrote is not
  * written twice; a board asked for in the last quarter of an hour is waited for.
  */
-export async function ensureActa(force = false): Promise<void> {
-  if (actaWriting) return;
+export function ensureActa(force = false): Promise<void> {
+  // one board at a time: a second call (the page and the messenger opening together) waits for the first
+  if (actaRun) return actaRun;
+  actaRun = writeTodaysBoard(force).finally(() => {
+    actaRun = null;
+  });
+  return actaRun;
+}
+
+async function writeTodaysBoard(force: boolean): Promise<void> {
   await Promise.race([threadsReady, new Promise((r) => setTimeout(r, 6000))]);
   const now = Date.now();
-  if (actaWriting || boardOf(getThread(ACTA_ID), actaKey(now)).length) return;
-  if (!force && meta.actaAt && now - meta.actaAt < 15 * 60_000) return;
+  const today = actaKey(now);
+  if (boardOf(getThread(ACTA_ID), today).length) return;
+  // asked for a moment ago (another device, or before a reload): wait for it, but let the learner ask again
+  if (!force && meta.actaAt && now - meta.actaAt < 15 * 60_000) {
+    actaError = "The scribe started on today's board a moment ago.";
+    emit();
+    return;
+  }
   const ctx = promptCtx(now);
   if (!ctx) return;
   const d = await deps();
@@ -673,9 +689,15 @@ export async function ensureActa(force = false): Promise<void> {
   meta = { ...meta, actaAt: now };
   refreshLives(meta, PEOPLE.map((p) => p.id), now);
   saveMeta();
+  emit();
   try {
-    const posts = await writeActa(meta, ctx, d, earlierBoards(getThread(ACTA_ID), now));
-    if (!posts.length) throw new Error("empty");
+    const written = await writeActa(meta, ctx, d, earlierBoards(getThread(ACTA_ID), now));
+    if (!written.length) throw new Error("empty");
+    // another device's board came in meanwhile: the first one stays
+    if (boardOf(getThread(ACTA_ID), today).length) return;
+    // stamped when it comes out, so a look at the list while the scribe wrote does not mark it read
+    const at = Date.now();
+    const posts = written.map((m, i) => ({ ...m, at: at + i }));
     const t = getThread(ACTA_ID);
     saveThread(merge(t, { ...t, messages: [...t.messages, ...posts] }));
   } catch (e) {

@@ -27,7 +27,7 @@ export const PHOTOS: Photo[] = [
   { id: "iulia-theatre", en: "the theatre tonight!!", who: ["iulia"] },
   { id: "iulia-dressing-table", en: "where is my earring??", who: ["iulia"] },
   { id: "iulia-wax-letter", en: "a letter with no name… who??", who: ["iulia"] },
-  { id: "iulia-rain", en: "rain. all day. bored.", who: ["iulia"] },
+  { id: "iulia-rain", en: "rain in the atrium. all day. bored.", who: ["iulia"] },
   { id: "iulia-stola", en: "new dress for the festival: yes or no?", who: ["iulia"] },
   { id: "iulia-mirror", en: "me trying to look serious", who: ["iulia"] },
   { id: "iulia-tutor", en: "my Greek tutor fell asleep in the middle of Homer", who: ["iulia"] },

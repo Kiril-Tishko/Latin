@@ -126,7 +126,7 @@ export const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+
  * still slips is kept with its unknown words marked (better than a hole in the
  * conversation).
  */
-export async function vetAll<T extends Draft>(drafts: T[], ctx: PromptCtx, deps: Deps): Promise<(T & { newWords?: string[] })[]> {
+export async function vetAll<T extends Draft>(drafts: T[], ctx: PromptCtx, deps: Deps, texting = true): Promise<(T & { newWords?: string[] })[]> {
   const out: (T & { newWords?: string[] })[] = drafts.map((d) => ({ ...d, la: withMacrons(clean(d.la), deps.lex), en: clean(d.en) }));
   // one or two new words a person used in a strong moment, each with its meaning, are theirs to use
   const glossed = (d: T, v: ReturnType<typeof vetMessage>) =>
@@ -135,7 +135,7 @@ export async function vetAll<T extends Draft>(drafts: T[], ctx: PromptCtx, deps:
   if (bad.length) {
     try {
       const fixed = await deps.ask<{ messages?: { la?: string; en?: string }[] }>(
-        repairPrompt(bad.map((b) => ({ la: out[b.i].la, en: out[b.i].en, issues: b.v.issues })), ctx),
+        repairPrompt(bad.map((b) => ({ la: out[b.i].la, en: out[b.i].en, issues: b.v.issues })), ctx, texting),
         { ...deps.opts, effort: "low", cache: false },
       );
       bad.forEach((b, k) => {

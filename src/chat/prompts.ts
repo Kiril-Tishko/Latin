@@ -485,11 +485,13 @@ export function storyPersonPrompt(text: string, meta: Meta, ctx: PromptCtx): str
 }
 
 /** Asks for messages that broke the limits to be written again. */
-export function repairPrompt(bad: { la: string; en: string; issues: string[] }[], ctx: PromptCtx): string {
+export function repairPrompt(bad: { la: string; en: string; issues: string[] }[], ctx: PromptCtx, texting = true): string {
   return [
-    `These messages for a Latin messenger break the learner's limits. Rewrite each one to say the same thing (or something close, or simpler) with ONLY the allowed words, forms and grammar below. Keep the person's voice, mood and emoji.`,
+    texting
+      ? `These messages for a Latin messenger break the learner's limits. Rewrite each one to say the same thing (or something close, or simpler) with ONLY the allowed words, forms and grammar below. Keep the person's voice, mood and emoji.`
+      : `These lines of a daily notice board (Rome's Ācta Diurna, read by a beginner) break the learner's limits. Rewrite each one as a plain sentence of news that says the same thing (or something close, or simpler) with ONLY the allowed words, forms and grammar below: never a single word or an emoji.`,
     bad.map((b, i) => `${i + 1}. «${b.la}» (${b.en}). Problems: ${b.issues.join("; ")}`).join("\n"),
-    languageBlock(ctx),
+    languageBlock(ctx, texting),
     `Reply with only JSON: {"messages": [{"la": "<Latin>", "en": "<English>"}]} in the same order, one for each.`,
   ].join("\n\n");
 }

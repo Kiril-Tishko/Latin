@@ -65,6 +65,7 @@ import {
   setBlocked,
   setMuted,
   storyPerson,
+  todaysBoard,
   touchLives,
   typingIn,
   useMessenger,
@@ -363,7 +364,7 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
             </button>
           );
         })}
-        {!rows.length && <p class="muted small list-note">Nothing found for "{query.trim()}".</p>}
+        {!rows.length && !(q && actaMatches(q, now)) && <p class="muted small list-note">Nothing found for "{query.trim()}".</p>}
         <ListFoot />
       </div>
       {newChat && <NewChat onClose={() => setNewChat(false)} onSomeoneNew={() => { setNewChat(false); void find(); }} />}
@@ -988,7 +989,7 @@ function ActaView({ now }: { now: number }) {
               <Icon.quill /> <span lang="la">Scrība scrībit…</span> The scribe is writing today's board.
             </div>
           )}
-          {error && !writing && (
+          {error && !writing && !todaysBoard(now).length && (
             <div class="chat-error well small">
               {error} <button class="linkish" onClick={() => void ensureActa(true)}>Try again</button>
             </div>

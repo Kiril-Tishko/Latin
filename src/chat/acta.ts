@@ -119,7 +119,8 @@ export async function writeActa(meta: Meta, ctx: PromptCtx, deps: Deps, earlier:
   const items = itemsOf(raw);
   // every title and line vetted like a message (one rewrite asked for what slips)
   const drafts = items.flatMap((x, i) => [...(x.title.la ? [{ i, j: -1, ...x.title }] : []), ...x.lines.map((l, j) => ({ i, j, ...l }))]);
-  const vetted = await vetAll(drafts, ctx, deps);
+  // (a board's lines are rewritten as news, not as texting)
+  const vetted = await vetAll(drafts, ctx, deps, false);
   for (const d of vetted) {
     const item = items[d.i];
     if (d.j < 0) item.title = { la: d.la, en: d.en };

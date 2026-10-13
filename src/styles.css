@@ -1318,7 +1318,11 @@ main.page.msgr-page { padding-block: 14px; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar-letter { display: grid; place-items: center; width: 100%; height: 100%; font-family: var(--f-display); color: var(--gold); }
 .group-avatar { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; background: var(--gold-soft); width: var(--av, var(--av-size, 44px)); height: var(--av, var(--av-size, 44px)); }
-.group-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.group-avatar img { width: 100%; height: 100%; object-fit: cover; min-width: 0; min-height: 0; }
+/* fewer than four faces fill the circle: one whole, two side by side, three with the first tall */
+.group-avatar[data-n="0"], .group-avatar[data-n="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.group-avatar[data-n="2"] { grid-template-rows: 1fr; }
+.group-avatar[data-n="3"] img:first-child { grid-row: span 2; }
 .presence-dot {
   position: absolute;
   right: 3%;
@@ -1962,3 +1966,44 @@ main.page.msgr-page { padding-block: 14px; }
 .bubble.deleted { cursor: default; opacity: 0.75; }
 .bubble.deleted .bubble-text { color: var(--ink-2); font-size: 0.95rem; }
 .profile-status { font-family: var(--f-text); font-style: italic; color: var(--ink-2); }
+
+/* ---- Nūntiī: the learner's own abilities (photos, voice, groups, block, mute) ---- */
+.muted-mark { font-size: 0.75rem; opacity: 0.6; margin-left: 4px; }
+.unread-badge.quiet { background: var(--m-line); color: var(--ink-2); box-shadow: none; }
+.pic-wait { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; width: min(300px, 62vw); padding: 14px; border-radius: 8px; border: 1px dashed var(--m-line); background: var(--m-line-soft); cursor: default; }
+.pic-wait-icon { grid-row: span 2; font-size: 1.6rem; animation: pic-pulse 1.6s ease-in-out infinite; }
+.pic-wait.failed .pic-wait-icon { animation: none; opacity: 0.5; }
+.pic-wait-text { font-family: var(--f-ui); color: var(--ink-2); }
+.pic-wait-en { color: var(--ink-2); line-height: 1.3; }
+@keyframes pic-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .pic-wait-icon { animation: none; } }
+.photo-draft, .voice-draft { display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin-bottom: 6px; border-radius: 10px; background: var(--m-line-soft); }
+.photo-draft img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; }
+.photo-draft span { flex: 1; }
+.voice-draft svg { width: 18px; height: 18px; flex: none; }
+.voice-draft .linkish { margin-left: auto; }
+.send-btn.voice { background: linear-gradient(#8a3b2c, #6a2a1e); }
+.emoji-actions { display: flex; gap: 6px; padding-bottom: 8px; margin-bottom: 6px; border-bottom: 1px solid var(--m-line-soft); }
+.emoji-action { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--m-line); background: var(--m-panel); font-family: var(--f-ui); font-size: 0.9rem; color: var(--ink); cursor: pointer; }
+.emoji-action svg { width: 18px; height: 18px; }
+.emoji-action[aria-pressed="true"] { border-color: var(--gold); background: var(--m-line-soft); }
+.react-row.mine { justify-content: flex-end; padding-left: 0; }
+.delete-mine { color: var(--bad, #9b2d20); }
+.delete-mine.sure { border-color: currentColor; font-weight: 600; }
+.chat-confirm { margin: 6px 10px 0; gap: 8px; }
+.blocked-bar { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 12px; color: var(--ink-2); }
+.person-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 0; border-radius: 10px; background: none; text-align: left; font: inherit; color: inherit; }
+button.person-row { cursor: pointer; }
+button.person-row:hover { background: var(--m-line-soft); }
+.person-row-job { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-mark { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--m-line); color: var(--panel); font-weight: 700; }
+.pick-mark.on { background: var(--gold); border-color: var(--gold); }
+.new-chat-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.story-seek { flex-wrap: nowrap; gap: 8px; }
+.story-seek .input { flex: 1; min-width: 0; }
+.group-sheet > .group-avatar { align-self: center; }
+.profile-actions { gap: 8px; }
+@media (max-width: 520px) {
+  .story-seek { flex-wrap: wrap; }
+  .story-seek .btn { width: 100%; }
+}

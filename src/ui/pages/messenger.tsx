@@ -9,13 +9,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import { ENGRAVINGS } from "../../content/engravings";
 import { ROMAN_EMOJI } from "../../content/roman-emoji";
 import { emojiCodes, onlyEmoji, showEmoji, withoutEmoji } from "../../chat/emoji";
-import { GROUP, PEOPLE } from "../../content/people";
+import { GROUP, PEOPLE, SIDE_PEOPLE } from "../../content/people";
 import { phrasebook } from "../../content/phrases";
 import { PORTRAIT_BY_ID } from "../../content/portraits";
 import { localTime, moodText, statusAt } from "../../chat/life";
-import { arrived, awayNow, Check, CoachTurn, deletedNow, groupName, isBlocked, membersOf, Msg, preview, REACTIONS, reactionsOf, SYS, Thread, unreadCount, voiceOf, Who, whoOf } from "../../chat/model";
+import { arrived, awayNow, Check, CoachTurn, deletedNow, groupMembers, groupName, iBlocked, isBlocked, isMuted, membersOf, Msg, preview, REACTIONS, reactionsOf, SYS, Thread, unreadCount, voiceOf, Who, whoOf } from "../../chat/model";
 import { romanDate, romeDay, todayLine } from "../../chat/calendar";
-import { PHOTO_BY_ID, photoSrc } from "../../content/photos";
+import { PHOTO_BY_ID, PHOTO_CREDIT, photoSrc } from "../../content/photos";
 import { speak, stopSpeaking, useSpeaking, useVoices } from "../../audio/speech";
 import { allowedWords, CHAT_WORD_LIST, headword, notLatin, strangeWords } from "../../chat/words";
 import { Analysis, annotate } from "../../latin/analyze";
@@ -31,29 +31,45 @@ import { go } from "../nav";
 import { useScreen } from "../screen";
 import {
   actaState,
+  addToGroup,
   allThreads,
   answer,
   askCoach,
+  canSendPhotos,
+  chatExists,
   chatWords,
   check,
+  clearChat,
   composing,
   connectMessenger,
+  createGroup,
+  deleteMine,
   ensureActa,
   errorOf,
   findSomeone,
   forget,
   getMeta,
   getThread,
+  leaveGroup,
   markRead,
   opened,
+  picOf,
+  picSrc,
   presence,
   reactTo,
+  removeFromGroup,
+  renameGroup,
   send,
+  sendPhoto,
+  sendVoice,
+  setBlocked,
+  setMuted,
+  storyPerson,
   touchLives,
   typingIn,
   useMessenger,
 } from "../messenger";
-import { derived, update, useProgress } from "../store";
+import { derived, getProgress, update, useProgress } from "../store";
 import { storage } from "../platform";
 import { WordModal } from "./words";
 import { knownWord, openAddWord } from "../addword";
@@ -75,12 +91,12 @@ export function Avatar({ who, size = 44, dot }: { who: Pick<Who, "portrait" | "n
   );
 }
 
-/** The group's picture: four of its faces. */
-function GroupAvatar({ size = 44 }: { size?: number }) {
+/** A group's picture: four of its faces. */
+function GroupAvatar({ id = GROUP.id, size = 44 }: { id?: string; size?: number }) {
   const meta = getMeta();
   return (
-    <span class="avatar group-avatar" style={{ "--av-size": `${size}px` }} aria-label={groupName(meta)}>
-      {membersOf(GROUP.id, meta).slice(0, 4).map((p) => (
+    <span class="avatar group-avatar" data-n={Math.min(4, membersOf(id, meta).length)} style={{ "--av-size": `${size}px` }} aria-label={groupName(meta, id)}>
+      {membersOf(id, meta).slice(0, 4).map((p) => (
         <img key={p.id} src={PORTRAIT_BY_ID.get(p.portrait)?.src} alt="" style={p.flip ? { transform: "scaleX(-1)" } : undefined} />
       ))}
     </span>
@@ -182,10 +198,10 @@ export function Messenger({ thread }: { thread?: string }) {
   }, [!!me]);
   const t = thread ? getThread(thread) : null;
   const acta = thread === ACTA_ID;
-  const known = t && (acta || thread === GROUP.id || PEOPLE.some((x) => x.id === thread) || getMeta().strangers[thread!]) && !t.gone;
+  const known = t && (acta || chatExists(thread!)) && !t.gone;
   useScreen(
     "page",
-    acta ? "Messenger: the Ācta Diurna (Rome's daily board of news)" : known ? `Messenger: chat with ${thread === GROUP.id ? `the group ${groupName(getMeta())}` : nameOf(thread!)}` : "Messenger",
+    acta ? "Messenger: the Ācta Diurna (Rome's daily board of news)" : known ? `Messenger: chat with ${t!.kind === "group" ? `the group ${groupName(getMeta(), thread!)}` : nameOf(thread!)}` : "Messenger",
     () => (acta ? boardText(t!, now) : known ? screenText(t!, now) : "The list of chats in the messenger."),
   );
   return (
@@ -213,7 +229,7 @@ function EmptyChat() {
   return (
     <section class="chat chat-empty msgr-panel">
       <Sprig cls="empty-sprig" />
-      <p class="muted ui">Choose a chat, or find someone new.</p>
+      <p class="muted ui">Choose a chat, or start a new one.</p>
     </section>
   );
 }
@@ -260,14 +276,17 @@ function Setup() {
 
 // ------------------------------------------------------------------ list
 
+/** The messages that show: arrived, and not cleared away by the learner. */
+const visible = (t: Thread, now: number) => arrived(t, now).filter((m) => !t.clearedAt || m.at > t.clearedAt);
+
 function lastOf(t: Thread, now: number): Msg | undefined {
-  return arrived(t, now).at(-1);
+  return visible(t, now).at(-1);
 }
 
 /** Does a chat match a search: a name, or any message, Latin or English (long marks never needed)? */
 function matches(t: Thread, who: Who | null, q: string, now: number): boolean {
   if (!q) return true;
-  const hay = [who?.name ?? groupName(getMeta()), ...(who ? [] : membersOf(GROUP.id, getMeta()).map((p) => p.name)), ...arrived(t, now).flatMap((m) => [m.la, m.en ?? ""])];
+  const hay = [who?.name ?? groupName(getMeta(), t.id), ...(who ? [] : membersOf(t.id, getMeta()).map((p) => p.name)), ...visible(t, now).flatMap((m) => [m.la, m.en ?? ""])];
   return hay.some((s) => plain(s).includes(q));
 }
 
@@ -276,6 +295,7 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
   const [finding, setFinding] = useState<{ ctl: AbortController } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [newChat, setNewChat] = useState(false);
   const q = plain(query.trim());
   const rows = allThreads()
     .map((t) => ({ t, last: lastOf(t, now), who: t.kind === "group" ? null : whoOf(t.id, meta) }))
@@ -297,8 +317,8 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
           <h1 class="msgr-title">Nūntiī</h1>
           <Sprig cls="title-sprig" />
         </div>
-        <button id="find-someone" class="btn gold find-btn" onClick={() => void find()} disabled={!!finding} title="Meet someone new from anywhere in the Roman world">
-          <Icon.plus /> Someone new
+        <button id="new-chat" class="btn gold find-btn" onClick={() => setNewChat(true)} disabled={!!finding} title="Write to anyone: a friend, someone from the story, someone new, or a group of your own">
+          <Icon.plus /> New chat
         </button>
       </div>
       {/* the day in Rome, where the friends live: the Roman date and a festival */}
@@ -316,10 +336,11 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
           const typing = typingIn(t, now);
           return (
             <button key={t.id} role="listitem" class={`chat-row${active === t.id ? " active" : ""}${unread ? " unread" : ""}`} onClick={() => go({ page: "messenger", thread: t.id })} id={`chat-${t.id}`}>
-              {who ? <Avatar who={who} size={64} dot={dotOf(who, t, now)} /> : <GroupAvatar size={64} />}
+              {who ? <Avatar who={who} size={64} dot={dotOf(who, t, now)} /> : <GroupAvatar id={t.id} size={64} />}
               <span class="chat-row-main">
                 <span class="chat-row-top">
-                  <span class="chat-row-name" lang="la">{who?.name ?? groupName(meta)}</span>
+                  <span class="chat-row-name" lang="la">{who?.name ?? groupName(meta, t.id)}</span>
+                  {isMuted(meta, t.id) && <span class="muted-mark" title="Muted" aria-label="muted">🔕</span>}
                   {last && <span class="chat-row-time">{when(last.at, now)}</span>}
                 </span>
                 <span class="chat-row-bottom">
@@ -332,10 +353,10 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
                         <span lang="la">{showEmoji(preview(last, now))}</span>
                       </>
                     ) : (
-                      <span>{who ? `${who.job}, ${who.city}` : membersOf(GROUP.id, meta).map((x) => x.name).join(", ")}</span>
+                      <span>{who ? `${who.job}, ${who.city}` : membersOf(t.id, meta).map((x) => x.name).join(", ")}</span>
                     )}
                   </span>
-                  {unread > 0 && <span class="unread-badge" aria-label={`${unread} unread`}>{roman(unread)}</span>}
+                  {unread > 0 && <span class={`unread-badge${isMuted(meta, t.id) ? " quiet" : ""}`} aria-label={`${unread} unread`}>{roman(unread)}</span>}
                 </span>
               </span>
               <span class="chat-row-go" aria-hidden="true"><Icon.chevron /></span>
@@ -345,6 +366,7 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
         {!rows.length && <p class="muted small list-note">Nothing found for "{query.trim()}".</p>}
         <ListFoot />
       </div>
+      {newChat && <NewChat onClose={() => setNewChat(false)} onSomeoneNew={() => { setNewChat(false); void find(); }} />}
     </aside>
   );
 }
@@ -484,12 +506,16 @@ function ChatView({ id, now }: { id: string; now: number }) {
   const group = t.kind === "group";
   const who = group ? null : members[0];
   const [profile, setProfile] = useState<Who | null>(null);
+  const [groupSheet, setGroupSheet] = useState(false);
   const [openEn, setOpenEn] = useState<string[]>([]);
   const [allEn, setAllEn] = useState(false);
   const [card, setCard] = useState<{ msg: string; index: number } | null>(null);
-  // voice messages whose words are shown, and the photo opened large
+  // voice messages whose words are shown, and the photo opened large (a photo of theirs, or a picture by its id)
   const [voiceText, setVoiceText] = useState<string[]>([]);
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<{ photo?: string; pic?: string; en?: string } | null>(null);
+  // a message of the learner's about to be deleted (the second tap deletes it), and the chat about to be cleared
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
   const [wordOpen, setWordOpen] = useState<Entry | null>(null);
   const [words, setWords] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -500,7 +526,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
   const [flash, setFlash] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
-  const shown = arrived(t, now);
+  const shown = visible(t, now);
   const firstUnread = useRef<string | null | undefined>(undefined);
   if (firstUnread.current === undefined) firstUnread.current = shown.find((m) => m.from !== "me" && m.at > t.readAt)?.id ?? null;
   const lex = chatWords().lex;
@@ -569,7 +595,9 @@ function ChatView({ id, now }: { id: string; now: number }) {
   };
 
   const status = who ? statusAt(who.day, who.tz, now) : null;
-  const sub = who ? presence(who, t, now, status!) : typingWho ? `${nameOf(typingWho)} is typing…` : members.map((w) => w.name).join(", ");
+  const sub = who ? presence(who, t, now, status!) : typingWho ? `${nameOf(typingWho)} is typing…` : [...members.map((w) => w.name), "you"].join(", ");
+  const muted = isMuted(meta, id);
+  const blockedByMe = !!who && iBlocked(meta, who.id);
   const error = errorOf(id);
 
   /** A tap on a word shows what it is under the message; elsewhere on the message, its English. */
@@ -592,13 +620,13 @@ function ChatView({ id, now }: { id: string; now: number }) {
   let lastDay = "";
   const lastMine = shown.filter((m) => m.from === "me").at(-1)?.id;
   return (
-    <section class="chat msgr-panel" aria-label={`Chat with ${who?.name ?? groupName(meta)}`}>
+    <section class="chat msgr-panel" aria-label={`Chat with ${who?.name ?? groupName(meta, id)}`}>
       <header class="chat-head">
         <button class="btn ghost small chat-back" onClick={() => go({ page: "messenger" })} aria-label="Back to the chats">←</button>
-        <button class="chat-head-who" onClick={() => who && setProfile(who)} disabled={!who} id="chat-profile">
-          {who ? <Avatar who={who} size={72} dot={dotOf(who, t, now)} /> : <GroupAvatar size={72} />}
+        <button class="chat-head-who" onClick={() => (who ? setProfile(who) : setGroupSheet(true))} id="chat-profile">
+          {who ? <Avatar who={who} size={72} dot={dotOf(who, t, now)} /> : <GroupAvatar id={id} size={72} />}
           <span class="stack" style={{ gap: 0, minWidth: 0 }}>
-            <span class="chat-head-name" lang="la">{who?.name ?? groupName(meta)}</span>
+            <span class="chat-head-name" lang="la">{who?.name ?? groupName(meta, id)}{muted && <span class="muted-mark" aria-label="muted"> 🔕</span>}</span>
             <span class={`chat-head-sub${typingWho ? " typing-text" : ""}`}>{who && typingWho ? "typing…" : sub}</span>
           </span>
         </button>
@@ -624,8 +652,15 @@ function ChatView({ id, now }: { id: string; now: number }) {
             </button>
             {menu && (
               <div class="menu-pop" role="menu" onClick={() => setMenu(false)}>
-                {who && <button role="menuitem" onClick={() => setProfile(who)}>Profile</button>}
+                {who ? <button role="menuitem" onClick={() => setProfile(who)}>Profile</button> : <button role="menuitem" id="group-info" onClick={() => setGroupSheet(true)}>Group: name and people</button>}
                 <button role="menuitem" onClick={() => setAllEn(!allEn)}>{allEn ? "Hide the English" : "Show the English of all"}</button>
+                <button role="menuitem" id="mute-chat" onClick={() => setMuted(id, !muted)}>{muted ? "Unmute" : "Mute (no notices, no count)"}</button>
+                <button role="menuitem" id="clear-chat" onClick={() => setClearing(true)}>Clear chat…</button>
+                {who && (
+                  <button role="menuitem" id="block-who" onClick={() => setBlocked(who.id, !blockedByMe)}>
+                    {blockedByMe ? `Unblock ${who.name}` : `Block ${who.name}`}
+                  </button>
+                )}
                 {who?.stranger && <button role="menuitem" onClick={() => setProfile(who)}>Say goodbye…</button>}
               </div>
             )}
@@ -634,6 +669,13 @@ function ChatView({ id, now }: { id: string; now: number }) {
         <Sprig cls="head-sprig" flip />
       </header>
 
+      {clearing && (
+        <div class="chat-confirm well row" role="alertdialog" aria-label="Clear this chat?">
+          <span class="ui small" style={{ flex: 1 }}>Clear this chat? Its messages disappear on your side; {group ? "they" : who?.name} still remember{group ? "" : "s"} them.</span>
+          <button class="btn small" id="clear-yes" onClick={() => { clearChat(id); setClearing(false); }}>Clear</button>
+          <button class="btn ghost small" onClick={() => setClearing(false)}>Keep</button>
+        </div>
+      )}
       {search !== null && (
         <div class="chat-find">
           <Icon.search />
@@ -708,12 +750,13 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     {group && sender && firstOfRun && <span class="bubble-name" lang="la">{sender.name}</span>}
                     {m.re && <Quote msg={t.messages.find((x) => x.id === m.re)} onJump={() => jumpTo(m.re!)} />}
                     {m.photo && photoSrc(m.photo) && (
-                      <button class="bubble-photo" onClick={(e) => { e.stopPropagation(); setPhoto(m.photo!); }} aria-label={`Photo: ${PHOTO_BY_ID.get(m.photo)?.en ?? ""}`}>
+                      <button class="bubble-photo" onClick={(e) => { e.stopPropagation(); setPhoto({ photo: m.photo }); }} aria-label={`Photo: ${PHOTO_BY_ID.get(m.photo)?.en ?? ""}`}>
                         <img src={photoSrc(m.photo)} alt={PHOTO_BY_ID.get(m.photo)?.en ?? ""} loading="lazy" />
                       </button>
                     )}
+                    {m.pic && <PicInBubble m={m} onOpen={() => setPhoto({ pic: m.pic, en: m.picEn })} />}
                     {m.voice && (
-                      <VoiceNote m={m} who={sender} open={voiceText.includes(m.id)} onText={() => setVoiceText(voiceText.includes(m.id) ? voiceText.filter((x) => x !== m.id) : [...voiceText, m.id])} />
+                      <VoiceNote m={m} who={mine ? learnerVoice() : sender} open={voiceText.includes(m.id)} onText={() => setVoiceText(voiceText.includes(m.id) ? voiceText.filter((x) => x !== m.id) : [...voiceText, m.id])} />
                     )}
                     {m.la && (!m.voice || voiceText.includes(m.id) || !audioReady()) && (
                       <span class="bubble-text">
@@ -729,6 +772,31 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     <Reactions m={m} id={id} now={now} />
                   </div>
                 </div>
+                )}
+                {mine && openEn.includes(m.id) && (
+                  <div class="react-row mine" role="group" aria-label="Your message">
+                    <button
+                      class="react-reply"
+                      onClick={() => {
+                        setReplyTo(m.id);
+                        setOpenEn(openEn.filter((x) => x !== m.id));
+                        document.getElementById("composer")?.focus();
+                      }}
+                    >
+                      <Icon.reply /> Reply
+                    </button>
+                    <button
+                      class={`react-reply delete-mine${deleting === m.id ? " sure" : ""}`}
+                      onClick={() => {
+                        if (deleting !== m.id) return setDeleting(m.id);
+                        deleteMine(id, m.id);
+                        setDeleting(null);
+                        setOpenEn(openEn.filter((x) => x !== m.id));
+                      }}
+                    >
+                      {deleting === m.id ? "Delete for everyone?" : "Delete"}
+                    </button>
+                  </div>
                 )}
                 {!mine && openEn.includes(m.id) && (
                   <div class="react-row" role="group" aria-label="React or reply">
@@ -771,11 +839,19 @@ function ChatView({ id, now }: { id: string; now: number }) {
         </div>
       </div>
 
-      <Composer id={id} replyTo={replyTo ? t.messages.find((m) => m.id === replyTo) ?? null : null} onReplied={() => setReplyTo(null)} />
+      {blockedByMe ? (
+        <div class="composer blocked-bar ui">
+          <span>You blocked {who!.name}. Nothing they send reaches you.</span>
+          <button class="btn small" id="unblock" onClick={() => setBlocked(who!.id, false)}>Unblock</button>
+        </div>
+      ) : (
+        <Composer id={id} replyTo={replyTo ? t.messages.find((m) => m.id === replyTo) ?? null : null} onReplied={() => setReplyTo(null)} />
+      )}
       {profile && <Profile who={profile} t={getThread(profile.id)} now={now} onClose={() => setProfile(null)} />}
+      {groupSheet && <GroupSheet id={id} onClose={() => setGroupSheet(false)} />}
       {words && <WordsSheet onClose={() => setWords(false)} onPick={(f) => insertIntoComposer(id, f)} />}
       {wordOpen && <WordModal e={wordOpen} onClose={() => setWordOpen(null)} />}
-      {photo && <PhotoView id={photo} onClose={() => setPhoto(null)} />}
+      {photo && <PhotoView {...photo} onClose={() => setPhoto(null)} />}
     </section>
   );
 }
@@ -1001,7 +1077,7 @@ function VoiceNote({ m, who, open, onText }: { m: Msg; who: Who | null; open: bo
   const id = `voice-${m.id}`;
   const on = speaking === id;
   const ready = audioReady();
-  const v = who ? voiceOf(who) : { g: "m" as const, pitch: 1, rate: 0.9 };
+  const v = who ? voiceOf(who) : myVoice();
   const bars = useMemo(() => waveform(m.id, 26), [m.id]);
   const secs = voiceSeconds(m.la, v.rate);
   return (
@@ -1035,27 +1111,56 @@ function VoiceNote({ m, who, open, onText }: { m: Msg; who: Who | null; open: bo
 }
 
 /** A photo, large, with what it shows and where the picture comes from. */
-function PhotoView({ id, onClose }: { id: string; onClose: () => void }) {
-  const p = PHOTO_BY_ID.get(id);
+function PhotoView({ photo, pic, en, onClose }: { photo?: string; pic?: string; en?: string; onClose: () => void }) {
+  const p = photo ? PHOTO_BY_ID.get(photo) : undefined;
+  const made = pic ? picOf(pic) : undefined;
+  const src = photo ? photoSrc(photo) : picSrc(made);
+  const what = p?.en ?? en ?? made?.en ?? "";
+  const mine = made?.by === "me";
   return (
-    <Modal wide onClose={onClose} label="Photo" screen={`A photo in the chat: ${p?.en ?? id}. ${p?.what ?? ""}`}>
+    <Modal wide onClose={onClose} label="Photo" screen={`A photo in the chat${what ? `: ${what}` : ""}.`}>
       <div class="stack photo-view">
         <div class="spread">
           <span class="eyebrow">Photo</span>
           <button class="btn ghost small" onClick={onClose} aria-label="Close"><Icon.close /></button>
         </div>
-        <img src={photoSrc(id)} alt={p?.en ?? ""} />
-        {p && (
-          <div class="stack" style={{ gap: "4px" }}>
-            <p style={{ margin: 0 }}>{p.en}</p>
-            <p class="small muted" style={{ margin: 0 }}>{p.what}</p>
-            <p class="small muted" style={{ margin: 0 }}>{p.credit}</p>
-          </div>
-        )}
+        {src && <img src={src} alt={what} />}
+        <div class="stack" style={{ gap: "4px" }}>
+          {what && <p style={{ margin: 0 }}>{mine ? `What they saw: ${what}` : what}</p>}
+          {!mine && <p class="small muted" style={{ margin: 0 }}>{PHOTO_CREDIT}</p>}
+        </div>
       </div>
     </Modal>
   );
 }
+
+/**
+ * A picture in a message: a fresh one the people asked for (it shows as
+ * "sending" until it is made), or a photo the learner sent.
+ */
+function PicInBubble({ m, onOpen }: { m: Msg; onOpen: () => void }) {
+  const p = picOf(m.pic!);
+  const src = picSrc(p);
+  if (src)
+    return (
+      <button class="bubble-photo" onClick={(e) => { e.stopPropagation(); onOpen(); }} aria-label={`Photo${m.picEn ? `: ${m.picEn}` : ""}`}>
+        <img src={src} alt={m.picEn ?? "a photo"} />
+      </button>
+    );
+  // still being made, or it never came: what it shows, in words
+  const failed = p?.status === "failed";
+  return (
+    <span class={`bubble-photo pic-wait${failed ? " failed" : ""}`} role="img" aria-label={failed ? "A photo that did not come through" : "A photo, still coming"}>
+      <span class="pic-wait-icon" aria-hidden="true">📷</span>
+      <span class="pic-wait-text small">{failed ? "The photo did not come through" : "Photo on its way…"}</span>
+      {m.picEn && m.from !== "me" && <i class="pic-wait-en small">{m.picEn}</i>}
+    </span>
+  );
+}
+
+/** The learner's own voice in their voice messages: the device's voice, as a man or a woman. */
+const learnerVoice = (): Who | null => null;
+const myVoice = () => ({ g: getProgress().settings.me?.g ?? ("m" as const), pitch: 1, rate: 0.9 });
 
 /** Read receipts: ✓ sent, ✓✓ read. */
 function Ticks({ m, now }: { m: Msg; now: number }) {
@@ -1309,7 +1414,7 @@ const PICKER_TABS: PickerTab[] = ["roman", "everyday", "phrases"];
  * The ＋: the Roman emoji (drawn for this site, then real ones), everyday faces
  * and things, and the phrasebook (greetings to this chat's person by name).
  */
-function EmojiPicker({ id, onPick, onPhrase, onClose }: { id: string; onPick: (s: string) => void; onPhrase: (s: string) => void; onClose: () => void }) {
+function EmojiPicker({ id, onPick, onPhrase, onClose, actions }: { id: string; onPick: (s: string) => void; onPhrase: (s: string) => void; onClose: () => void; actions?: preact.ComponentChildren }) {
   const [tab, setTab] = useState<PickerTab>(() => {
     const saved = storage.get("tabula-latina-emoji-tab") as PickerTab | null;
     return saved && PICKER_TABS.includes(saved) ? saved : "roman";
@@ -1325,7 +1430,8 @@ function EmojiPicker({ id, onPick, onPhrase, onClose }: { id: string; onPick: (s
     storage.set("tabula-latina-emoji-tab", t);
   };
   return (
-    <div class="emoji-pop" role="dialog" aria-label="Emoji and phrases">
+    <div class="emoji-pop" role="dialog" aria-label="Photo, voice, emoji and phrases">
+      {actions && <div class="emoji-actions">{actions}</div>}
       <div class="emoji-tabs" role="tablist">
         <button role="tab" aria-selected={tab === "roman"} onClick={() => choose("roman")}>
           <span class="emoji-tab-icon">{ROMAN_EMOJI[0].char}</span> Roman
@@ -1355,7 +1461,7 @@ function EmojiPicker({ id, onPick, onPhrase, onClose }: { id: string; onPick: (s
 
 /** Ready phrases with their English: a tap puts one into the message. */
 function Phrasebook({ id, onPick }: { id: string; onPick: (s: string) => void }) {
-  const groups = phrasebook(membersOf(id, getMeta()), id === GROUP.id);
+  const groups = phrasebook(membersOf(id, getMeta()), getThread(id).kind === "group");
   return (
     <div class="phrase-list">
       {groups.map((g) => (
@@ -1380,6 +1486,13 @@ function Composer({ id, replyTo, onReplied }: { id: string; replyTo: Msg | null;
   const [checking, setChecking] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [emoji, setEmoji] = useState(false);
+  // a photo picked to send (with the text as its caption), and the next message sent as a voice message
+  const [photo, setPhoto] = useState<{ file: Blob; url: string } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [asVoice, setAsVoice] = useState(false);
+  const [canPhoto, setCanPhoto] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  useEffect(() => void canSendPhotos().then((c) => setCanPhoto(!!c)), []);
   const box = useRef<HTMLTextAreaElement>(null);
   // typing never closes the coach's window: the learner fixes the message with the correction in view
   const change = (v: string) => {
@@ -1414,13 +1527,28 @@ function Composer({ id, replyTo, onReplied }: { id: string; replyTo: Msg | null;
     inserts.set(id, (s) => put(s, false));
     return () => void inserts.delete(id);
   });
-  const doSend = () => {
-    if (!text.trim()) return;
-    send(id, emojiCodes(text), replyTo?.id);
+  const doSend = async () => {
+    if (photo) {
+      setSending(true);
+      const res = await sendPhoto(id, photo.file, emojiCodes(text), replyTo?.id);
+      setSending(false);
+      if (res) return setErr(res.error);
+      setPhoto(null);
+    } else if (!text.trim()) return;
+    else if (asVoice) sendVoice(id, emojiCodes(text), replyTo?.id);
+    else send(id, emojiCodes(text), replyTo?.id);
     onReplied();
     change("");
     setEmoji(false);
+    setAsVoice(false);
     box.current?.focus();
+  };
+  const pick = (f: File | undefined) => {
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => setPhoto({ file: f, url: String(fr.result) });
+    fr.readAsDataURL(f);
+    setEmoji(false);
   };
   const doCheck = async () => {
     const draft = emojiCodes(text.trim());
@@ -1449,9 +1577,42 @@ function Composer({ id, replyTo, onReplied }: { id: string; replyTo: Msg | null;
           </button>
         </div>
       )}
+      {photo && (
+        <div class="photo-draft" role="status">
+          <img src={photo.url} alt="Your photo" />
+          <span class="small ui">{sending ? "Sending…" : "Your photo. Write a caption if you like, then send."}</span>
+          <button class="btn ghost small" onClick={() => setPhoto(null)} aria-label="Do not send the photo" disabled={sending}><Icon.close /></button>
+        </div>
+      )}
+      {asVoice && !photo && (
+        <div class="voice-draft small ui" role="status">
+          <Icon.mic /> Your next message goes as a voice message, read aloud in Latin.
+          <button class="linkish" onClick={() => setAsVoice(false)}>Cancel</button>
+        </div>
+      )}
+      <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => { pick((e.target as HTMLInputElement).files?.[0]); (e.target as HTMLInputElement).value = ""; }} />
       <div class="composer-row">
-        {emoji && <EmojiPicker id={id} onPick={(e) => put(e, true)} onPhrase={(ph) => put(ph, true, true)} onClose={() => setEmoji(false)} />}
-        <button class="plus-btn" aria-label="Emoji and phrases" aria-expanded={emoji} onClick={() => setEmoji(!emoji)}>
+        {emoji && (
+          <EmojiPicker
+            id={id}
+            onPick={(e) => put(e, true)}
+            onPhrase={(ph) => put(ph, true, true)}
+            onClose={() => setEmoji(false)}
+            actions={
+              <>
+                {canPhoto && (
+                  <button id="attach-photo" class="emoji-action" onClick={() => fileInput.current?.click()}>
+                    <Icon.camera /> Photo
+                  </button>
+                )}
+                <button id="as-voice" class="emoji-action" aria-pressed={asVoice} onClick={() => { setAsVoice(!asVoice); setEmoji(false); box.current?.focus(); }}>
+                  <Icon.mic /> Voice message
+                </button>
+              </>
+            }
+          />
+        )}
+        <button class="plus-btn" aria-label="Photo, voice message, emoji and phrases" aria-expanded={emoji} onClick={() => setEmoji(!emoji)}>
           <Icon.plus />
         </button>
         <textarea
@@ -1460,7 +1621,7 @@ function Composer({ id, replyTo, onReplied }: { id: string; replyTo: Msg | null;
           class="composer-box"
           rows={1}
           lang="la"
-          placeholder="Write in Latin…"
+          placeholder={photo ? "A caption (or nothing)…" : asVoice ? "Say it in Latin…" : "Write in Latin…"}
           {...NO_CORRECTION}
           value={text}
           onInput={(e) => change((e.target as HTMLTextAreaElement).value)}
@@ -1469,7 +1630,7 @@ function Composer({ id, replyTo, onReplied }: { id: string; replyTo: Msg | null;
             // a keyboard sends with Enter; on a phone Enter is a new line and the arrow sends
             if (e.key === "Enter" && !e.shiftKey && enterSends()) {
               e.preventDefault();
-              doSend();
+              void doSend();
             }
             if (e.key === "Escape") setEmoji(false);
           }}
@@ -1477,8 +1638,8 @@ function Composer({ id, replyTo, onReplied }: { id: string; replyTo: Msg | null;
         <button id="composer-check" class="check-btn" onClick={() => void doCheck()} disabled={!text.trim() || checking} title="Ask the coach whether it is right, or how to say it in Latin">
           {checking ? "…" : <><Icon.check /><span class="check-label"> Check</span></>}
         </button>
-        <button id="composer-send" class="send-btn" onClick={doSend} disabled={!text.trim()} aria-label="Send">
-          <Icon.send />
+        <button id="composer-send" class={`send-btn${asVoice && !photo ? " voice" : ""}`} onClick={() => void doSend()} disabled={(!text.trim() && !photo) || sending} aria-label={asVoice && !photo ? "Send as a voice message" : "Send"}>
+          {asVoice && !photo ? <Icon.mic /> : <Icon.send />}
         </button>
       </div>
     </div>
@@ -1586,6 +1747,10 @@ function Profile({ who, t, now, onClose }: { who: Who; t: Thread; now: number; o
             Portrait: {p.title}, {p.date}. <a href={p.url} target="_blank" rel="noreferrer">{p.museum}</a>, {p.license}.
           </p>
         )}
+        <div class="row profile-actions">
+          <button class="btn ghost small" id="profile-mute" onClick={() => setMuted(who.id, !isMuted(meta, who.id))}>{isMuted(meta, who.id) ? "Unmute" : "Mute"}</button>
+          <button class="btn ghost small" id="profile-block" onClick={() => setBlocked(who.id, !iBlocked(meta, who.id))}>{iBlocked(meta, who.id) ? `Unblock ${who.name}` : `Block ${who.name}`}</button>
+        </div>
         {who.stranger &&
           (!bye ? (
             <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => setBye(true)}>Say goodbye (remove this chat)…</button>
@@ -1618,7 +1783,7 @@ export function useArrivals(onArrive: (t: Thread, m: Msg) => void, current: stri
     const from = last.current;
     last.current = now;
     for (const t of allThreads()) {
-      if (t.id === current) continue;
+      if (t.id === current || isMuted(getMeta(), t.id)) continue;
       const m = t.messages.filter((x) => x.from !== "me" && x.at > from && x.at <= now && x.at > t.readAt).at(-1);
       if (m) onArrive(t, m);
     }
@@ -1648,9 +1813,204 @@ export function ArrivalNotice({ current }: { current: string | null }) {
     <button key={shown.m.id} class="arrival ansata" role="status" aria-label={`New message from ${who?.name ?? ""}: tap to open, swipe to dismiss`} {...swipe}>
       {who && <Avatar who={who} size={34} />}
       <span class="stack" style={{ gap: 0, minWidth: 0 }}>
-        <b class="ui small" lang="la">{who?.name ?? nameOf(shown.m.from)}{shown.t.kind === "group" ? ` · ${groupName(getMeta())}` : ""}</b>
+        <b class="ui small" lang="la">{who?.name ?? nameOf(shown.m.from)}{shown.t.kind === "group" ? ` · ${groupName(getMeta(), shown.t.id)}` : ""}</b>
         <span class="arrival-text" lang="la">{showEmoji(preview(shown.m, Date.now()))}</span>
       </span>
     </button>
+  );
+}
+
+// ------------------------------------------------------- new chats, groups
+
+/** Everyone the learner can write to: the five friends, and the people met or brought into the story. */
+function everyone(): Who[] {
+  const meta = getMeta();
+  return [...PEOPLE.map((p) => p.id), ...Object.keys(meta.strangers).filter((id) => !getThread(id).gone)].map((id) => whoOf(id, meta)).filter((w): w is Who => !!w);
+}
+
+/** A person in a list: face, name, what they do. */
+function PersonRow({ who, children, onClick, id }: { who: Who; children?: preact.ComponentChildren; onClick?: () => void; id?: string }) {
+  const inner = (
+    <>
+      <Avatar who={who} size={44} />
+      <span class="stack" style={{ gap: 0, minWidth: 0, flex: 1 }}>
+        <b lang="la">{who.name}</b>
+        <span class="small muted person-row-job">{who.job}, {who.city}</span>
+      </span>
+      {children}
+    </>
+  );
+  return onClick ? (
+    <button class="person-row" id={id} onClick={onClick}>{inner}</button>
+  ) : (
+    <div class="person-row" id={id}>{inner}</div>
+  );
+}
+
+/**
+ * New chat: write to anyone. A friend or someone met; someone from the story
+ * (anyone the friends have mentioned, or any other name: Claude makes them
+ * real); a group of the learner's own; or someone random from anywhere.
+ */
+function NewChat({ onClose, onSomeoneNew }: { onClose: () => void; onSomeoneNew: () => void }) {
+  const [mode, setMode] = useState<"list" | "group">("list");
+  const [story, setStory] = useState("");
+  const [busy, setBusy] = useState<{ ctl: AbortController; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const open = (id: string) => {
+    onClose();
+    go({ page: "messenger", thread: id });
+  };
+  const seek = async (text: string) => {
+    if (!text.trim() || busy) return;
+    const ctl = new AbortController();
+    setBusy({ ctl, text });
+    setError(null);
+    const res = await storyPerson(text.trim(), ctl.signal);
+    setBusy(null);
+    if ("id" in res) open(res.id);
+    else if (res.error && res.error !== "Stopped.") setError(res.error);
+  };
+  if (mode === "group") return <NewGroup onBack={() => setMode("list")} onClose={onClose} onMade={open} />;
+  return (
+    <Modal onClose={() => { busy?.ctl.abort(); onClose(); }} label="New chat" wide>
+      <div class="stack new-chat">
+        <div class="spread">
+          <h2>New chat</h2>
+          <button class="btn ghost small" onClick={onClose} aria-label="Close"><Icon.close /></button>
+        </div>
+        <div class="new-chat-actions">
+          <button id="new-group" class="btn" onClick={() => setMode("group")}><Icon.plus /> New group</button>
+          <button id="find-someone" class="btn" onClick={onSomeoneNew} title="Meet someone new from anywhere in the Roman world">🎲 Someone new</button>
+        </div>
+        <div class="stack" style={{ gap: "6px" }}>
+          <span class="eyebrow">Someone from the story</span>
+          <p class="small muted" style={{ margin: 0 }}>Anyone the friends have mentioned, or anyone else in their lives: say who, and they become real.</p>
+          <div class="chips">
+            {SIDE_PEOPLE.map((x) => (
+              <button key={x.text} class="chip" disabled={!!busy} onClick={() => void seek(x.text)}>{x.en}</button>
+            ))}
+          </div>
+          <form class="row story-seek" onSubmit={(e) => { e.preventDefault(); void seek(story); }}>
+            <input id="story-who" class="input" value={story} placeholder="e.g. Tertia, Iūlia's sister; Marcus's landlord…" {...NO_CORRECTION} onInput={(e) => setStory((e.target as HTMLInputElement).value)} />
+            <button class="btn gold" disabled={!story.trim() || !!busy}>Write to them</button>
+          </form>
+          {busy && (
+            <p class="small ui well row" role="status">
+              <span style={{ flex: 1 }}>Finding {busy.text}…</span>
+              <button class="btn ghost small" onClick={() => busy.ctl.abort()}>Stop</button>
+            </p>
+          )}
+          {error && <p class="small bad">{error}</p>}
+        </div>
+        <div class="stack" style={{ gap: "4px" }}>
+          <span class="eyebrow">People you know</span>
+          {everyone().map((w) => (
+            <PersonRow key={w.id} who={w} id={`new-${w.id}`} onClick={() => open(w.id)}>
+              {iBlocked(getMeta(), w.id) && <span class="small muted">blocked</span>}
+            </PersonRow>
+          ))}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** A group of the learner's own: a name and whom to bring together. */
+function NewGroup({ onBack, onClose, onMade }: { onBack: () => void; onClose: () => void; onMade: (id: string) => void }) {
+  const [name, setName] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (id: string) => setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
+  return (
+    <Modal onClose={onClose} label="New group" wide>
+      <div class="stack new-chat">
+        <div class="spread">
+          <button class="btn ghost small" onClick={onBack} aria-label="Back">←</button>
+          <h2 style={{ flex: 1 }}>New group</h2>
+          <button class="btn ghost small" onClick={onClose} aria-label="Close"><Icon.close /></button>
+        </div>
+        <label class="stack" style={{ gap: "4px" }}>
+          <span class="ui small"><b>Its name</b> (Latin, English, anything)</span>
+          <input id="group-name" class="input" value={name} maxLength={40} placeholder="e.g. Cēna, Nova turba, Secret plan" {...NO_CORRECTION} onInput={(e) => setName((e.target as HTMLInputElement).value)} />
+        </label>
+        <span class="eyebrow">Who is in it</span>
+        <div class="stack" style={{ gap: "4px" }}>
+          {everyone().map((w) => (
+            <PersonRow key={w.id} who={w} id={`pick-${w.id}`} onClick={() => toggle(w.id)}>
+              <span class={`pick-mark${picked.includes(w.id) ? " on" : ""}`} aria-label={picked.includes(w.id) ? "in the group" : "not in the group"}>{picked.includes(w.id) ? "✓" : ""}</span>
+            </PersonRow>
+          ))}
+        </div>
+        <button id="group-create" class="btn gold" disabled={!picked.length} onClick={() => onMade(createGroup(name, picked))}>
+          Create the group{picked.length ? ` (${picked.length + 1} with you)` : ""}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** A group's name and people: rename it, add or remove people, mute it, leave it. */
+function GroupSheet({ id, onClose }: { id: string; onClose: () => void }) {
+  useMessenger();
+  const meta = getMeta();
+  const [name, setName] = useState(groupName(meta, id));
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const members = membersOf(id, meta);
+  const others = everyone().filter((w) => !groupMembers(meta, id).includes(w.id));
+  const info = meta.world?.groups?.[id];
+  const muted = isMuted(meta, id);
+  return (
+    <Modal onClose={onClose} label={`The group ${groupName(meta, id)}`} wide>
+      <div class="stack group-sheet">
+        <div class="spread">
+          <span class="eyebrow">Group{info ? (info.by === "me" ? " · made by you" : ` · started by ${nameOf(info.by)}`) : ""}</span>
+          <button class="btn ghost small" onClick={onClose} aria-label="Close"><Icon.close /></button>
+        </div>
+        <GroupAvatar id={id} size={96} />
+        <form class="row" onSubmit={(e) => { e.preventDefault(); if (name.trim() && name.trim() !== groupName(meta, id)) renameGroup(id, name); }}>
+          <input id="group-rename" class="input" value={name} maxLength={40} {...NO_CORRECTION} aria-label="The group's name" onInput={(e) => setName((e.target as HTMLInputElement).value)} />
+          <button class="btn small" disabled={!name.trim() || name.trim() === groupName(meta, id)}>Rename</button>
+        </form>
+        <span class="eyebrow">{members.length + 1} people</span>
+        <div class="stack" style={{ gap: "4px" }}>
+          {members.map((w) => (
+            <PersonRow key={w.id} who={w}>
+              {removing === w.id ? (
+                <button class="btn small" id={`remove-${w.id}`} onClick={() => { removeFromGroup(id, w.id); setRemoving(null); }}>Remove {w.name}?</button>
+              ) : (
+                <button class="btn ghost small" onClick={() => setRemoving(w.id)}>Remove</button>
+              )}
+            </PersonRow>
+          ))}
+          <div class="person-row"><span class="ui small">…and you</span></div>
+        </div>
+        {others.length > 0 &&
+          (adding ? (
+            <div class="stack" style={{ gap: "4px" }}>
+              <span class="eyebrow">Add someone</span>
+              {others.map((w) => (
+                <PersonRow key={w.id} who={w} id={`add-${w.id}`} onClick={() => addToGroup(id, [w.id])}>
+                  <span class="small"><Icon.plus /> Add</span>
+                </PersonRow>
+              ))}
+            </div>
+          ) : (
+            <button class="btn ghost" id="group-add" onClick={() => setAdding(true)}><Icon.plus /> Add people</button>
+          ))}
+        <button class="btn ghost" onClick={() => setMuted(id, !muted)}>{muted ? "Unmute" : "Mute (no notices, no count)"}</button>
+        {id !== GROUP.id &&
+          (leaving ? (
+            <div class="well row">
+              <span class="ui small" style={{ flex: 1 }}>Leave «{groupName(meta, id)}»? It leaves your chats.</span>
+              <button class="btn small" id="group-leave-yes" onClick={() => { leaveGroup(id); onClose(); go({ page: "messenger" }); }}>Leave</button>
+              <button class="btn ghost small" onClick={() => setLeaving(false)}>Stay</button>
+            </div>
+          ) : (
+            <button class="linkish" style={{ alignSelf: "flex-start" }} id="group-leave" onClick={() => setLeaving(true)}>Leave the group…</button>
+          ))}
+      </div>
+    </Modal>
   );
 }

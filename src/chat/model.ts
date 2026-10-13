@@ -29,6 +29,10 @@ export interface Msg {
   voice?: boolean;
   /** A photo sent with the message (content/photos.ts); `la` is its caption. */
   photo?: string;
+  /** A picture made for this message, or one the learner sent: its id in messenger/pics (see Pic); `la` is its caption. */
+  pic?: string;
+  /** What that picture shows (English): what the sender asked for, or what the people saw in the learner's photo. */
+  picEn?: string;
   /** The message this one answers, shown quoted above it (its id). */
   re?: string;
   /** Reactions, by who reacted ("me" or a person's id): the emoji and when it shows; an empty emoji is one taken back. */
@@ -62,7 +66,10 @@ export interface Drama {
  * away and where, the status lines they set, and the storylines among them.
  */
 export interface World {
+  /** The friends' group («Amīcī»). */
   group?: { name?: string; members?: string[] };
+  /** Other groups: the learner's own and any the people start, by chat id ("g-…"). */
+  groups?: Record<string, GroupInfo>;
   blocked?: Record<string, number>;
   away?: Record<string, { until: number; where: string }>;
   status?: Record<string, { text: string; at: number }>;
@@ -70,10 +77,28 @@ export interface World {
   updatedAt: number;
 }
 
-/** The group's members now (the five friends to begin with; people leave and join). */
-export const groupMembers = (meta: Meta): string[] => meta.world?.group?.members ?? PEOPLE.map((p) => p.id);
-/** The group's name now (Amīcī, until someone renames it). */
-export const groupName = (meta: Meta): string => meta.world?.group?.name || GROUP.name;
+/** A group besides the friends' own: its name, who is in it, who started it ("me" for the learner), and when. */
+export interface GroupInfo {
+  name: string;
+  members: string[];
+  by: string;
+  at: number;
+  /** The learner left it, or deleted it: it leaves the list. */
+  gone?: boolean;
+  updatedAt: number;
+}
+
+/** Is this chat a group: the friends' group, or another one? */
+export const isGroupId = (id: string, meta: Meta) => id === GROUP.id || !!meta.world?.groups?.[id];
+/** The groups the learner is in now. */
+export const groupIds = (meta: Meta): string[] => [GROUP.id, ...Object.entries(meta.world?.groups ?? {}).filter(([, g]) => !g.gone).map(([id]) => id)];
+/** A group's members now (the friends' group: the five friends to begin with; people leave and join). */
+export const groupMembers = (meta: Meta, id: string = GROUP.id): string[] =>
+  id === GROUP.id ? meta.world?.group?.members ?? PEOPLE.map((p) => p.id) : meta.world?.groups?.[id]?.members ?? [];
+/** A group's name now (Amīcī, until someone renames it). */
+export const groupName = (meta: Meta, id: string = GROUP.id): string => (id === GROUP.id ? meta.world?.group?.name || GROUP.name : meta.world?.groups?.[id]?.name || "Group");
+/** The groups someone is in now, by name. */
+export const groupsOf = (meta: Meta, who: string): string[] => groupIds(meta).filter((g) => groupMembers(meta, g).includes(who));
 /** Has this person blocked the learner? */
 export const isBlocked = (meta: Meta, id: string) => !!meta.world?.blocked?.[id];
 /** Where someone is away, if they are, now. */
@@ -88,7 +113,10 @@ export function mergeWorld(a: World | undefined, b: World | undefined): World | 
   const [older, newer] = a.updatedAt > b.updatedAt ? [b, a] : [a, b];
   const dramas = new Map((older.dramas ?? []).map((d) => [d.id, d]));
   for (const d of newer.dramas ?? []) if (!dramas.has(d.id) || d.updatedAt >= dramas.get(d.id)!.updatedAt) dramas.set(d.id, d);
-  return { ...newer, dramas: [...dramas.values()] };
+  // groups: each the newer copy, from either side
+  const groups = { ...(older.groups ?? {}) };
+  for (const [id, g] of Object.entries(newer.groups ?? {})) if (!groups[id] || g.updatedAt >= groups[id].updatedAt) groups[id] = g;
+  return { ...newer, dramas: [...dramas.values()], groups };
 }
 
 /** The emoji anyone may react with: the learner's bar, and what the people may choose. */
@@ -138,6 +166,8 @@ export interface Thread {
   updatedAt: number;
   /** A stranger the learner said goodbye to: hidden from the list. */
   gone?: boolean;
+  /** The learner cleared the chat then: earlier messages no longer show (the people still remember). */
+  clearedAt?: number;
 }
 
 /**
@@ -181,6 +211,40 @@ export interface Meta {
   bonds?: Record<string, Bond>;
   /** What the people did to the messenger itself (see World). */
   world?: World;
+  /** What the learner chose: people they blocked, chats they muted. */
+  mine?: Mine;
+}
+
+/** The learner's own choices: whom they blocked, which chats they muted (no notices, no count, no phone notification). */
+export interface Mine {
+  blocked: string[];
+  muted: string[];
+  updatedAt: number;
+}
+
+/** Has the learner blocked this person? */
+export const iBlocked = (meta: Meta, id: string) => !!meta.mine?.blocked.includes(id);
+/** Has the learner muted this chat? */
+export const isMuted = (meta: Meta, chat: string) => !!meta.mine?.muted.includes(chat);
+/** Two copies of the learner's choices: the newer one. */
+export const mergeMine = (a: Mine | undefined, b: Mine | undefined) => (!a || !b ? a ?? b : a.updatedAt > b.updatedAt ? a : b);
+
+/**
+ * A picture in a chat: one the people sent, made by an image generator from
+ * what Claude said it shows (`prompt`; it waits as "wanted" until made), or a
+ * photo the learner sent. Kept in its own document (messenger/pics/<id>), as a
+ * small WebP or JPEG in base64; `en` says what it shows, for the people and
+ * for the learner.
+ */
+export interface Pic {
+  id: string;
+  by: string;
+  en: string;
+  prompt?: string;
+  status: "wanted" | "done" | "failed";
+  type?: string;
+  b64?: string;
+  at: number;
 }
 
 export const newMeta = (): Meta => ({ v: 1, seenAt: 0, plannedAt: 0, life: {}, strangers: {} });
@@ -248,7 +312,7 @@ export function whoOf(id: string, meta: Meta): Who | null {
 
 /** Who is in a thread. */
 export function membersOf(threadId: string, meta: Meta): Who[] {
-  if (threadId === GROUP.id) return groupMembers(meta).map((id) => whoOf(id, meta)).filter((w): w is Who => !!w);
+  if (isGroupId(threadId, meta)) return groupMembers(meta, threadId).map((id) => whoOf(id, meta)).filter((w): w is Who => !!w);
   const w = whoOf(threadId, meta);
   return w ? [w] : [];
 }
@@ -272,7 +336,7 @@ export function preview(m: Msg, now = Infinity): string {
   if (deletedNow(m, now)) return "🚫 Message deleted";
   if (m.title) return m.title.la;
   if (m.voice) return "🎤 Voice message";
-  if (m.photo) return `📷 ${m.la || "Photo"}`;
+  if (m.photo || m.pic) return `📷 ${m.la || "Photo"}`;
   return m.la;
 }
 

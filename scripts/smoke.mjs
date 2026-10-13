@@ -2,7 +2,7 @@
 // answers a few exercises, and saves screenshots. Fails on any page error.
 // Usage: npm run build && npm run smoke -- [outDir]
 import { chromium } from "playwright-core";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const out = resolve(process.argv[2] ?? "dist/screens");
@@ -946,7 +946,7 @@ async function messenger() {
   if (!prompts.includes("THE DAY IN ROME") || !prompts.includes("a.d. IV Īd. Oct.")) errors.push("messenger: the reply prompt lacks the day in Rome");
   if (!prompts.includes("THE OTHER FRIENDS, RIGHT NOW")) errors.push("messenger: the reply prompt lacks the other friends' news");
   if (!prompts.includes("HOW THE LEARNER'S LAST MESSAGE READS") || !prompts.includes("«Librum»: accusative singular")) errors.push("messenger: the reply prompt does not read the learner's message literally");
-  if (!prompts.includes("PHOTOS THEY COULD SEND") || !prompts.includes('"voice": true')) errors.push("messenger: the reply prompt offers no photos or voice messages");
+  if (!prompts.includes("PHOTOS THEY HAVE ON THEIR TABULA") || !prompts.includes('"voice": true') || !prompts.includes('"picture"')) errors.push("messenger: the reply prompt offers no photos, pictures or voice messages");
   if (!((await p.locator(".msgr-date").textContent()) ?? "").includes("Īd. Oct.")) errors.push("messenger: no Roman date over the chats");
   // a tap on a word shows a card under the message (what the word is); a tap elsewhere on the message, its English
   await p.locator(".bubble:not(.mine) .w").first().click();
@@ -1001,7 +1001,7 @@ async function messenger() {
   // the phone routine left messages in the inbox: they land in Marcus's chat, unread (one a voice message, one a photo)
   shared.set("data/users/u1/messenger/inbox/r1", { chat: "marcus", from: "marcus", la: "Salvē! Labōrō 😩", en: "Hi! I'm working 😩", at: Date.parse("2026-10-12T10:40:00Z") });
   shared.set("data/users/u1/messenger/inbox/r2", { chat: "marcus", from: "marcus", la: "Hahae! Labōrō", en: "Haha! I'm working", voice: true, at: Date.parse("2026-10-12T10:41:00Z") });
-  shared.set("data/users/u1/messenger/inbox/r3", { chat: "marcus", from: "marcus", la: "Ecce!", en: "Look!", photo: "coin", at: Date.parse("2026-10-12T10:42:00Z") });
+  shared.set("data/users/u1/messenger/inbox/r3", { chat: "marcus", from: "marcus", la: "Ecce!", en: "Look!", photo: "marcus-coins", at: Date.parse("2026-10-12T10:42:00Z") });
   await p.waitForTimeout(900);
   if (shared.has("data/users/u1/messenger/inbox/r1")) errors.push("messenger: the inbox message was not taken");
   if (!(await p.locator("#chat-marcus .unread-badge").count())) errors.push("messenger: the routine's message is not shown as unread");
@@ -1013,10 +1013,11 @@ async function messenger() {
   if (!(await p.locator(".bubble-text", { hasText: "Hahae" }).count())) errors.push("messenger: without a voice, a voice message's words do not show");
   if (!(await p.locator(".bubble-photo img").count())) errors.push("messenger: a photo does not show in its message");
   await p.locator(".bubble-photo").click();
-  if (!(await p.locator(".photo-view", { hasText: "Trajan" }).count())) errors.push("messenger: a tapped photo does not open with what it is");
+  if (!(await p.locator(".photo-view", { hasText: "until payday" }).count())) errors.push("messenger: a tapped photo does not open with what it is");
   await p.screenshot({ path: `${out}/messenger-photo.png` });
   await p.keyboard.press("Escape");
   await p.click(".chat-back").catch(() => {});
+  await p.click("#new-chat");
   await p.click("#find-someone");
   await p.waitForTimeout(2500);
   if (!(await p.locator(".chat-head-name").textContent())?.trim() || (await p.locator(".chat-row:not(.acta-row)").count()) !== 7) errors.push("messenger: someone new did not open a chat");
@@ -1088,6 +1089,194 @@ async function messenger() {
   await other.p.click(".chat-back");
   await other.p.screenshot({ path: `${out}/messenger-phone-list.png` });
   await other.ctx.close();
+  await ctx.close();
+}
+
+// What the learner can do in the messenger besides writing: a fresh picture someone sends
+// (made by the pictures routine, fired through the connector), a photo of the learner's own
+// (Claude sees it), a voice message, deleting a message, muting, blocking, a group of their
+// own (renamed, someone removed), someone from the story, clearing a chat.
+async function abilities() {
+  const shared = new Map();
+  const runtime = () => {
+    window.__prompts = [];
+    window.__images = [];
+    window.__mcp = [];
+    const sample = async () => ({ text: "", truncated: false });
+    sample.limits = async () => ({ images: { maxCount: 4, mediaTypes: ["image/jpeg", "image/png"] } });
+    sample.json = async (prompt, opts) => {
+      window.__prompts.push(prompt);
+      if (opts?.images) window.__images.push(opts.images.length);
+      await new Promise((r) => setTimeout(r, 250));
+      if (prompt.includes("TODAY'S BOARD")) return { items: [{ kind: "day", title: "Hodiē", titleEn: "Today", lines: [{ la: "Agricola labōrat.", en: "The farmer works." }] }] };
+      if (prompt.includes("ON THEIR OWN")) return { messages: [] };
+      if (prompt.includes("wants to write to someone from the story")) return { name: "Tertia", g: "f", age: 19, job: "Iūlia's younger sister", city: "Rome", about: "Nosy and clever.", link: { to: "iulia", how: "her sister" }, first: "Who is this?", happenings: [] };
+      if (prompt.includes("break the learner's limits")) return { messages: [{ la: "Euge!", en: "Great!" }] };
+      if (prompt.includes("group chat «Cēna")) return { messages: [{ from: "iulia", la: "Salvēte! 😄", en: "Hi all! 😄", gap: 1 }] };
+      if (prompt.includes("attached to this prompt")) return { messages: [{ from: "iulia", la: "Euge! 😻", en: "Great! 😻", gap: 1 }], saw: "a ginger cat on a sofa" };
+      const id = (prompt.match(/Person ids: "([a-z0-9]+)"/) || [])[1] || "iulia";
+      return { messages: [{ from: id, la: "Ecce!", en: "Look!", gap: 1, picture: "a goat standing on the roof of a Roman house" }] };
+    };
+    const docRef = (path) => ({
+      get: async () => { const d = await window.__dbGet(path); return { exists: !!d, data: () => d ?? undefined }; },
+      set: async (data) => void (await window.__dbSet(path, JSON.parse(JSON.stringify(data)))),
+      delete: async () => void (await window.__dbDel(path)),
+      collection: (sub) => colRef(`${path}/${sub}`),
+      onSnapshot: (next) => {
+        let last = "";
+        const tick = async () => {
+          const d = await window.__dbGet(path);
+          const sig = JSON.stringify(d);
+          if (sig === last) return;
+          last = sig;
+          next({ exists: !!d, data: () => d ?? undefined });
+        };
+        void tick();
+        const t = setInterval(tick, 200);
+        return () => clearInterval(t);
+      },
+    });
+    const colRef = (path) => ({
+      doc: (id) => docRef(`${path}/${id}`),
+      onSnapshot: (next) => {
+        let last = "";
+        const tick = async () => {
+          const docs = await window.__dbList(path);
+          const sig = JSON.stringify(docs);
+          if (sig === last) return;
+          last = sig;
+          next({ docs: docs.map((d) => ({ id: d.id, data: () => d.data })) });
+        };
+        void tick();
+        const t = setInterval(tick, 200);
+        return () => clearInterval(t);
+      },
+      orderBy: () => ({ limit: () => ({ onSnapshot: () => () => undefined }) }),
+    });
+    const db = { doc: docRef, collection: colRef };
+    const mcp = { callTool: async (server, tool, input) => (window.__mcp.push({ server, tool, input }), { payload: {} }) };
+    window.claude = { use: async (n) => (n === "sample" ? sample : n === "db" ? db : n === "user" ? { id: async () => "u1" } : n === "mcp" ? mcp : null) };
+  };
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  await ctx.clock.install({ time: new Date("2026-10-12T10:30:00Z") });
+  await seed(ctx);
+  await ctx.addInitScript(runtime);
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => errors.push(`abilities: ${e.message}`));
+  p.on("console", (m) => m.type() === "error" && !/fonts\.g/.test(m.text()) && errors.push(`abilities console: ${m.text()}`));
+  await p.exposeFunction("__dbGet", (path) => shared.get(path) ?? null);
+  await p.exposeFunction("__dbSet", (path, data) => void shared.set(path, data));
+  await p.exposeFunction("__dbDel", (path) => void shared.delete(path));
+  await p.exposeFunction("__dbList", (col) => [...shared.entries()].filter(([k]) => k.startsWith(col + "/") && !k.slice(col.length + 1).includes("/")).map(([k, data]) => ({ id: k.slice(col.length + 1), data })));
+  await p.goto(`file://${page}#nuntii`);
+  await p.waitForTimeout(700);
+  await p.fill("#me-name", "Kiril");
+  await p.click("#me-m");
+  await p.click("#me-start");
+  await p.waitForTimeout(800);
+  const pics = () => [...shared.entries()].filter(([k]) => k.startsWith("data/users/u1/messenger/pics/")).map(([k, v]) => ({ id: k.split("/").pop(), ...v }));
+  // a real picture to send (one of the portraits)
+  const PNG = readFileSync(resolve("src/content/portraits", readdirSync("src/content/portraits").find((f) => f.endsWith(".webp"))));
+
+  // a fresh picture: "on its way", the pictures routine fired once, then the picture itself
+  await p.click("#chat-iulia");
+  await p.fill("#composer", "Salvē, Iūlia!");
+  await p.click("#composer-send");
+  await p.waitForTimeout(3500);
+  await ctx.clock.fastForward("20:00");
+  await p.waitForTimeout(800);
+  const wanted = pics().find((x) => x.status === "wanted");
+  if (!wanted || !wanted.prompt.includes("goat")) errors.push(`abilities: the picture Iūlia sends does not wait to be made (${JSON.stringify(pics())})`);
+  if (!(await p.locator(".pic-wait", { hasText: "on its way" }).count())) errors.push("abilities: a picture being made does not show as on its way");
+  const fired = await p.evaluate(() => window.__mcp);
+  if (fired.length !== 1 || fired[0].server !== "Claude Code Remote" || fired[0].tool !== "fire_trigger" || !String(fired[0].input.trigger_id).startsWith("trig_")) errors.push(`abilities: the pictures routine was not fired (${JSON.stringify(fired)})`);
+  if (wanted) shared.set(`data/users/u1/messenger/pics/${wanted.id}`, { ...wanted, status: "done", type: "image/webp", b64: PNG.toString("base64") });
+  await p.waitForTimeout(800);
+  if (!(await p.locator(".bubble-photo img").count())) errors.push("abilities: the picture does not show once it is made");
+  await p.screenshot({ path: `${out}/abilities-picture.png` });
+
+  // the learner's own photo, with a caption: Claude is shown it, and they remember what it showed
+  await p.click(".plus-btn");
+  if (!(await p.locator("#attach-photo").count())) errors.push("abilities: no way to send a photo");
+  await p.setInputFiles("input[type=file]", { name: "cat.webp", mimeType: "image/webp", buffer: PNG });
+  await p.waitForTimeout(300);
+  if (!(await p.locator(".photo-draft img").count())) errors.push("abilities: a picked photo is not shown before sending");
+  await p.fill("#composer", "Fēlēs mea!");
+  await p.click("#composer-send");
+  await p.waitForTimeout(3500);
+  await ctx.clock.fastForward("20:00");
+  await p.waitForTimeout(800);
+  if (!pics().some((x) => x.by === "me" && x.b64)) errors.push("abilities: the learner's photo is not saved");
+  if (!(await p.locator(".bubble.mine .bubble-photo img").count())) errors.push("abilities: the learner's photo does not show in the chat");
+  if (!(await p.evaluate(() => window.__images.includes(1)))) errors.push("abilities: Claude was not shown the learner's photo");
+  const thread = shared.get("data/users/u1/messenger/threads/iulia");
+  if (!thread?.messages?.some((m) => m.from === "me" && m.picEn === "a ginger cat on a sofa")) errors.push("abilities: what the photo showed is not remembered");
+  await p.screenshot({ path: `${out}/abilities-photo.png` });
+
+  // a voice message of the learner's own
+  await p.click(".plus-btn");
+  await p.click("#as-voice");
+  await p.fill("#composer", "Salvē, Iūlia");
+  await p.click("#composer-send");
+  await p.waitForTimeout(400);
+  if (!(await p.locator(".bubble.mine .voice-note").count())) errors.push("abilities: the learner's voice message shows no player");
+
+  // delete a message of the learner's (two taps)
+  await p.locator(".bubble.mine").last().click({ position: { x: 20, y: 10 } });
+  await p.click(".delete-mine");
+  await p.click(".delete-mine.sure");
+  await p.waitForTimeout(300);
+  if (!(await p.locator(".bubble.mine.deleted").count())) errors.push("abilities: a deleted message does not show as deleted");
+
+  // mute and block
+  await p.click('.chat-tools [aria-label="More"]');
+  await p.click("#mute-chat");
+  if (!(await p.locator("#chat-iulia .muted-mark").count())) errors.push("abilities: a muted chat is not marked in the list");
+  await p.click('.chat-tools [aria-label="More"]');
+  await p.click("#block-who");
+  if (!(await p.locator(".blocked-bar").count()) || (await p.locator("#composer").count())) errors.push("abilities: blocking does not close the message box");
+  await p.screenshot({ path: `${out}/abilities-blocked.png` });
+  await p.click("#unblock");
+  if (!(await p.locator("#composer").count())) errors.push("abilities: unblocking does not bring the message box back");
+
+  // clear the chat
+  await p.click('.chat-tools [aria-label="More"]');
+  await p.click("#clear-chat");
+  await p.click("#clear-yes");
+  if (await p.locator(".chat-msgs .bubble").count()) errors.push("abilities: a cleared chat still shows its messages");
+
+  // a group of the learner's own: made, answered, renamed, someone removed
+  await p.click("#new-chat");
+  await p.screenshot({ path: `${out}/abilities-new-chat.png` });
+  await p.click("#new-group");
+  await p.fill("#group-name", "Cēna");
+  await p.click("#pick-iulia");
+  await p.click("#pick-marcus");
+  await p.click("#group-create");
+  await p.waitForTimeout(3000);
+  await ctx.clock.fastForward("20:00");
+  await p.waitForTimeout(800);
+  if (!(await p.locator(".chat-sys", { hasText: "You created the group «Cēna»." }).count())) errors.push("abilities: a new group does not say who made it");
+  if (!(await p.locator(".bubble .bubble-text", { hasText: "Salvēte" }).count())) errors.push("abilities: nobody answers in the new group");
+  if (!(await p.locator(".chat-row-name", { hasText: "Cēna" }).count())) errors.push("abilities: the new group is not in the list");
+  await p.click("#chat-profile");
+  await p.fill("#group-rename", "Cēna magna");
+  await p.locator(".group-sheet button", { hasText: "Rename" }).click();
+  await p.locator(".group-sheet .person-row", { hasText: "Marcus" }).locator("button").click();
+  await p.click("#remove-marcus");
+  await p.screenshot({ path: `${out}/abilities-group.png` });
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(300);
+  if (!(await p.locator(".chat-sys", { hasText: "You renamed the group «Cēna magna»." }).count()) || !(await p.locator(".chat-sys", { hasText: "You removed Marcus." }).count())) errors.push("abilities: renaming or removing shows no line in the group");
+
+  // someone from the story
+  await p.click("#new-chat");
+  await p.fill("#story-who", "Tertia, Iūlia's sister");
+  await p.locator(".story-seek button").click();
+  await p.waitForTimeout(1200);
+  if (!((await p.locator(".chat-head-name").textContent()) ?? "").includes("Tertia")) errors.push("abilities: writing to someone from the story does not open their chat");
+  if (!(await p.locator(".chat-row-name", { hasText: "Tertia" }).count())) errors.push("abilities: someone from the story is not in the list");
+  await p.screenshot({ path: `${out}/abilities-story.png` });
   await ctx.close();
 }
 
@@ -1172,10 +1361,11 @@ async function ownWords() {
   await ctx.close();
 }
 
-// SMOKE_ONLY=messenger npm run smoke: just one part (messenger, ownWords, learn, stories, conversations, chatScroll, askClaude, audio, recorded, pages)
+// SMOKE_ONLY=messenger npm run smoke: just one part (messenger, abilities, ownWords, learn, stories, conversations, chatScroll, askClaude, audio, recorded, pages)
 const only = process.env.SMOKE_ONLY;
 const parts = {
   messenger: () => messenger(),
+  abilities: () => abilities(),
   ownWords: () => ownWords(),
   learn: async () => {
     await learnFlow("learn-desktop", { width: 1280, height: 900 }, true);

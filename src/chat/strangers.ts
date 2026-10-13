@@ -43,6 +43,8 @@ export interface Stranger {
   first?: string;
   /** Brought into the story by the people themselves (hidden from the chat list until they write). */
   invented?: boolean;
+  /** Someone from the story the learner sought out and wrote to (shown in the list at once). */
+  story?: boolean;
   createdAt: number;
 }
 

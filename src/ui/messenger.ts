@@ -10,11 +10,11 @@ import { useEffect, useState } from "preact/hooks";
 import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
 import { ACTA_ID, actaKey, boardOf, earlierBoards, writeActa } from "../chat/acta";
-import { applyFeelings, checkDraft, Deps, glossOf, meetStranger, refreshLives, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
+import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, picId, refreshLives, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
 import { deviceZone, hashRand } from "../chat/life";
-import { CoachTurn, isBlocked, membersOf, mergeBonds, mergeReactions, mergeWorld, Meta, Msg, msgId, newMeta, newThread, SYS, Thread, unreadCount } from "../chat/model";
+import { CoachTurn, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, MOMENTS, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
 import { allowedWords, calendarEntry, chatEntries, chatLexicon, nameEntry } from "../chat/words";
 import { calendarBlock, calendarWords, romeDay } from "../chat/calendar";
@@ -25,7 +25,8 @@ import { Lexicon } from "../latin/analyze";
 import { engineFacts } from "../latin/facts";
 import { Entry } from "../latin/types";
 import { chatOpts, coachOpts } from "./models";
-import { DocCollection, DocRef, DocSnap, LiveDoc, messengerStore, sampleErrorText, sampler, storage } from "./platform";
+import { callConnector, DocCollection, DocRef, DocSnap, imageLimits, LiveDoc, messengerStore, sampleErrorText, sampler, storage } from "./platform";
+import { sysLine } from "../chat/world";
 import { derived, getProgress } from "./store";
 
 const LOCAL_KEY = "tabula-latina-messenger-v1";
@@ -42,7 +43,7 @@ type T = Thread & { dropped?: string[] };
 
 let meta: Meta = newMeta();
 let threads: Record<string, T> = {};
-let store: { meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection } | null = null;
+let store: { meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection; pics: DocCollection } | null = null;
 const listeners = new Set<() => void>();
 /** Threads whose people are writing an answer right now (Claude is working), with any error. */
 const writing = new Map<string, { ctl: AbortController; error?: string }>();
@@ -74,23 +75,28 @@ function emit() {
 
 export const getMeta = () => meta;
 export const getThread = (id: string): T => threads[id] ?? newThread(id, kindOf(id));
-const kindOf = (id: string): Thread["kind"] => (id === GROUP.id ? "group" : id === ACTA_ID ? "channel" : PEOPLE.some((p) => p.id === id) ? "dm" : "stranger");
+const kindOf = (id: string): Thread["kind"] =>
+  id === GROUP.id || id.startsWith("g-") ? "group" : id === ACTA_ID ? "channel" : PEOPLE.some((p) => p.id === id) ? "dm" : "stranger";
 
 /**
- * Every conversation: the five friends and the group always, strangers until
- * the learner says goodbye; someone the friends brought into the story shows
- * once they write (`hidden`: them too, for Claude).
+ * Every conversation: the five friends and the groups the learner is in
+ * always, strangers until the learner says goodbye; someone the friends
+ * brought into the story shows once they write or the learner seeks them out
+ * (`hidden`: them too, for Claude).
  */
 export function allThreads(hidden = false): T[] {
-  const ids = [...PEOPLE.map((p) => p.id), GROUP.id, ...Object.keys(meta.strangers)];
-  return ids.map(getThread).filter((t) => !t.gone && (hidden || t.messages.length || !meta.strangers[t.id]?.invented));
+  const ids = [...PEOPLE.map((p) => p.id), ...groupIds(meta), ...Object.keys(meta.strangers)];
+  return ids.map(getThread).filter((t) => !t.gone && (hidden || t.messages.length || !meta.strangers[t.id]?.invented || meta.strangers[t.id]?.story));
 }
+
+/** Is this chat one the learner can open: a friend, a group they are in, a stranger met? */
+export const chatExists = (id: string) => PEOPLE.some((p) => p.id === id) || groupIds(meta).includes(id) || !!meta.strangers[id];
 
 export const errorOf = (id: string) => errors.get(id);
 
 export function unreadTotal(now = Date.now()): number {
-  // a new board of the Ācta Diurna counts as one
-  return allThreads().reduce((n, t) => n + unreadCount(t, now), 0) + (actaUnread(now) ? 1 : 0);
+  // a new board of the Ācta Diurna counts as one; a muted chat does not count
+  return allThreads().reduce((n, t) => n + (isMuted(meta, t.id) ? 0 : unreadCount(t, now)), 0) + (actaUnread(now) ? 1 : 0);
 }
 
 /** Re-renders on every change and whenever a planned message arrives or someone starts typing. */
@@ -156,7 +162,9 @@ function merge(a: T | undefined, b: T): T {
   for (const m of [...a.messages, ...b.messages]) {
     const had = byId.get(m.id);
     // the copy with more news wins (a read time, a check)
-    byId.set(m.id, had ? { ...had, ...m, readAt: m.readAt ?? had.readAt, check: m.check ?? had.check, reactions: mergeReactions(had.reactions, m.reactions), deletedAt: Math.min(m.deletedAt ?? Infinity, had.deletedAt ?? Infinity) || undefined } : m);
+    // deleted: the earlier moment of the two (none when neither copy was deleted)
+    const gone = Math.min(m.deletedAt ?? Infinity, had?.deletedAt ?? Infinity);
+    byId.set(m.id, had ? { ...had, ...m, readAt: m.readAt ?? had.readAt, check: m.check ?? had.check, reactions: mergeReactions(had.reactions, m.reactions), deletedAt: Number.isFinite(gone) ? gone : undefined } : m);
   }
   const messages = [...byId.values()].filter((m) => !dropped.includes(m.id)).sort((x, y) => x.at - y.at).slice(-MAX_MESSAGES);
   return {
@@ -251,6 +259,7 @@ function follow(s: NonNullable<typeof store>) {
         life: { ...meta.life, ...(remote.life ?? {}) },
         strangers: { ...meta.strangers, ...(remote.strangers ?? {}) },
         world: mergeWorld(meta.world, remote.world),
+        mine: mergeMine(meta.mine, remote.mine),
         // feelings: for each person the newer, from either copy
         bonds: mergeBonds(meta.bonds, remote.bonds),
       };
@@ -281,6 +290,8 @@ function follow(s: NonNullable<typeof store>) {
     },
     () => undefined,
   );
+  // pictures that were waiting to be made
+  for (const t of Object.values(threads)) for (const m of t.messages) if (m.pic && m.from !== "me" && Date.now() - m.at < 3 * 86400_000) void loadPic(m.pic);
   // messages the phone routine wrote while the page was closed
   s.inbox.onSnapshot(
     (snap) => {
@@ -291,14 +302,17 @@ function follow(s: NonNullable<typeof store>) {
 }
 
 function takeFromInbox(d: DocSnap) {
-  const x = d.data() as { chat?: string; from?: string; la?: string; en?: string; at?: number; voice?: unknown; photo?: unknown; gloss?: unknown } | undefined;
+  const x = d.data() as { chat?: string; from?: string; la?: string; en?: string; at?: number; voice?: unknown; photo?: unknown; pic?: unknown; picEn?: unknown; gloss?: unknown } | undefined;
   const chat = String(x?.chat ?? "");
-  // a photo needs no caption; a photo the page does not have is dropped
+  // a photo needs no caption; a photo the page does not have is dropped; a picture the routine made is in messenger/pics
   const photo = typeof x?.photo === "string" && PHOTO_BY_ID.has(x.photo) ? x.photo : undefined;
-  if (!x || !(x.la || photo) || !chat || !(chat === GROUP.id || PEOPLE.some((p) => p.id === chat) || meta.strangers[chat])) {
+  const pic = !photo && typeof x?.pic === "string" && /^[\w-]{3,40}$/.test(x.pic) ? x.pic : undefined;
+  const blocked = !isGroupId(chat, meta) && iBlocked(meta, String(x?.from ?? chat));
+  if (!x || !(x.la || photo || pic) || !chat || !chatExists(chat) || blocked) {
     void store?.inbox.doc(d.id).delete().catch(() => undefined);
     return;
   }
+  if (pic) void loadPic(pic);
   const t = getThread(chat);
   if (!t.messages.some((m) => m.id === d.id)) {
     const msg: Msg = {
@@ -308,8 +322,9 @@ function takeFromInbox(d: DocSnap) {
       en: x.en ? String(x.en) : undefined,
       at: Number(x.at) || Date.now(),
       src: "routine",
-      ...(x.voice === true && !photo ? { voice: true } : {}),
+      ...(x.voice === true && !photo && !pic ? { voice: true } : {}),
       ...(photo ? { photo } : {}),
+      ...(pic ? { pic, ...(x.picEn ? { picEn: String(x.picEn).slice(0, 300) } : {}) } : {}),
       ...(glossOf(x.gloss) ? { gloss: glossOf(x.gloss) } : {}),
     };
     saveThread(merge(t, { ...t, messages: [...t.messages, msg] }));
@@ -349,7 +364,7 @@ export function promptCtx(now = Date.now()): PromptCtx | null {
   const seen = derived().seenKnowledge.skills;
   // what each chat remembers about the learner: friends talk to each other
   const memories = Object.fromEntries(Object.values(threads).filter((t) => t.memory.length && !t.gone).map((t) => [t.id, t.memory]));
-  return { now, me: p.settings.me, tz: p.settings.tz ?? deviceZone(), words: allowedWords(chatWords().entries, seen), seen, calendar: calendarBlock(now), group: getThread(GROUP.id), memories };
+  return { now, me: p.settings.me, tz: p.settings.tz ?? deviceZone(), words: allowedWords(chatWords().entries, seen), seen, calendar: calendarBlock(now), group: getThread(GROUP.id), memories, canMake: madeToday(now) < MAKE_PER_DAY };
 }
 
 async function deps(): Promise<Deps | { error: string }> {
@@ -375,9 +390,10 @@ const pending = new Map<string, ReturnType<typeof setTimeout>>();
  * Sends the learner's message (maybe answering an earlier one, quoted above
  * it); the people answer after a short pause, so a burst gets one answer.
  */
-export function send(id: string, text: string, re?: string) {
+export function send(id: string, text: string, re?: string, extra: Partial<Pick<Msg, "voice" | "pic">> = {}) {
   const la = text.trim();
-  if (!la) return;
+  if (!la && !extra.pic) return;
+  if (!isGroupId(id, meta) && iBlocked(meta, id)) return;
   const now = Date.now();
   const t = getThread(id);
   // answers still on their way are taken back: they will answer everything at once
@@ -387,7 +403,7 @@ export function send(id: string, text: string, re?: string) {
   errors.delete(id);
   saveThread({
     ...t,
-    messages: [...t.messages.filter((m) => !waiting.includes(m.id)), { id: msgId(), from: "me", la, at: now, ...(re ? { re } : {}) }],
+    messages: [...t.messages.filter((m) => !waiting.includes(m.id)), { id: msgId(), from: "me", la, at: now, ...(re ? { re } : {}), ...extra }],
     dropped: [...(t.dropped ?? []), ...waiting].slice(-200),
     readAt: now,
   });
@@ -436,7 +452,9 @@ export async function answer(id: string) {
   readingAt.set(id, { at: timing.first.t.readAt, who: timing.first.w.id });
   emit();
   try {
-    const reply = await writeReply(getThread(id), meta, ctx, { ...d, ask: (p, o) => d.ask(p, { ...o, signal: ctl.signal }) }, timing);
+    // the learner's photos the people have not seen yet go along, for Claude to look at
+    const photos = await unseenPhotos(getThread(id));
+    const reply = await writeReply(getThread(id), meta, ctx, { ...d, ask: (p, o) => d.ask(p, { ...o, signal: ctl.signal }) }, timing, photos.map((x) => x.blob));
     if (ctl.signal.aborted) return;
     const now = Date.now();
     const t = getThread(id);
@@ -451,10 +469,16 @@ export async function answer(id: string) {
       const mine = reply.reactions.filter((x) => x.msg === m.id);
       return mine.length ? { ...m, reactions: { ...m.reactions, ...Object.fromEntries(mine.map((x) => [x.from, { e: x.e, at: Math.max(x.at, now + 600) }])) } } : m;
     });
-    saveThread({ ...t, messages: [...reacted, ...messages], memory: [...new Set([...t.memory, ...reply.remember])].slice(-24) });
+    // what they saw in the learner's photos, so they remember it
+    const seen = new Set(photos.map((x) => x.msg));
+    const described = reply.saw ? reacted.map((m) => (seen.has(m.id) ? { ...m, picEn: reply.saw } : m)) : reacted;
+    saveThread({ ...t, messages: [...described, ...messages], memory: [...new Set([...t.memory, ...reply.remember])].slice(-24) });
+    for (const x of photos) if (reply.saw) void updatePic(x.pic, { en: reply.saw });
+    // fresh pictures their messages carry
+    makePictures(reply.made);
     // what the conversation did to them: feelings about the learner, a moment, a mood, the silent treatment
     applyFeelings(meta, reply, now);
-    await enact(reply.deeds, ctx, d, Math.max(now, (messages.at(-1)?.at ?? now) + 1000));
+    await enact(reply.deeds, ctx, d, Math.max(now, (messages.at(-1)?.at ?? now) + 1000), isGroupId(id, meta) ? id : GROUP.id);
     meta = { ...meta };
     saveMeta();
     void writeBrief();
@@ -479,14 +503,17 @@ export const composing = (id: string) => (writing.has(id) ? readingAt.get(id) ??
  * the world changed, with the lines a messenger shows (left, joined, added,
  * renamed) and the messages they deleted.
  */
-async function enact(deeds: Deeds, ctx: PromptCtx, d: Deps, at: number) {
+async function enact(deeds: Deeds, ctx: PromptCtx, d: Deps, at: number, groupId: string = GROUP.id) {
   if (!deeds.acts.length && !deeds.dramas.length && !deeds.newPeople.length) return;
   const born = welcome(meta, deeds.newPeople, Math.random, at);
   refreshLives(meta, born.map((s) => s.id), at);
   const specOf = (name: string) => deeds.newPeople.find((p) => p.name === name)!;
   const joining = born.filter((s) => specOf(s.name).joinGroup);
+  // the first words of a group they start are vetted like any message
+  for (const a of deeds.acts)
+    if (a.do === "newGroup" && a.messages?.length) a.messages = (await vetAll(a.messages, ctx, d).catch(() => [])).map((m) => ({ from: m.from, la: m.la, en: m.en }));
   const all: Record<string, T> = Object.fromEntries(allThreads(true).map((t) => [t.id, t]));
-  for (const t of applyDeeds(meta, all, deeds, at, GROUP.id, joining)) saveThread(t);
+  for (const t of applyDeeds(meta, all, deeds, at, groupId, joining)) saveThread(t);
   // their first words: in private, or in the group they have just joined
   for (const s of born) {
     const first = specOf(s.name).firstMessages ?? [];
@@ -522,6 +549,7 @@ export async function opened() {
       const t = getThread(o.chat);
       saveThread({ ...t, messages: [...t.messages, o.msg] });
     }
+    makePictures(own.made);
     await enact(own.deeds, ctx, d, now + 60_000);
     meta = { ...meta };
     saveMeta();
@@ -664,11 +692,12 @@ export function touchLives(ids: string[]) {
 }
 
 let briefKey = "";
-/** Writes the brief for the phone routine when what it says has changed. */
-async function writeBrief() {
+/** Writes the brief for the phone routine when what it says has changed (`force`: the learner changed something it carries). */
+async function writeBrief(force = false) {
+  if (force) briefKey = "";
   const ctx = promptCtx();
   if (!ctx || !store) return;
-  const strangers = allThreads().filter((t) => t.kind === "stranger" && t.messages.length).map((t) => t.id);
+  const strangers = allThreads().filter((t) => t.kind === "stranger" && (t.messages.length || meta.strangers[t.id]?.story)).map((t) => t.id);
   const brief = makeBrief(meta, ctx, strangers);
   const key = JSON.stringify([brief.me, brief.language, brief.people.map((p) => p.sheet)]);
   // the moods rolled ahead age too: write again at least twice a day
@@ -682,8 +711,8 @@ let lastBrief = 0;
 
 /** "online", "typing…", "last seen 14:20": how present someone looks. */
 export function presence(who: { id: string; day: import("../content/people").Day; tz: string }, t: Thread, now: number, status: { state: string }): string {
-  // blocked: nothing of them shows any more
-  if (t.kind !== "group" && isBlocked(meta, who.id)) return "last seen a long time ago";
+  // blocked (either way): nothing of them shows any more
+  if (t.kind !== "group" && (isBlocked(meta, who.id) || iBlocked(meta, who.id))) return "last seen a long time ago";
   if (typingIn(t, now) === who.id) return "typing…";
   const lastOwn = t.messages.filter((m) => m.from === who.id && m.at <= now).at(-1)?.at ?? 0;
   if (now - lastOwn < 90_000) return "online";
@@ -695,4 +724,288 @@ export function presence(who: { id: string; day: import("../content/people").Day
   const seen = Math.max(lastOwn, now - back);
   const d = new Date(seen);
   return `last seen ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// -------------------------------------------------------------- pictures
+
+/** How many fresh pictures the people may have made in a day (each one is a little work for a volunteer's machine). */
+const MAKE_PER_DAY = 8;
+/** The routine that makes wanted pictures at once ("Nūntiī: pictures", fired through the Claude Code Remote connector). */
+export const PICTURE_TRIGGER = "trig_01UuDAZrviveDMPR1sjce698";
+const CONNECTOR = "Claude Code Remote";
+
+/** Fresh pictures the people asked for in the last day. */
+function madeToday(now: number): number {
+  let n = 0;
+  for (const t of Object.values(threads)) for (const m of t.messages) if (m.pic && m.from !== "me" && now - m.at < 86400_000) n++;
+  return n;
+}
+
+const picCache = new Map<string, Pic>();
+const picFollow = new Map<string, () => void>();
+const picLoading = new Set<string>();
+/** The learner's photos sent from this browser, as files (for Claude to look at). */
+const blobs = new Map<string, Blob>();
+
+/** A picture, when it has come in (it loads the first time it is asked for). */
+export function picOf(id: string): Pic | undefined {
+  if (!picCache.has(id)) void loadPic(id);
+  return picCache.get(id);
+}
+
+/** Loads a picture's document; one still being made is followed until it is done. */
+async function loadPic(id: string) {
+  if (picCache.get(id)?.status === "done" || picLoading.has(id) || picFollow.has(id) || !store) return;
+  picLoading.add(id);
+  const ref = store.pics.doc(id);
+  try {
+    const snap = await ref.get?.();
+    const p = snap?.exists ? (snap.data() as unknown as Pic) : undefined;
+    if (p) picCache.set(id, { ...p, id });
+    if ((!p || p.status === "wanted") && ref.onSnapshot) {
+      picFollow.set(
+        id,
+        ref.onSnapshot(
+          (x) => {
+            const q = x.exists ? (x.data() as unknown as Pic) : undefined;
+            if (!q) return;
+            picCache.set(id, { ...q, id });
+            if (q.status !== "wanted") {
+              picFollow.get(id)?.();
+              picFollow.delete(id);
+            }
+            emit();
+          },
+          () => undefined,
+        ),
+      );
+    }
+  } catch {
+    /* it shows as a picture that did not load */
+  } finally {
+    picLoading.delete(id);
+    emit();
+  }
+}
+
+/** A picture as an image source: its data, once made. */
+export const picSrc = (p: Pic | undefined) => (p?.status === "done" && p.b64 ? `data:${p.type ?? "image/jpeg"};base64,${p.b64}` : undefined);
+
+function savePic(p: Pic) {
+  picCache.set(p.id, p);
+  emit();
+  if (store) {
+    const s = store;
+    queueWrite(`p:${p.id}`, () => s.pics.doc(p.id).set(toBody(p)));
+  }
+}
+
+function updatePic(id: string, patch: Partial<Pic>) {
+  const p = picCache.get(id);
+  if (p) savePic({ ...p, ...patch });
+}
+
+/**
+ * Fresh pictures the people want to send: each waits in messenger/pics until
+ * it is made, by the pictures routine (fired at once through the Claude Code
+ * Remote connector, when the page may use it) or by the hourly phone routine.
+ */
+function makePictures(made: Pic[]) {
+  if (!made.length) return;
+  for (const p of made) {
+    savePic(p);
+    void loadPic(p.id);
+  }
+  void firePictures(made.map((p) => p.id));
+}
+
+let lastFire = 0;
+async function firePictures(ids: string[]) {
+  const now = Date.now();
+  // one run makes every picture that waits
+  if (now - lastFire < 90_000) return;
+  lastFire = now;
+  try {
+    await callConnector(CONNECTOR, "fire_trigger", { trigger_id: PICTURE_TRIGGER, text: `Pictures waiting: ${ids.join(", ")}` });
+  } catch {
+    /* the hourly routine makes them */
+  }
+}
+
+/** Shrinks a photo the learner picked to a small JPEG (its longest side 1024 pixels at most, under the store's limit). */
+async function shrink(file: Blob): Promise<{ blob: Blob; b64: string }> {
+  const img = await createImageBitmap(file);
+  for (const [side, q] of [[1024, 0.8], [800, 0.72], [640, 0.62], [480, 0.55]] as const) {
+    const k = Math.min(1, side / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * k);
+    c.height = Math.round(img.height * k);
+    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise<Blob | null>((r) => c.toBlob(r, "image/jpeg", q));
+    if (!blob) continue;
+    const b64 = await new Promise<string>((r) => {
+      const fr = new FileReader();
+      fr.onload = () => r(String(fr.result).split(",")[1] ?? "");
+      fr.readAsDataURL(blob);
+    });
+    if (b64.length < 200_000) return { blob, b64 };
+  }
+  throw new Error("too big");
+}
+
+let photoCaps: Promise<{ maxCount: number } | null> | null = null;
+/** Whether the people can see the learner's photos here (Claude can be shown pictures from this page). */
+export const canSendPhotos = () => (photoCaps ??= imageLimits());
+
+/** The learner sends a photo, with a caption if they wrote one; the people see it and answer. */
+export async function sendPhoto(id: string, file: Blob, caption: string, re?: string): Promise<{ error: string } | null> {
+  try {
+    const { blob, b64 } = await shrink(file);
+    const pic = picId();
+    blobs.set(pic, blob);
+    savePic({ id: pic, by: "me", en: "", status: "done", type: "image/jpeg", b64, at: Date.now() });
+    send(id, caption, re, { pic });
+    return null;
+  } catch {
+    return { error: "That picture could not be read. Try another one." };
+  }
+}
+
+/** A picture's data as a file again (no fetch: the page's network is closed). */
+function blobOf(p: Pic | undefined): Blob | undefined {
+  if (!p?.b64) return undefined;
+  try {
+    const bin = atob(p.b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: p.type ?? "image/jpeg" });
+  } catch {
+    return undefined;
+  }
+}
+
+/** The learner's photos in the newest messages that the people have not looked at yet (with their files). */
+async function unseenPhotos(t: Thread): Promise<{ msg: string; pic: string; blob: Blob }[]> {
+  const caps = await canSendPhotos();
+  if (!caps) return [];
+  const out: { msg: string; pic: string; blob: Blob }[] = [];
+  for (const m of [...t.messages].reverse()) {
+    if (m.from !== "me") break;
+    if (!m.pic || m.picEn) continue;
+    let blob = blobs.get(m.pic);
+    if (!blob) {
+      await loadPic(m.pic);
+      blob = blobOf(picCache.get(m.pic));
+    }
+    if (blob) out.unshift({ msg: m.id, pic: m.pic, blob });
+  }
+  return out.slice(-Math.max(1, caps.maxCount));
+}
+
+// ------------------------------------------------------ the learner's own
+
+/** The learner's message, typed, sent as a voice message (their words read by the device's voice). */
+export const sendVoice = (id: string, text: string, re?: string) => send(id, text, re, { voice: true });
+
+/** The learner deletes a message of theirs for everyone (the people may have read it already). */
+export function deleteMine(id: string, msg: string) {
+  const t = getThread(id);
+  const now = Date.now();
+  saveThread({ ...t, messages: t.messages.map((m) => (m.id === msg && m.from === "me" ? { ...m, deletedAt: now } : m)) });
+}
+
+/** Clears a chat on this side: its messages no longer show (the people still remember them). */
+export function clearChat(id: string) {
+  saveThread({ ...getThread(id), clearedAt: Date.now() });
+}
+
+function setMine(change: (m: Mine) => Mine) {
+  meta = { ...meta, mine: { ...change(meta.mine ?? { blocked: [], muted: [], updatedAt: 0 }), updatedAt: Date.now() } };
+  saveMeta();
+  void writeBrief(true);
+}
+
+/** Blocks someone (nothing they send in private reaches the learner), or unblocks them. */
+export const setBlocked = (who: string, on: boolean) => setMine((m) => ({ ...m, blocked: on ? [...new Set([...m.blocked, who])] : m.blocked.filter((x) => x !== who) }));
+
+/** Mutes a chat (no notice, no count, no phone notification), or unmutes it. */
+export const setMuted = (chat: string, on: boolean) => setMine((m) => ({ ...m, muted: on ? [...new Set([...m.muted, chat])] : m.muted.filter((x) => x !== chat) }));
+
+/** Changes the world on the learner's side: a group made, renamed, people added or removed; the chat gets the messenger's lines. */
+function changeGroups(id: string, change: (g: { name: string; members: string[] }) => { name: string; members: string[] } | null, lines: string[]) {
+  const now = Date.now();
+  const world = { ...(meta.world ?? { updatedAt: 0 }) };
+  const cur = { name: groupName(meta, id), members: groupMembers(meta, id) };
+  const next = change(cur);
+  if (id === GROUP.id) world.group = next ? { ...world.group, name: next.name, members: next.members } : world.group;
+  else {
+    const old = world.groups?.[id];
+    world.groups = { ...world.groups, [id]: next ? { by: old?.by ?? "me", at: old?.at ?? now, ...next, updatedAt: now } : { ...old!, gone: true, updatedAt: now } };
+  }
+  world.updatedAt = now;
+  meta = { ...meta, world };
+  saveMeta();
+  const t = getThread(id);
+  let at = now;
+  saveThread({ ...t, messages: [...t.messages, ...lines.map((en) => sysLine(en, "me", at++))] });
+  void writeBrief(true);
+}
+
+const namesOf = (ids: string[]) => ids.map((x) => whoOf(x, meta)?.name ?? x).join(", ");
+
+/** The learner makes a group of their own with whom they like; the people find themselves in it and react. Returns its chat id. */
+export function createGroup(name: string, members: string[]): string {
+  const id = `g-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  const n = name.trim() || "Nova turba";
+  changeGroups(id, () => ({ name: n, members }), [`You created the group «${n}».`, `You added ${namesOf(members)}.`]);
+  // they find themselves in it, and say something (or not)
+  pending.set(id, setTimeout(() => void answer(id), 1500));
+  return id;
+}
+
+export const renameGroup = (id: string, name: string) => name.trim() && changeGroups(id, (g) => ({ ...g, name: name.trim() }), [`You renamed the group «${name.trim()}».`]);
+
+export function addToGroup(id: string, who: string[]) {
+  const fresh = who.filter((x) => !groupMembers(meta, id).includes(x));
+  if (!fresh.length) return;
+  changeGroups(id, (g) => ({ ...g, members: [...g.members, ...fresh] }), [`You added ${namesOf(fresh)}.`]);
+  pending.set(id, setTimeout(() => void answer(id), 1500));
+}
+
+/** The learner takes someone out of a group: they notice, and it stays with them. */
+export function removeFromGroup(id: string, who: string) {
+  changeGroups(id, (g) => ({ ...g, members: g.members.filter((x) => x !== who) }), [`You removed ${namesOf([who])}.`]);
+  const bond = meta.bonds?.[who] ?? { feel: "", moments: [], updatedAt: 0 };
+  const day = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/Rome" });
+  meta = { ...meta, bonds: { ...meta.bonds, [who]: { ...bond, moments: [...bond.moments, `${day}: the learner removed me from the group «${groupName(meta, id)}»`].slice(-MOMENTS), updatedAt: Date.now() } } };
+  saveMeta();
+  pending.set(id, setTimeout(() => void answer(id), 1500));
+}
+
+/** The learner leaves (and so deletes) a group of their own or one the people started. */
+export const leaveGroup = (id: string) => id !== GROUP.id && changeGroups(id, () => null, ["You left the group."]);
+
+/** The learner wants to write to someone from the story: Claude makes them real. Returns their chat id. */
+export async function storyPerson(text: string, signal?: AbortSignal): Promise<{ id: string } | { error: string }> {
+  const ctx = promptCtx();
+  if (!ctx) return { error: "Tell the people your name first." };
+  const d = await deps();
+  if ("error" in d) return d;
+  try {
+    const res = await meetFromStory(text, meta, ctx, { ...d, ask: (p, o) => d.ask(p, { ...o, signal }) });
+    if ("existing" in res) {
+      const t = getThread(res.existing);
+      if (t.gone) saveThread({ ...t, gone: false });
+      if (meta.strangers[res.existing] && !meta.strangers[res.existing].story) meta = { ...meta, strangers: { ...meta.strangers, [res.existing]: { ...meta.strangers[res.existing], story: true } } };
+      saveMeta();
+      return { id: res.existing };
+    }
+    meta = { ...meta, strangers: { ...meta.strangers, [res.stranger.id]: res.stranger }, life: { ...meta.life, [res.stranger.id]: res.life } };
+    saveMeta();
+    saveThread(newThread(res.stranger.id, "stranger"));
+    void writeBrief(true);
+    return { id: res.stranger.id };
+  } catch (e) {
+    return { error: (e as { code?: string })?.code === "no_person" ? "Claude could not tell who that is. Say a little more about them." : errorText(e) };
+  }
 }

@@ -10,10 +10,10 @@ import { Lexicon } from "../latin/analyze";
 import { checkAnswer, literalReading } from "../latin/facts";
 import { PHOTO_BY_ID, photoSrc } from "../content/photos";
 import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from "./life";
-import { awayNow, isBlocked, Meta, MOMENTS, Msg, msgId, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
+import { awayNow, groupIds, iBlocked, isBlocked, Meta, MOMENTS, Msg, msgId, Pic, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
-import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, strangerPrompt } from "./prompts";
-import { rollStranger, Stranger } from "./strangers";
+import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, storyPersonPrompt, strangerPrompt } from "./prompts";
+import { inventStranger, NewPerson, rollStranger, Stranger } from "./strangers";
 import { vetMessage, withMacrons } from "./vet";
 
 const plainWord = (w: string) => w.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -63,6 +63,8 @@ interface Draft {
   en: string;
   voice?: boolean;
   photo?: string;
+  /** A fresh picture to make: what it shows (English). */
+  picture?: string;
   re?: string;
   /** New words in a strong moment, with their meanings. */
   gloss?: Record<string, string>;
@@ -88,14 +90,23 @@ const unsendOf = (x: unknown) => {
   return Number.isFinite(n) && n > 0 ? Math.max(2, Math.min(600, n)) : undefined;
 };
 
-/** A voice message and a photo, as Claude marked them (a photo only if it exists; a caption may be empty). */
-function extras(m: { voice?: unknown; photo?: unknown }): { voice?: true; photo?: string } {
+/**
+ * A voice message, a photo or a fresh picture, as Claude marked them (a photo
+ * only if it exists; a picture only when pictures may be made now; a caption
+ * may be empty).
+ */
+function extras(m: { voice?: unknown; photo?: unknown; picture?: unknown }, canMake = false): { voice?: true; photo?: string; picture?: string } {
   const photo = typeof m.photo === "string" && PHOTO_BY_ID.has(m.photo) && photoSrc(m.photo) ? m.photo : undefined;
-  return { ...(m.voice === true && !photo ? { voice: true as const } : {}), ...(photo ? { photo } : {}) };
+  const picture = !photo && canMake ? clean(m.picture).slice(0, 400) || undefined : undefined;
+  return { ...(m.voice === true && !photo && !picture ? { voice: true as const } : {}), ...(photo ? { photo } : {}), ...(picture ? { picture } : {}) };
 }
 
-/** The message fields of a vetted draft: its Latin and English, a voice message or photo, the words that slipped. */
-const fields = (d: Draft & { newWords?: string[] }) => ({ la: d.la, en: d.en, ...(d.voice ? { voice: true } : {}), ...(d.photo ? { photo: d.photo } : {}), ...(d.re ? { re: d.re } : {}), ...(d.newWords ? { newWords: d.newWords } : {}), ...(d.gloss ? { gloss: d.gloss } : {}) });
+/** A picture to be made for a message: its id goes on the message, the rest waits in messenger/pics until it is made. */
+export const picId = () => `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const wanted = (d: { from?: string; picture?: string }, at: number, id: string): Pic => ({ id, by: d.from ?? "", en: d.picture!, prompt: d.picture!, status: "wanted", at });
+
+/** The message fields of a vetted draft: its Latin and English, a voice message, photo or picture, the words that slipped. */
+const fields = (d: Draft & { newWords?: string[] }, pic?: string) => ({ la: d.la, en: d.en, ...(d.voice ? { voice: true } : {}), ...(d.photo ? { photo: d.photo } : {}), ...(pic ? { pic, picEn: d.picture } : {}), ...(d.re ? { re: d.re } : {}), ...(d.newWords ? { newWords: d.newWords } : {}), ...(d.gloss ? { gloss: d.gloss } : {}) });
 
 /** When a message sent at `at` is taken back, if it is. */
 const deletedAtOf = (d: Draft, at: number) => (d.unsend ? { deletedAt: at + d.unsend * 1000 } : {});
@@ -167,6 +178,10 @@ export interface Reply {
   readAt: number;
   /** Reactions to the learner's last message, each shown a moment after its person reads it. */
   reactions: { msg: string; from: string; e: string; at: number }[];
+  /** Fresh pictures the messages carry, to be made. */
+  made: Pic[];
+  /** What the learner's newest photo shows, as they saw it. */
+  saw?: string;
 }
 
 export type Timing = ReturnType<typeof timingFor>;
@@ -186,10 +201,10 @@ export function timingFor(members: Who[], now: number, r: Rand = Math.random, me
 }
 
 /** The people's answer to what the learner wrote (the last messages of the thread). */
-export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps, timing?: Timing): Promise<Reply> {
+export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps, timing?: Timing, images?: unknown[]): Promise<Reply> {
   const r = deps.r ?? Math.random;
   const members = membersOf(thread.id, meta);
-  if (!members.length) return { messages: [], remember: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {}, deeds: noDeeds() };
+  if (!members.length) return { messages: [], remember: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {}, deeds: noDeeds(), made: [] };
   refreshLives(meta, members.map((w) => w.id), ctx.now, r);
   const { first, byId } = timing ?? timingFor(members, ctx.now, r, meta);
   // the learner's last messages, read word by word: a mistake is taken literally
@@ -201,9 +216,10 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   const literal = burst.length ? literalReading(withoutEmoji(burst.join(" ")), deps.lex) : "";
   const prompt = replyPrompt(thread, meta, ctx, { at: first.t.startAt, why: first.t.why }, literal);
   const raw = await deps.ask<{
-    messages?: { from?: string; la?: string; en?: string; gap?: number; re?: unknown; voice?: unknown; photo?: unknown; gloss?: unknown; unsend?: unknown }[];
+    messages?: { from?: string; la?: string; en?: string; gap?: number; re?: unknown; voice?: unknown; photo?: unknown; picture?: unknown; gloss?: unknown; unsend?: unknown }[];
     react?: { from?: string; emoji?: string }[];
     remember?: string[];
+    saw?: unknown;
     feel?: Record<string, unknown>;
     moment?: Record<string, unknown>;
     mood?: Record<string, unknown>;
@@ -211,7 +227,7 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     acts?: unknown;
     drama?: unknown;
     newPerson?: unknown;
-  }>(prompt, { ...deps.opts, cache: false });
+  }>(prompt, { ...deps.opts, cache: false, ...(images?.length ? { images } : {}) });
   const ids = new Set(members.map((w) => w.id));
   const fromOf = (x: unknown) => (ids.has(String(x)) ? String(x) : members.length === 1 ? members[0].id : "");
   // "re": the number of a message in the conversation the prompt showed (a quote of the very last one says nothing)
@@ -221,16 +237,20 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     return Number.isInteger(i) && i >= 1 && i < shown.length ? shown[i - 1].id : undefined;
   };
   const drafts = (raw?.messages ?? [])
-    .map((m) => ({ from: fromOf(m.from), la: clean(m.la), en: clean(m.en), gap: Number(m.gap) || 2, re: reOf(m.re), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), ...extras(m) }))
-    .filter((m) => m.from && (m.la || m.photo))
+    .map((m) => ({ from: fromOf(m.from), la: clean(m.la), en: clean(m.en), gap: Number(m.gap) || 2, re: reOf(m.re), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), ...extras(m, ctx.canMake) }))
+    .filter((m) => m.from && (m.la || m.photo || m.picture))
     .slice(0, 5);
   const vetted = await vetAll(drafts, ctx, deps);
   // each message arrives after the one before it: a pause, then the typing; a sleeper answers when awake
   let t = first.t.startAt;
+  const made: Pic[] = [];
   const messages: Msg[] = vetted.map((d) => {
     const own = byId.get(d.from!);
     t = Math.max(t, own?.startAt ?? t) + Math.min(40, Math.max(0, d.gap)) * 1000 + typingTime(d.la);
-    return { id: msgId(), from: d.from!, at: Math.round(t), src: "reply", ...fields(d), ...deletedAtOf(d, Math.round(t)) };
+    // a fresh picture: one a reply at most
+    const pic = d.picture && !made.length ? picId() : undefined;
+    if (pic) made.push(wanted(d, ctx.now, pic));
+    return { id: msgId(), from: d.from!, at: Math.round(t), src: "reply", ...fields(d, pic), ...deletedAtOf(d, Math.round(t)) };
   });
   const remember = (raw?.remember ?? []).map(clean).filter(Boolean).slice(0, 2);
   // reactions to the learner's last message: one per person, a moment after they read it
@@ -243,8 +263,9 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     reactions.push({ msg: target.id, from, e, at: Math.round((byId.get(from)?.readAt ?? first.t.readAt) + 1500 + r() * 4000) });
   }
   // what they did besides writing: blocking, leaving, renaming, travelling, new people, storylines
-  const deeds = deedsOf(raw ?? {}, ids, allPeople(meta), shown);
-  return { messages, remember, readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids), deeds };
+  const deeds = deedsOf(raw ?? {}, ids, allPeople(meta), shown, new Set(groupIds(meta)));
+  const saw = images?.length ? clean(raw?.saw).slice(0, 200) || undefined : undefined;
+  return { messages: messages.filter((m) => m.la || m.photo || m.pic), remember, readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids), deeds, made, ...(saw ? { saw } : {}) };
 }
 
 /** The feelings, moments, moods and silences Claude reported, for the people of the thread only. */
@@ -301,12 +322,12 @@ export interface Own {
 }
 
 /** What the people write on their own in the next hours (written now, each shown at its moment). */
-export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, deps: Deps, hours = 3): Promise<{ messages: Own[]; deeds: Deeds }> {
+export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, deps: Deps, hours = 3): Promise<{ messages: Own[]; deeds: Deeds; made: Pic[] }> {
   const r = deps.r ?? Math.random;
   const live = threads.filter((t) => !t.gone);
   refreshLives(meta, [...new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)))], ctx.now, r);
   const raw = await deps.ask<{
-    messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown; gloss?: unknown; unsend?: unknown }[];
+    messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown; picture?: unknown; gloss?: unknown; unsend?: unknown }[];
     feel?: Record<string, unknown>;
     moment?: Record<string, unknown>;
     acts?: unknown;
@@ -320,14 +341,14 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
   const everyone = new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)));
   applyFeelings(meta, feelingsOf({ feel: raw?.feel, moment: raw?.moment }, everyone), ctx.now);
   // what they do besides writing; someone unblocking the learner now may write to them again
-  const deeds = deedsOf(raw ?? {}, allPeople(meta), allPeople(meta));
+  const deeds = deedsOf(raw ?? {}, allPeople(meta), allPeople(meta), [], new Set(groupIds(meta)));
   const unblocking = new Set(deeds.acts.filter((a) => a.do === "unblock").map((a) => a.who));
   const byChat = new Map(live.map((t) => [t.id, t]));
   const drafts = (raw?.messages ?? [])
-    .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), ...extras(m) }))
+    .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), ...extras(m, ctx.canMake) }))
     .filter((m) => {
       const t = byChat.get(m.chat);
-      if (!t || !(m.la || m.photo)) return false;
+      if (!t || !(m.la || m.photo || m.picture)) return false;
       // never into a chat with messages still on their way; only its own people; only someone awake then
       if (t.messages.some((x) => x.from !== "me" && x.at > ctx.now)) return false;
       const member = membersOf(t.id, meta).find((w) => w.id === m.from);
@@ -336,19 +357,25 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
       if (t.kind !== "group" && silentNow(meta.bonds?.[member.id], ctx.now + m.in * 60000)) return false;
       // blocked: nothing reaches the learner in private, unless they unblock them now
       if (t.kind !== "group" && isBlocked(meta, member.id) && !unblocking.has(member.id)) return false;
+      // blocked by the learner: what they send in private never arrives
+      if (t.kind !== "group" && iBlocked(meta, member.id)) return false;
       return statusAt(member.day, member.tz, ctx.now + m.in * 60000).state !== "asleep";
     })
     .slice(0, 10);
   const vetted = await vetAll(drafts, ctx, deps);
   const last = new Map<string, number>();
+  const made: Pic[] = [];
   const messages = vetted.map((d) => {
     // a burst stays in order: each message after the one before
     let at = ctx.now + d.in * 60000 + Math.round(r() * 20000);
     at = Math.max(at, (last.get(d.chat) ?? 0) + typingTime(d.la));
     last.set(d.chat, at);
-    return { chat: d.chat, msg: { id: msgId(), from: d.from, at, src: "own" as const, ...fields(d), ...deletedAtOf(d, at) } };
+    // fresh pictures: two at most in a turn
+    const pic = d.picture && made.length < 2 ? picId() : undefined;
+    if (pic) made.push(wanted(d, ctx.now, pic));
+    return { chat: d.chat, msg: { id: msgId(), from: d.from, at, src: "own" as const, ...fields(d, pic), ...deletedAtOf(d, at) } };
   });
-  return { messages, deeds };
+  return { messages: messages.filter((x) => x.msg.la || x.msg.photo || x.msg.pic), deeds, made };
 }
 
 // ------------------------------------------------------------ strangers
@@ -379,6 +406,45 @@ export async function meetStranger(meta: Meta, ctx: PromptCtx, deps: Deps): Prom
     return { id: msgId(), from: s.id, la: d.la, en: d.en, at: t, src: "first", ...(d.newWords ? { newWords: d.newWords } : {}) };
   });
   return { stranger: s, first, life };
+}
+
+/**
+ * Someone from the story the learner wants to write to (Tertia, Iūlia's
+ * sister; Marcus's landlord; "the man who stole Gāius's pig"): Claude makes
+ * them real from everything the story holds, and they wait for the learner's
+ * first message. Their face, day and time zone come from the dice.
+ */
+export async function meetFromStory(text: string, meta: Meta, ctx: PromptCtx, deps: Deps): Promise<{ existing: string } | { stranger: Stranger; life: Life }> {
+  const r = deps.r ?? Math.random;
+  const raw = await deps.ask<Record<string, unknown>>(storyPersonPrompt(text, meta, ctx), { ...deps.opts, cache: false });
+  // someone the learner already has a chat with
+  const existing = String(raw?.existing ?? "");
+  if (existing && (PERSON_BY_ID.has(existing) || meta.strangers[existing])) return { existing };
+  const link = raw?.link as { to?: unknown; how?: unknown } | undefined;
+  const to = String(link?.to ?? "");
+  const spec: NewPerson = {
+    name: clean(raw?.name).slice(0, 30),
+    g: raw?.g === "f" ? "f" : "m",
+    age: Math.max(5, Math.min(99, Number(raw?.age) || 30)),
+    job: clean(raw?.job).slice(0, 80) || "lives in Rome",
+    city: clean(raw?.city).slice(0, 60) || "Rome",
+    about: clean(raw?.about).slice(0, 500),
+    ...(PERSON_BY_ID.has(to) ? { link: { to, how: clean(link?.how).slice(0, 160) } } : {}),
+    ...(clean(raw?.first) ? { first: clean(raw?.first).slice(0, 300) } : {}),
+  };
+  if (!/^\p{Lu}\p{L}+$/u.test(spec.name)) throw Object.assign(new Error("no one"), { code: "no_person" });
+  const used = Object.values(meta.strangers);
+  const same = used.find((x) => x.name === spec.name) ?? [...PERSON_BY_ID.values()].find((p) => p.name === spec.name);
+  if (same) return { existing: same.id };
+  const taken = [...used.map((s) => s.name), ...[...PERSON_BY_ID.values()].map((p) => p.name)];
+  const s = inventStranger(spec, r, { names: taken, portraits: used.map((x) => x.portrait) }, ctx.now);
+  s.secret = clean(raw?.secret) || undefined;
+  s.happenings = (Array.isArray(raw?.happenings) ? (raw.happenings as { en?: unknown; mood?: unknown; hours?: unknown[] }[]) : [])
+    .map((h) => ({ en: clean(h?.en), mood: clean(h?.mood) || undefined, hours: [Number(h?.hours?.[0]) || 4, Number(h?.hours?.[1]) || 24] as [number, number] }))
+    .filter((h) => h.en)
+    .slice(0, 6);
+  const { life } = lifeNow({ moods: s.moods, swing: s.swing, happenings: s.happenings }, undefined, ctx.now, r);
+  return { stranger: { ...s, invented: true, story: true }, life };
 }
 
 // ---------------------------------------------------------------- checks

@@ -3,12 +3,12 @@
 // limits of the learner's Latin. Plain functions of plain data, so the same
 // text serves the page and the brief the phone routine reads.
 import { emojiList } from "./emoji";
-import { photosFor } from "../content/photos";
+import { PHOTO_BY_ID, photosFor } from "../content/photos";
 import { GROUP, PEOPLE } from "../content/people";
 import { SKILLS } from "../latin/skills";
 import type { Me } from "../trainer/progress";
 import { Life, localTime, moodText, partOfDay, statusAt } from "./life";
-import { awayNow, Bond, CoachTurn, deletedNow, groupMembers, groupName, isBlocked, Meta, Msg, REACTIONS, SYS, Thread, Who, membersOf, silentNow, whoOf } from "./model";
+import { awayNow, Bond, CoachTurn, deletedNow, groupIds, groupMembers, groupName, groupsOf, iBlocked, isBlocked, isGroupId, Meta, Msg, REACTIONS, SYS, Thread, Who, membersOf, silentNow, whoOf } from "./model";
 import type { Stranger } from "./strangers";
 import type { AllowedWord } from "./words";
 
@@ -26,6 +26,8 @@ export interface PromptCtx {
   group?: Thread;
   /** What each chat remembers about the learner, by chat id: friends talk, so they may know what the learner told the others. */
   memories?: Record<string, string[]>;
+  /** Fresh pictures may be made now (a few a day). */
+  canMake?: boolean;
 }
 
 // ------------------------------------------------------------ language
@@ -118,8 +120,10 @@ export function worldLine(who: Who, meta: Meta, now: number): string {
   if (away) out.push(`${who.name} is away (${away.where}) until ${localTime(away.until, who.tz).weekday} ${localTime(away.until, who.tz).date}: they write rarely and late.`);
   const status = meta.world?.status?.[who.id];
   if (status) out.push(`Their status line: «${status.text}».`);
-  if (!who.stranger && !groupMembers(meta).includes(who.id)) out.push(`Not in the group «${groupName(meta)}» now.`);
-  else if (who.stranger && groupMembers(meta).includes(who.id)) out.push(`In the group «${groupName(meta)}» with the friends.`);
+  if (iBlocked(meta, who.id)) out.push(`THE LEARNER HAS BLOCKED ${who.name.toUpperCase()}: nothing ${who.name} sends in private reaches the learner (one grey tick, never read). They may suspect it, hear it from someone, or find out; in a group they can still talk.`);
+  const theirs = groupsOf(meta, who.id).map((g) => `«${groupName(meta, g)}»`);
+  if (!who.stranger && !groupMembers(meta).includes(who.id)) out.push(`Not in the friends' group «${groupName(meta)}» now.`);
+  if (theirs.length) out.push(`In the group${theirs.length > 1 ? "s" : ""} ${theirs.join(", ")} with the learner.`);
   return out.join(" ");
 }
 
@@ -183,25 +187,40 @@ export function conversationBlock(thread: Thread, meta: Meta, ctx: PromptCtx, tz
         .filter(([, r]) => r.e && r.at <= ctx.now)
         .map(([who, r]) => `${nameOf(who, meta, ctx.me)} reacted ${r.e}`);
       if (m.from === SYS) return `#${i + 1} [${t.weekday.slice(0, 3)} ${t.hm}] (${m.en})`;
-      const what = m.voice ? `[voice message] ${m.la}` : m.photo ? `[photo] ${m.la}` : m.la;
-      const gone = deletedNow(m, ctx.now) ? ` (deleted by ${nameOf(m.from, meta, ctx.me)}; the learner sees only that a message was deleted)` : "";
+      const what = m.voice ? `[voice message] ${m.la}` : m.photo ? `[photo: ${PHOTO_BY_ID.get(m.photo)?.en ?? "a photo"}] ${m.la}` : m.pic ? `${picText(m)} ${m.la}`.trim() : m.la;
+      const gone = !deletedNow(m, ctx.now)
+        ? ""
+        : m.from === "me"
+          ? m.readAt && m.readAt <= m.deletedAt!
+            ? " (the learner deleted this after it was read: they saw it)"
+            : thread.kind === "group"
+              ? " (the learner deleted this; whoever had read it already saw it)"
+              : " (the learner deleted this before it was read: only «message deleted» shows)"
+          : ` (deleted by ${nameOf(m.from, meta, ctx.me)}; the learner sees only that a message was deleted)`;
       return `#${i + 1} [${t.weekday.slice(0, 3)} ${t.hm}] ${nameOf(m.from, meta, ctx.me)}${quote}: ${what}${gone}${reacted.length ? `   (${reacted.join(", ")})` : ""}`;
     })
     .join("\n");
 }
 
+/** A picture in the conversation, as the people know it. */
+function picText(m: Msg): string {
+  if (m.from === "me") return m.picEn ? `[a photo the learner sent: ${m.picEn}]` : "[a photo the learner sent: it is attached to this prompt, look at it]";
+  return `[photo: ${m.picEn ?? "a photo"}]`;
+}
+
 const HOW_TO_BE_REAL = `BE THEM:
 These are real people, not characters in a script: pride, moods, desires, opinions, secrets, a history with the learner and with each other. There is no plot to follow; let things happen as they would. Surprise the learner.
 Their feelings about the learner grow from what really happens, and show in everything they do. Trolling works on them as on real people: some fall for anything, some see through it and mock it, some troll first, prank, lie, test the learner's loyalty or jealousy. They drag the learner into their lives: secrets to keep, sides to take, favours, gossip, lies to cover.
-Adult themes are welcome, as in a Roman comedy or in Catullus: desire, innuendo, wine, insults, scandal, heartbreak; anything sexual stays implied, never described.
+Adult themes are welcome, as in a Roman comedy or in Catullus: desire, innuendo, wine, insults, scandal, heartbreak; anything sexual stays implied, never described. Anyone under eighteen is never part of anything romantic or sexual, nor talked about that way.
 They never correct the learner's Latin. They live in the Roman world around 100 AD and write on a «tabula» that carries messages; they know nothing of AI, phones, sites or lessons. Text the way people text, not the way assistants write.`;
 
 /** What they can do besides writing (the learner discovers it as it happens). */
 const CAN_DO = `WHAT THEY CAN DO (only what they would really do now; usually none of it):
-- not answer at all; react; quote a message; send a voice message or a photo
+- not answer at all; react; quote a message; send a voice message, a photo from the list, or a picture of anything they would really send
 - send a message and take it back a moment later ("unsend": seconds), or delete an earlier message of theirs (act "delete", "msg": its number)
 - block the learner (act "block") and unblock them later ("unblock"); blocked, the learner's messages do not reach them
-- leave the group ("leave"), come back ("join"), add someone ("add", "whom": a person id or a new person's name), rename it ("rename", "text")
+- leave a group ("leave"), come back ("join"), add someone ("add", "whom": a person id or a new person's name), throw someone out ("remove"), rename it ("rename", "text"); "group": its chat id (the chat they are in, or the friends' group, when left out)
+- start a group of their own with the learner and whoever they like ("newGroup", "text": its name, "with": ["me", person ids], "messages": its first messages): a party, a plot, a secret, a group about someone without them
 - set a status line for themselves ("status", "text": a few Latin words or emoji)
 - go away for a while, travelling or vanishing ("away", "hours", "text": where to), and come back ("back")
 - bring someone new into their lives: a lover, a rival, a relative, a creditor, a new friend ("newPerson"), who may join the group or write to the learner
@@ -209,7 +228,7 @@ const CAN_DO = `WHAT THEY CAN DO (only what they would really do now; usually no
 - whatever else a real person would do with a messenger, as far as words, emoji and these can carry it`;
 
 /** The JSON fields for what they do besides writing. */
-const DEEDS = `- "acts" (optional): [{"who": "<person id>", "do": "block" | "unblock" | "leave" | "join" | "add" | "rename" | "delete" | "status" | "away" | "back", "text": "...", "whom": "...", "msg": <number>, "hours": <number>}]
+const DEEDS = `- "acts" (optional): [{"who": "<person id>", "do": "block" | "unblock" | "leave" | "join" | "add" | "remove" | "rename" | "newGroup" | "delete" | "status" | "away" | "back", "text": "...", "whom": "...", "group": "<chat id>", "with": ["me", "<person id>"], "messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English>"}], "msg": <number>, "hours": <number>}]
 - "drama" (optional): [{"id": "<short id, new or one shown>", "en": "<what is going on now among them, and who knows what (English)>", "who": ["<person ids>"], "over": true when it has ended}]
 - "newPerson" (optional): [{"name": "<Latin name>", "g": "m" | "f", "age": <years>, "job": "...", "city": "...", "about": "<who they are, two sentences>", "link": {"to": "<friend id>", "how": "<how they know them>"}, "first": "<how they feel about the learner>", "joinGroup": true, "messages": [{"la": "<Latin>", "en": "<English>"}]}]
 - A message may also carry "gloss": {"<new word>": "<meaning>"} for a new word in it, and "unsend": <seconds> to take it back that long after sending.`;
@@ -223,31 +242,43 @@ function peopleOf(thread: Thread, meta: Meta, now: number): string {
 
 /** Voice messages and photos: what a message may carry besides its text. */
 const EXTRAS = `- "voice": true (optional) makes it a short voice message: they say it aloud and "la" is what they say (3 to 14 words, spoken style). Now and then, about one message in eight, when it fits the moment (walking, cooking, in a hurry, lazy to type, excited, sleepy, singing); never two in a row.
-- "photo": "<photo id>" (optional) sends one of the photos listed with the message, "la" being its caption (a few words, or only an emoji): rarely, when it fits the moment or the talk.`;
+- "photo": "<photo id>" (optional) sends one of the photos listed with the message, "la" being its caption (a few words, or only an emoji, or ""): now and then, when it fits the moment or the talk.`;
+
+/** A fresh picture: what they would really send, made by an image generator from what Claude says it shows. */
+const PICTURE = `- "picture": "<what the photo shows, in English, as their camera would see it: the scene, the people, the light, in one or two sentences>" (optional) instead of "photo", when nothing in the list fits and a picture really is worth it: what they are doing right now, something funny, wild, disgusting, beautiful or absurd in their day, a selfie, proof of something, a picture to tease or tempt. It is made for them, so it can show anything of their world (around AD 100: no modern things), except nudity and gore. A few a day at most.`;
 
 const OUTPUT = `Reply with only JSON:
-{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "re": <number>, "voice": true, "photo": "<photo id>"}], "react": [{"from": "<person id>", "emoji": "<emoji>"}], "remember": ["<new fact about the learner>"], "feel": {"<person id>": "<how they feel about the learner now>"}, "moment": {"<person id>": "<what just happened between them>"}, "mood": {"<person id>": "<their mood now>"}, "silent": {"<person id>": <hours>}}
+{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "re": <number>, "voice": true, "photo": "<photo id>", "picture": "<what a new photo shows>"}], "saw": "<what the learner's newest photo shows, a few English words>", "react": [{"from": "<person id>", "emoji": "<emoji>"}], "remember": ["<new fact about the learner>"], "feel": {"<person id>": "<how they feel about the learner now>"}, "moment": {"<person id>": "<what just happened between them>"}, "mood": {"<person id>": "<their mood now>"}, "silent": {"<person id>": <hours>}}
 - 0 to 4 messages; one is often right. No answer at all ("messages": []) is an answer too: they read it and say nothing (hurt, sulking, playing it cool, busy). "gap": 1-40 (typing time is added by the page; a long gap is a pause to think).
 - "re" (optional): the number (#) of the message this one answers, shown quoted above it as in any messenger. Only when it answers something that is not simply the last message: one of several things the learner said, an earlier question, a message from someone else in the group. Usually leave it out.
 ${EXTRAS}
 - "react" (optional): a reaction to the learner's last message, as people do in messengers: one emoji per person, from ${REACTIONS.join(" ")}. When it fits (a joke 😂, sweet words ❤️, news 😮, sad news 😢, thanks 🙏); often none. Rarely a reaction is the whole answer, when the message needs no words: then "messages" may be [].
 - "remember": 0-2 short facts about the learner worth remembering later (English), or [].
+- "saw" (only when the learner's newest photo is attached): what it shows, a few plain English words, so they remember it.
 - "feel" (for anyone whose feelings about the learner moved now): how they feel about the learner after this, in their own words, first person, one or two sentences (English): what they would never say aloud. Feelings move slowly or suddenly, as with real people.
 - "moment" (when something happened between them worth remembering later: a joke, an insult, a kindness, a confession, a fight): a few words (English).
 - "mood" (when this conversation changed someone's mood): their mood now, a word or two.
 - "silent" (when someone is hurt or angry enough to ignore the learner): the hours they will ignore them, 1 to 24; 0 when they end a silence.
 ${DEEDS}`;
 
-/** The photos the people of a chat could send now (none sent lately in this chat). */
-export function photosBlock(people: Who[], recent: string[]): string {
-  const lines = people
-    .map((w) => ({ w, ps: photosFor(w.id, w.stranger, recent) }))
+/** The photos the people of a chat could send now (none sent lately in this chat), and a fresh picture when it may be made. */
+export function photosBlock(people: Who[], recent: string[], canMake = false): string {
+  const own = people
+    .map((w) => ({ w, ps: photosFor(w.id, w.stranger, recent).filter((p) => p.who !== "any") }))
     .filter((x) => x.ps.length)
-    .map((x) => `${x.w.name}: ${x.ps.map((p) => `"${p.id}" (${p.en})`).join("; ")}`);
-  return lines.length ? `PHOTOS THEY COULD SEND (their own world, as they see it):\n${lines.join("\n")}` : "";
+    .map((x) => `${x.w.name}'s own: ${x.ps.map((p) => `"${p.id}" (${p.en})`).join("; ")}`);
+  const any = photosFor("", true, recent).map((p) => `"${p.id}" (${p.en})`);
+  const lines = [...own, ...(any.length ? [`Anyone's: ${any.join("; ")}`] : [])];
+  return [
+    lines.length ? `PHOTOS THEY HAVE ON THEIR TABULA (photos of their own world, as they took them; the caption is theirs to write):\n${lines.join("\n")}` : "",
+    canMake ? PICTURE : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** Photos sent lately in a chat, not to be sent again soon. */
+// (made pictures are new each time)
 const recentPhotos = (t: Thread) => t.messages.slice(-60).flatMap((m) => (m.photo ? [m.photo] : []));
 
 /** What is going on with the friends now: for a private chat (friends hear each other's news). */
@@ -283,7 +314,7 @@ export function gossipBlock(thread: Thread, meta: Meta, ctx: PromptCtx): string 
   const lines = (ids: string[]) =>
     ids.flatMap((id) => {
       const facts = mem[id] ?? [];
-      const who = id === GROUP.id ? `in the group «${groupName(meta)}»` : PEOPLE.find((p) => p.id === id)?.name;
+      const who = isGroupId(id, meta) ? `in the group «${groupName(meta, id)}»` : PEOPLE.find((p) => p.id === id)?.name;
       return facts.length && who ? [`- ${who}: ${facts.slice(-6).join("; ")}`] : [];
     });
   const name = ctx.me.name;
@@ -298,7 +329,7 @@ export function gossipBlock(thread: Thread, meta: Meta, ctx: PromptCtx): string 
     const l = friend ? [...lines([friend.id]), ...(meta.bonds?.[friend.id]?.feel ? [`- what ${friend.name} feels about ${name}: ${meta.bonds[friend.id].feel}`] : [])] : [];
     return l.length ? `WHAT ${friend!.name.toUpperCase()} MAY HAVE TOLD ${who.name.toUpperCase()} ABOUT ${name.toUpperCase()} (if they talked; never all at once):\n${l.join("\n")}` : "";
   }
-  const l = lines([...PEOPLE.map((p) => p.id).filter((id) => id !== who.id), GROUP.id]);
+  const l = lines([...PEOPLE.map((p) => p.id).filter((id) => id !== who.id), ...groupIds(meta).filter((g) => groupMembers(meta, g).includes(who.id))]);
   const feelings = PEOPLE.filter((p) => p.id !== who.id && meta.bonds?.[p.id]?.feel).map((p) => `- ${p.name}: ${meta.bonds![p.id].feel}`);
   return [
     l.length ? `WHAT THE OTHERS KNOW ABOUT ${name.toUpperCase()} (friends talk: ${who.name} may have heard some of it, and may ask about it, tease or let on, as friends do; something told in private ${who.name} may not know):\n${l.join("\n")}` : "",
@@ -316,6 +347,13 @@ ${literal}
 Read it LITERALLY, as a Roman would. If a mistake makes it say something other than they meant (a wrong ending makes the water drink them, a wrong person makes someone else do it, a wrong word means something else), react to what it literally says, in character: amused, puzzled, alarmed or teasing («Aqua tē bibit?! 😂»), and then maybe go on with what they meant. Never explain the grammar or correct them like a teacher. When a slip changes nothing (a missing long mark, a small spelling slip), simply answer.`;
 }
 
+/** Who started a group (the learner or one of the people), for its prompt. */
+function groupInfoLine(meta: Meta, id: string): string {
+  const g = meta.world?.groups?.[id];
+  if (!g) return "";
+  return g.by === "me" ? " (a group the learner made and named; the learner decides who is in it)" : ` (a group ${whoOf(g.by, meta)?.name ?? g.by} started)`;
+}
+
 /** The prompt for an answer to what the learner wrote. */
 export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: { at: number; why: string }, literal = ""): string {
   const group = thread.kind === "group";
@@ -325,7 +363,7 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
   const ids = members.map((w) => `"${w.id}" (${w.name})`).join(", ");
   return [
     group
-      ? `You write as the people in the group chat «${groupName(meta)}» of a Latin messenger: ${members.map((p) => p.name).join(", ")} and the learner. Decide who answers, if anyone: often one or two of them, sometimes more; they answer each other too, tease, flirt, agree or fight.`
+      ? `You write as the people in the group chat «${groupName(meta, thread.id)}» of a Latin messenger: ${members.map((p) => p.name).join(", ")} and the learner${groupInfoLine(meta, thread.id)}. Decide who answers, if anyone: often one or two of them, sometimes more; they answer each other too, tease, flirt, agree or fight.`
       : `You write as ${members[0]?.name} in a Latin messenger, texting with the learner.`,
     learnerBlock(ctx),
     `WHO ${group ? "THEY ARE" : "YOU ARE"}:\n${peopleOf(thread, meta, ctx.now)}`,
@@ -341,7 +379,7 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
     HOW_TO_BE_REAL,
     CAN_DO,
     languageBlock(ctx),
-    photosBlock(members, recentPhotos(thread)),
+    photosBlock(members, recentPhotos(thread), ctx.canMake),
     `${OUTPUT}\nPerson ids: ${ids}${Object.keys(meta.strangers).length ? `; others by id: ${Object.values(meta.strangers).map((x) => `"${x.id}" (${x.name})`).join(", ")}` : ""}.`,
   ]
     .filter(Boolean)
@@ -359,7 +397,7 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
     .filter((t) => !t.gone)
     .map((t) => {
       const last = t.messages.filter((m) => m.at <= ctx.now).slice(-6);
-      const title = t.kind === "group" ? `«${groupName(meta)}» (group: ${membersOf(t.id, meta).map((w) => w.name).join(", ")})` : whoOf(t.id, meta)?.name ?? t.id;
+      const title = t.kind === "group" ? `«${groupName(meta, t.id)}» (group: ${membersOf(t.id, meta).map((w) => w.name).join(", ")})` : `${whoOf(t.id, meta)?.name ?? t.id}${iBlocked(meta, t.id) ? " (the learner has blocked them: nothing they send here arrives)" : ""}`;
       const lastMine = [...t.messages].reverse().find((m) => m.from === "me" && m.at <= ctx.now);
       const waiting = t.messages.some((m) => m.from !== "me" && m.at > ctx.now);
       const remembers = t.memory.length ? `\n  (remembers about ${ctx.me.name}: ${t.memory.slice(-6).join("; ")})` : "";
@@ -378,14 +416,14 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
     HOW_TO_BE_REAL,
     CAN_DO,
     languageBlock(ctx),
-    photosBlock(everyone, sent),
+    photosBlock(everyone, sent, ctx.canMake),
     `Reply with only JSON:
-{"messages": [{"chat": "<chat id>", "from": "<person id>", "la": "<Latin>", "en": "<English>", "in": <minutes from now, 0-${hours * 60}>, "voice": true, "photo": "<photo id>"}]}
+{"messages": [{"chat": "<chat id>", "from": "<person id>", "la": "<Latin>", "en": "<English>", "in": <minutes from now, 0-${hours * 60}>, "voice": true, "photo": "<photo id>", "picture": "<what a new photo shows>"}]}
 Messages of one chat in time order; a burst of messages is a minute or less apart. {"messages": []} when nobody writes.
 Optionally also "feel": {"<person id>": "<how they feel about the learner now, first person, one or two sentences>"} for anyone whose feelings moved while the learner was away (missing them, worrying, cooling off after days of silence, still angry), and "moment": {"<person id>": "<a few words worth remembering>"}.
 ${EXTRAS}
 ${DEEDS}
-Person ids: ${PEOPLE.map((p) => `"${p.id}"`).join(", ")}${met.length ? `, ${met.map((x) => `"${x.id}" (${x.name})`).join(", ")}` : ""}. A person's private chat has their id; the group is "${GROUP.id}".`,
+Person ids: ${PEOPLE.map((p) => `"${p.id}"`).join(", ")}${met.length ? `, ${met.map((x) => `"${x.id}" (${x.name})`).join(", ")}` : ""}. A person's private chat has their id; the friends' group is "${GROUP.id}"${groupIds(meta).length > 1 ? `; other groups: ${groupIds(meta).filter((g) => g !== GROUP.id).map((g) => `"${g}" («${groupName(meta, g)}»)`).join(", ")}` : ""}.`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -423,6 +461,27 @@ export function strangerPrompt(s: Stranger, life: Life | undefined, ctx: PromptC
 - "happenings": 4 to 6 things, everyday ones and odd ones.
 - "first": ${s.writesFirst ? "1 to 3 messages" : "[]"}.`,
   ].join("\n\n");
+}
+
+/**
+ * The prompt that makes someone from the story real, when the learner wants to
+ * write to them: anyone the friends have mentioned, or would know.
+ */
+export function storyPersonPrompt(text: string, meta: Meta, ctx: PromptCtx): string {
+  const friends = PEOPLE.map((p) => `- ${p.name} [id "${p.id}"] (${p.age}, ${p.job}, ${p.city}): ${p.about} Ties: ${Object.entries(p.ties).map(([id, t]) => `${PEOPLE.find((x) => x.id === id)?.name}: ${t}`).join("; ")}. Now: ${lifeLine(meta.life[p.id])}.`).join("\n");
+  const others = Object.values(meta.strangers).map((s) => `- ${s.name} [id "${s.id}"] (${s.age}, ${s.job}, ${s.city})${s.link ? `, knows ${PEOPLE.find((p) => p.id === s.link!.to)?.name}: ${s.link.how}` : ""}${s.about ? `: ${s.about}` : ""}`).join("\n");
+  return [
+    `In a Latin messenger, a learner far away texts with people in the Roman world around 100 AD. The learner wants to write to someone from the story: «${text}». Make this person real, as the story says they are or would be: someone the friends mentioned, a relative, a lover, a rival, a neighbour, the man behind some piece of gossip, anyone. If it is clearly one of the people below, give their id as "existing" and nothing else.`,
+    `THE FRIENDS:\n${friends}`,
+    others ? `PEOPLE THE LEARNER HAS MET:\n${others}` : "",
+    dramaBlock(meta),
+    learnerBlock(ctx),
+    `Keep what the story already says about them; add what makes them real and specific (a past, a wish, a fear, a voice of their own), never generic. They are grown-ups (18 or older). Whether they have heard of the learner, and what they think of a foreigner writing to them out of nowhere, is theirs: surprised, flattered, suspicious, rude, delighted.`,
+    `Reply with only JSON:
+{"existing": "<id, only if it is one of the people above>", "name": "<their Latin name with long marks, as they are called>", "g": "m" | "f", "age": <years>, "job": "<what they do>", "city": "<where they live>", "about": "<two or three vivid sentences in English: who they are, and how they fit the story>", "link": {"to": "<the friend's id they are tied to>", "how": "<how>"}, "first": "<how they feel about the learner writing to them, first person, one sentence>", "secret": "<one thing they will not say at first>", "happenings": [{"en": "<something that could happen in their life>", "mood": "<the mood it brings>", "hours": [<shortest>, <longest>]}]}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /** Asks for messages that broke the limits to be written again. */

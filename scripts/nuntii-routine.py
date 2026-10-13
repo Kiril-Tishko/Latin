@@ -5,9 +5,12 @@
 #   python3 nuntii.py state  DIR             who is awake, moods, the chats
 #   python3 nuntii.py check  DIR "msg" ...   every word allowed?
 #   python3 nuntii.py notify DIR [new.json]  the line for the phone notification
+#   python3 nuntii.py picture ID FROM "what it shows" OUT.json   a fresh picture someone sends
+#   python3 nuntii.py pictures WANTED.json OUTDIR                every picture waiting to be made
 # DIR holds data/users/me/messenger.json, data/users/me/messenger/brief/now.json
 # and data/users/me/messenger/threads/*.json (as ArtifactData saves them).
-import glob, json, os, re, sys, time, unicodedata
+import base64, glob, json, os, re, sys, time, unicodedata, urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -65,11 +68,11 @@ def names(brief):
     return out
 
 
-def unseen(threads, now, extra=()):
+def unseen(threads, now, extra=(), muted=()):
     out = []
     for cid, t in threads.items():
-        # the Ācta Diurna is a news board, not a chat
-        if t.get("gone") or cid == "acta":
+        # the Ācta Diurna is a news board, not a chat; a muted chat makes no notification
+        if t.get("gone") or cid == "acta" or cid in muted:
             continue
         for m in t.get("messages", []):
             if m.get("from") not in ("me", "sys") and t.get("readAt", 0) < m.get("at", 0) <= now:
@@ -94,6 +97,10 @@ def state(d):
         print("\n" + day["text"])
     if brief.get("world"):
         print("\n" + brief["world"])
+    if brief.get("blocked"):
+        print("\nTHE LEARNER HAS BLOCKED (nothing they send in private arrives; do not write to the learner as them, in private): " + ", ".join(brief["blocked"]))
+    if brief.get("muted"):
+        print("MUTED BY THE LEARNER (fine to write; no notification): " + ", ".join(brief["muted"]))
     if brief.get("photos"):
         print("\nPHOTOS (id: what it shows; who may send it):")
         for ph in brief["photos"]:
@@ -112,7 +119,8 @@ def state(d):
             if m.get("from") == "sys":
                 print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] ({m.get('en')})")
             else:
-                print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] {n.get(m.get('from'), m.get('from'))}: {m.get('la')}" + (" (deleted)" if m.get("deletedAt") else ""))
+                what = f"[photo: {m.get('picEn') or m.get('photo') or 'a photo'}] " if m.get("pic") or m.get("photo") else "[voice] " if m.get("voice") else ""
+                print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] {n.get(m.get('from'), m.get('from'))}: {what}{m.get('la')}" + (" (deleted)" if m.get("deletedAt") else ""))
 
 
 def plain(w):
@@ -142,7 +150,8 @@ def notify(d, new_path=None):
         print("Open Nūntiī once, and your Roman friends will start writing to you.")
         return
     extra = load(new_path, []) if new_path else []
-    msgs = unseen(threads, now + 60_000, extra)
+    muted = set(brief.get("muted", []))
+    msgs = unseen(threads, now + 60_000, [m for m in extra if m.get("chat") not in muted], muted)
     if not msgs:
         print("No new messages.")
         return
@@ -153,7 +162,7 @@ def notify(d, new_path=None):
         line = f"{n.get(last.get('from'), last.get('from'))}: 🎤 Voice message"
     else:
         text = shown(last.get("la")) or "Photo"
-        line = f"{n.get(last.get('from'), last.get('from'))}: {'📷 ' if last.get('photo') else ''}{text}" + (f" ({shown(last['en'])})" if last.get("en") else "")
+        line = f"{n.get(last.get('from'), last.get('from'))}: {'📷 ' if last.get('photo') or last.get('pic') else ''}{text}" + (f" ({shown(last['en'])})" if last.get("en") else "")
     others = [n.get(m.get("from"), m.get("from")) for m in msgs[:-1]]
     if others:
         who = ", ".join(dict.fromkeys(others))
@@ -161,8 +170,77 @@ def notify(d, new_path=None):
     print(line)
 
 
+# pictures, made by AI Horde (aihorde.net): free volunteers' image generators, no key, about two minutes each
+HORDE = "https://aihorde.net/api/v2"
+HORDE_HEAD = {"apikey": "0000000000", "Content-Type": "application/json", "Client-Agent": "tabula-latina:1:anon", "User-Agent": "tabula-latina/1.0"}
+STYLE = ", amateur smartphone photo taken in ancient Rome around AD 100, candid, realistic, natural colours, sharp focus"
+NEGATIVE = "cartoon, painting, drawing, illustration, anime, 3d render, modern clothes, modern buildings, cars, electric light, glasses, text, letters, watermark, logo, signature, nsfw, nude, blood, gore, deformed hands, extra fingers"
+
+
+def horde(path, body=None):
+    req = urllib.request.Request(HORDE + path, data=json.dumps(body).encode() if body else None, headers=HORDE_HEAD, method="POST" if body else "GET")
+    with urllib.request.urlopen(req, timeout=90) as r:
+        return json.load(r)
+
+
+def make_picture(prompt, tries=2):
+    """One picture of what someone sends: (content type, base64), or None."""
+    for _ in range(tries):
+        try:
+            job = horde("/generate/async", {"prompt": prompt + STYLE + " ### " + NEGATIVE, "params": {"width": 576, "height": 576, "steps": 25, "n": 1, "sampler_name": "k_euler_a", "cfg_scale": 6}, "models": ["AlbedoBase XL (SDXL)"], "nsfw": False, "censor_nsfw": True, "r2": True})
+            t0 = time.time()
+            while not horde("/generate/check/" + job["id"]).get("done"):
+                if time.time() - t0 > 900:
+                    raise TimeoutError("queue")
+                time.sleep(8)
+            gen = horde("/generate/status/" + job["id"])["generations"][0]
+            if gen.get("censored"):
+                continue
+            raw = urllib.request.urlopen(urllib.request.Request(gen["img"], headers={"User-Agent": HORDE_HEAD["User-Agent"]}), timeout=90).read()
+            kind = "image/webp" if raw[8:12] == b"WEBP" else "image/png" if raw[:4] == b"\x89PNG" else "image/jpeg"
+            return kind, base64.b64encode(raw).decode()
+        except Exception as e:  # noqa: BLE001 - a volunteer's machine can fail in many ways
+            print(f"picture failed once ({e})", file=sys.stderr)
+            time.sleep(5)
+    return None
+
+
+def picture(pid, by, prompt, out):
+    """A fresh picture someone sends now: the whole messenger/pics document, written to OUT."""
+    res = make_picture(prompt)
+    doc = {"id": pid, "by": by, "en": prompt, "prompt": prompt, "at": int(time.time() * 1000), "status": "done" if res else "failed"}
+    if res:
+        doc["type"], doc["b64"] = res
+    with open(out, "w") as f:
+        json.dump(doc, f)
+    print("OK" if res else "FAILED: send the message without a picture (or a photo from the list)")
+
+
+def pictures(wanted_path, outdir):
+    """Every picture waiting to be made ([{"id", "prompt"}]), at once: OUTDIR/<id>.json holds the fields to update."""
+    wanted = load(wanted_path, []) or []
+    os.makedirs(outdir, exist_ok=True)
+
+    def one(w):
+        res = make_picture(w["prompt"])
+        doc = {"status": "done", "type": res[0], "b64": res[1]} if res else {"status": "failed"}
+        with open(os.path.join(outdir, w["id"] + ".json"), "w") as f:
+            json.dump(doc, f)
+        return w["id"], doc["status"]
+
+    with ThreadPoolExecutor(4) as pool:
+        for pid, status in pool.map(one, wanted[:8]):
+            print(pid, status)
+
+
 if __name__ == "__main__":
     cmd, d = sys.argv[1], sys.argv[2]
+    if cmd == "picture":
+        picture(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+        sys.exit()
+    if cmd == "pictures":
+        pictures(sys.argv[2], sys.argv[3])
+        sys.exit()
     if cmd == "state":
         state(d)
     elif cmd == "check":

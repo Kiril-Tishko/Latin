@@ -68,7 +68,7 @@ export async function chatCollection(): Promise<ChatCollection | null> {
 
 /** A collection of documents, as the store gives it (enough for the messenger). */
 export interface DocCollection {
-  doc(id: string): { set(data: Record<string, unknown>): Promise<void>; delete(): Promise<void> };
+  doc(id: string): { set(data: Record<string, unknown>): Promise<void>; update?(data: Record<string, unknown>): Promise<void>; delete(): Promise<void> } & Partial<LiveDoc>;
   onSnapshot(next: (snap: { docs: DocSnap[] }) => void, error?: (e: { code?: string }) => void): () => void;
 }
 
@@ -78,14 +78,14 @@ export interface LiveDoc extends DocRef {
 }
 
 /** The messenger's documents in the viewer's private space, or null when the account store is unavailable. */
-export async function messengerStore(): Promise<{ meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection } | null> {
+export async function messengerStore(): Promise<{ meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection; pics: DocCollection } | null> {
   const [db, user] = await Promise.all([use("db"), use("user")]);
   if (!db || !user) return null;
   const id: string | null = await user.id().catch(() => null);
   if (!id) return null;
   try {
     const meta = db.doc(`data/users/${id}/messenger`);
-    return { meta, brief: meta.collection("brief").doc("now"), threads: meta.collection("threads"), inbox: meta.collection("inbox") };
+    return { meta, brief: meta.collection("brief").doc("now"), threads: meta.collection("threads"), inbox: meta.collection("inbox"), pics: meta.collection("pics") };
   } catch {
     return null;
   }
@@ -93,6 +93,24 @@ export async function messengerStore(): Promise<{ meta: LiveDoc; brief: DocRef; 
 
 export async function sampler(): Promise<SampleFn | null> {
   return (await use("sample")) as SampleFn | null;
+}
+
+/** Whether Claude can be shown pictures from this page (how many per call, which types), or null. */
+export async function imageLimits(): Promise<{ maxCount: number; mediaTypes: string[] } | null> {
+  const sample = (await use("sample")) as { limits?: () => Promise<{ images?: { maxCount: number; mediaTypes: string[] } }> } | null;
+  if (!sample?.limits) return null;
+  try {
+    return (await sample.limits()).images ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Calls one of the viewer's connectors (the page declares which); rejects when it cannot. */
+export async function callConnector(server: string, tool: string, input: Record<string, unknown>): Promise<unknown> {
+  const mcp = (await use("mcp")) as { callTool(server: string, tool: string, input?: unknown): Promise<{ payload?: unknown }> } | null;
+  if (!mcp) throw Object.assign(new Error("no connectors here"), { code: "not_granted" });
+  return (await mcp.callTool(server, tool, input)).payload;
 }
 
 /** Viewer-facing text for a failed Claude call. */

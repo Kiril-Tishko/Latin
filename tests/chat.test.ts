@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { makeBrief } from "../src/chat/brief";
-import { applyFeelings, meetStranger, refreshLives, writeOwn, writeReply } from "../src/chat/engine";
+import { applyFeelings, meetFromStory, meetStranger, refreshLives, writeOwn, writeReply } from "../src/chat/engine";
 import { COMMON_HAPPENINGS, lifeNow, localTime, replyTiming, statusAt } from "../src/chat/life";
-import { deletedNow, groupMembers, groupName, isBlocked, mergeBonds, mergeReactions, mergeWorld, Msg, newMeta, newThread, preview, reactionsOf, silentNow, SYS, Thread, voiceOf } from "../src/chat/model";
+import { deletedNow, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Msg, newMeta, newThread, preview, reactionsOf, silentNow, SYS, Thread, voiceOf } from "../src/chat/model";
 import { applyDeeds, deedsOf, welcome } from "../src/chat/world";
 import { adYear, birthdaysNear, calendarBlock, calendarWords, festivalsNear, romanDate, todayLine } from "../src/chat/calendar";
-import { PHOTOS, photoSrc, photosFor } from "../src/content/photos";
+import { PHOTO_CREDIT, PHOTOS, photoSrc, photosFor } from "../src/content/photos";
+import scenes from "../scripts/content/photos.json";
+import routinePy from "../scripts/nuntii-routine.py?raw";
+import routineMd from "../scripts/messenger-routine.md?raw";
+import picturesMd from "../scripts/pictures-routine.md?raw";
 import { phrasebook } from "../src/content/phrases";
 import { literalReading } from "../src/latin/facts";
-import { conversationBlock, gossipBlock, languageBlock, PromptCtx, replyPrompt } from "../src/chat/prompts";
+import { conversationBlock, gossipBlock, languageBlock, ownPrompt, PromptCtx, replyPrompt, worldLine } from "../src/chat/prompts";
 import { LINKS, rollStranger } from "../src/chat/strangers";
 import { vetMessage, withMacrons } from "../src/chat/vet";
 import { allowedWords, calendarEntry, CHAT_WORDS, chatEntries, chatLexicon, formsFor, nameEntry, notLatin, strangeWords, vocativeOf } from "../src/chat/words";
@@ -356,7 +360,7 @@ describe("mistakes taken literally, voice messages and photos", () => {
       return {
         messages: [
           { from: "iulia", la: "Aqua tē bibit?! 😂", en: "The water drinks you?! 😂", gap: 1, voice: true },
-          { from: "iulia", la: "", en: "", gap: 2, photo: "earring" },
+          { from: "iulia", la: "", en: "", gap: 2, photo: "iulia-figs" },
           { from: "iulia", la: "Ecce!", en: "Look!", gap: 2, photo: "no-such-photo" },
         ],
         remember: [],
@@ -366,23 +370,25 @@ describe("mistakes taken literally, voice messages and photos", () => {
     const reply = await writeReply(t, newMeta(), ctxFor(ALL), { ask, opts: {}, lex, r: seeded(5) });
     expect(prompts[0]).toContain("HOW THE LEARNER'S LAST MESSAGE READS");
     expect(prompts[0]).toContain("«aqua»: nominative singular (subject)");
-    expect(prompts[0]).toContain('"earring"');
+    expect(prompts[0]).toContain('"iulia-figs"');
     expect(reply.messages[0].voice).toBe(true);
-    expect(reply.messages[1].photo).toBe("earring");
+    expect(reply.messages[1].photo).toBe("iulia-figs");
     expect(reply.messages[2].photo).toBeUndefined();
     expect(reply.messages[2].la).toBe("Ecce!");
     expect(preview(reply.messages[0])).toBe("🎤 Voice message");
     expect(preview(reply.messages[1])).toBe("📷 Photo");
   });
 
-  it("has every photo in the build, credited, sent by people who exist", () => {
-    expect(PHOTOS.length).toBeGreaterThan(20);
+  it("has every photo in the build, sent by people who exist, each scene ready to be made again", () => {
+    expect(PHOTOS.length).toBeGreaterThan(100);
+    expect(PHOTO_CREDIT).toContain("AI");
+    // the scenes the pictures were made from (scripts/content/photos.py makes any that is missing)
+    expect(scenes.map((x) => x.id).sort()).toEqual(PHOTOS.map((p) => p.id).sort());
     // every photo's image is a file beside the page (built from src/content/photos)
     const files = Object.keys(import.meta.glob("../src/content/photos/*.webp")).map((f) => f.split("/").pop());
     for (const p of PHOTOS) {
       expect(photoSrc(p.id), p.id).toBe(`photos/${p.id}.webp`);
       expect(files, p.id).toContain(`${p.id}.webp`);
-      expect(p.credit).toContain("CC0");
       if (p.who !== "any") for (const w of p.who) expect(PERSON_BY_ID.has(w), `${p.id}: ${w}`).toBe(true);
     }
     for (const person of PEOPLE) expect(photosFor(person.id, false).length, person.id).toBeGreaterThan(3);
@@ -712,5 +718,163 @@ describe("people with freedom: what they do besides writing", () => {
     const back = await writeOwn(ts, meta, ctxFor(SEEN, at), { ask: unblock, opts: {}, lex, r: seeded(4) });
     expect(back.messages.length).toBe(1);
     expect(back.deeds.acts).toEqual([{ who: "marcus", do: "unblock" }]);
+  });
+});
+
+describe("the learner's own abilities: groups, blocking, muting, deleting, photos, anyone from the story", () => {
+  const at = Date.UTC(2026, 9, 12, 12, 0);
+  const everyone = new Set(PEOPLE.map((p) => p.id));
+  const threads = (): Record<string, Thread> => Object.fromEntries([...PEOPLE.map((p) => newThread(p.id, "dm")), newThread(GROUP.id, "group")].map((t) => [t.id, t]));
+
+  it("keeps groups besides the friends' own: members, names, who started them, merged across devices", () => {
+    const meta = newMeta();
+    meta.world = { updatedAt: at, groups: { "g-cena": { name: "Cēna", members: ["iulia", "marcus"], by: "me", at, updatedAt: at } } };
+    expect(isGroupId("g-cena", meta)).toBe(true);
+    expect(isGroupId("marcus", meta)).toBe(false);
+    expect(groupIds(meta)).toEqual([GROUP.id, "g-cena"]);
+    expect(groupName(meta, "g-cena")).toBe("Cēna");
+    expect(membersOf("g-cena", meta).map((w) => w.id)).toEqual(["iulia", "marcus"]);
+    expect(groupMembers(meta)).toEqual(PEOPLE.map((p) => p.id));
+    // the people know which groups they share with the learner, and who made one
+    expect(worldLine({ ...PERSON_BY_ID.get("iulia")!, stranger: false }, meta, at)).toContain("«Cēna»");
+    const p = replyPrompt(newThread("g-cena", "group"), meta, ctxFor(SEEN, at), { at: at + 60_000, why: "free" });
+    expect(p).toContain("group chat «Cēna»");
+    expect(p).toContain("a group the learner made");
+    expect(p).not.toMatch(/You write as the people in the group chat[^\n]*Gāius/);
+    // another device's copy: each group the newer
+    const other = { updatedAt: at + 5, groups: { "g-cena": { name: "Cēna magna", members: ["iulia"], by: "me", at, updatedAt: at + 5 }, "g-x": { name: "X", members: ["gaius"], by: "gaius", at, updatedAt: at } } };
+    const merged = mergeWorld(meta.world, other)!;
+    expect(merged.groups!["g-cena"].name).toBe("Cēna magna");
+    expect(Object.keys(merged.groups!).sort()).toEqual(["g-cena", "g-x"]);
+    // the learner's choices: the newer copy
+    expect(mergeMine({ blocked: ["marcus"], muted: [], updatedAt: 2 }, { blocked: [], muted: ["amici"], updatedAt: 1 })!.blocked).toEqual(["marcus"]);
+  });
+
+  it("lets the people start a group of their own with the learner, throw someone out, rename any group", () => {
+    const meta = newMeta();
+    meta.world = { updatedAt: at, groups: { "g-cena": { name: "Cēna", members: ["iulia", "marcus", "gaius"], by: "me", at, updatedAt: at } } };
+    const groups = new Set(groupIds(meta));
+    const deeds = deedsOf(
+      {
+        acts: [
+          { who: "marcus", do: "newGroup", text: "Sine Iūliā", with: ["me", "lucius", "nobody"], messages: [{ from: "marcus", la: "Salvēte!", en: "Hi all!" }, { from: "iulia", la: "Hahae", en: "Haha" }] },
+          { who: "iulia", do: "remove", whom: "gaius", group: "g-cena" },
+          { who: "marcus", do: "rename", text: "Cēna optima", group: "g-cena" },
+          { who: "marcus", do: "leave", group: "g-nowhere" },
+          { who: "lucius", do: "newGroup", text: "Sōlus", with: [] },
+        ],
+      },
+      everyone,
+      everyone,
+      [],
+      groups,
+    );
+    expect(deeds.acts.map((a) => `${a.who}:${a.do}`)).toEqual(["marcus:newGroup", "iulia:remove", "marcus:rename"]);
+    expect(deeds.acts[0].with).toEqual(["me", "lucius"]);
+    // a message from someone not in the new group is dropped
+    expect(deeds.acts[0].messages!.map((m) => m.from)).toEqual(["marcus"]);
+    const changed = applyDeeds(meta, threads(), deeds, at, GROUP.id);
+    const made = Object.entries(meta.world!.groups!).find(([, g]) => g.name === "Sine Iūliā")!;
+    expect(made[1].members).toEqual(["marcus", "lucius"]);
+    expect(made[1].by).toBe("marcus");
+    const fresh = changed.find((t) => t.id === made[0])!;
+    expect(fresh.kind).toBe("group");
+    expect(fresh.messages.map((m) => m.en)).toEqual(["Marcus created the group «Sine Iūliā» and added you.", "Hi all!"]);
+    expect(groupMembers(meta, "g-cena")).toEqual(["iulia", "marcus"]);
+    expect(groupName(meta, "g-cena")).toBe("Cēna optima");
+    const cena = changed.find((t) => t.id === "g-cena")!;
+    expect(cena.messages.map((m) => m.en)).toEqual(["Iūlia removed Gāius.", "Marcus renamed the group «Cēna optima»."]);
+    expect(groupIds(meta)).toContain(made[0]);
+  });
+
+  it("tells the people who the learner blocked, and nothing they send in private arrives", async () => {
+    const meta = newMeta();
+    meta.mine = { blocked: ["lucius"], muted: ["amici"], updatedAt: at };
+    expect(iBlocked(meta, "lucius")).toBe(true);
+    expect(worldLine({ ...PERSON_BY_ID.get("lucius")!, stranger: false }, meta, at)).toContain("THE LEARNER HAS BLOCKED LŪCIUS");
+    const ts = [...PEOPLE.map((p) => newThread(p.id, "dm")), newThread(GROUP.id, "group")];
+    expect(ownPrompt(ts, meta, ctxFor(SEEN, at), 1)).toContain("the learner has blocked them");
+    const own = async <T,>(): Promise<T> => ({ messages: [{ chat: "lucius", from: "lucius", la: "Salvē.", en: "Hi.", in: 1 }, { chat: GROUP.id, from: "lucius", la: "Salvēte.", en: "Hi all.", in: 2 }] }) as T;
+    const out = await writeOwn(ts, meta, ctxFor(SEEN, at), { ask: own, opts: {}, lex, r: seeded(4) });
+    // in the group they still talk
+    expect(out.messages.map((m) => m.chat)).toEqual([GROUP.id]);
+    const brief = makeBrief(meta, ctxFor(SEEN, at), [], seeded(8));
+    expect(brief.blocked).toEqual(["lucius"]);
+    expect(brief.muted).toEqual(["amici"]);
+  });
+
+  it("shows the people what the learner deleted, and whether they had read it first", () => {
+    const meta = newMeta();
+    const t: Thread = {
+      ...newThread("iulia", "dm"),
+      messages: [
+        { id: "a", from: "me", la: "Tē amō", at, readAt: at + 1000, deletedAt: at + 5000 },
+        { id: "b", from: "me", la: "Ō nōn", at: at + 6000, deletedAt: at + 7000 },
+      ],
+    };
+    const c = conversationBlock(t, meta, ctxFor(SEEN, at + 60_000), "Europe/Rome");
+    expect(c).toContain("Tē amō (the learner deleted this after it was read: they saw it)");
+    expect(c).toContain("only «message deleted» shows");
+  });
+
+  it("makes fresh pictures only when they may be made, and lets the people see the learner's photos", async () => {
+    let opts: Record<string, unknown> = {};
+    const ask = async <T,>(_p: string, o: Record<string, unknown>): Promise<T> => {
+      opts = o;
+      return { messages: [{ from: "iulia", la: "Ecce!", en: "Look!", gap: 1, picture: "a selfie of Iūlia with a stolen fig cake, laughing" }], saw: "a grey cat on a sofa" } as T;
+    };
+    const t: Thread = { ...newThread("iulia", "dm"), messages: [{ id: "a", from: "me", la: "Fēlēs mea!", at, pic: "p1" }] };
+    const ctx = { ...ctxFor(ALL, at), canMake: true };
+    const prompt = replyPrompt(t, newMeta(), ctx, { at: at + 60_000, why: "free" });
+    expect(prompt).toContain('"picture"');
+    expect(prompt).toContain("[a photo the learner sent: it is attached to this prompt, look at it]");
+    const blob = { fake: true };
+    const reply = await writeReply(t, newMeta(), ctx, { ask, opts: {}, lex, r: seeded(3) }, undefined, [blob]);
+    expect(opts.images).toEqual([blob]);
+    expect(reply.saw).toBe("a grey cat on a sofa");
+    expect(reply.made.length).toBe(1);
+    expect(reply.messages[0].pic).toBe(reply.made[0].id);
+    expect(reply.messages[0].picEn).toContain("fig cake");
+    expect(reply.made[0]).toMatchObject({ by: "iulia", status: "wanted" });
+    expect(preview(reply.messages[0])).toBe("📷 Ecce!");
+    // a few a day: past that, no picture (the message stays)
+    const none = await writeReply(t, newMeta(), { ...ctx, canMake: false }, { ask, opts: {}, lex, r: seeded(3) });
+    expect(none.made).toEqual([]);
+    expect(none.messages[0].pic).toBeUndefined();
+    expect(none.messages[0].la).toBe("Ecce!");
+    expect(replyPrompt(t, newMeta(), { ...ctx, canMake: false }, { at: at + 60_000, why: "free" })).not.toContain('"picture": "<what the photo shows');
+    // once seen, the people remember what the photo showed
+    const seen = { ...t, messages: [{ ...t.messages[0], picEn: "a grey cat on a sofa" }] };
+    expect(conversationBlock(seen, newMeta(), ctx, "Europe/Rome")).toContain("[a photo the learner sent: a grey cat on a sofa]");
+  });
+
+  it("gives both routines the same helper as scripts/nuntii-routine.py, which skips muted chats and makes pictures", () => {
+    const code = routinePy.slice(routinePy.indexOf("import ")).trim();
+    for (const md of [routineMd, picturesMd]) expect(md.split("```python\n")[1].split("```")[0].trim()).toBe(code);
+    expect(code).toContain("def pictures(");
+    expect(code).toContain("cid in muted");
+    expect(routineMd).toContain("data/users/me/messenger/pics");
+    expect(picturesMd).toContain('"status", "==", "wanted"');
+  });
+
+  it("makes anyone from the story real when the learner wants to write to them", async () => {
+    const meta = newMeta();
+    const prompts: string[] = [];
+    const ask = async <T,>(prompt: string): Promise<T> => {
+      prompts.push(prompt);
+      return { name: "Tertia", g: "f", age: 19, job: "Iūlia's younger sister", city: "Rome", about: "Nosy, clever, reads everyone's letters.", link: { to: "iulia", how: "her sister" }, first: "Who is this foreigner my sister talks about?", secret: "She read Iūlia's poems.", happenings: [{ en: "caught reading letters", mood: "guilty", hours: [2, 6] }] } as T;
+    };
+    const res = await meetFromStory("Tertia, Iūlia's sister", meta, ctxFor(SEEN, at), { ask, opts: {}, lex, r: seeded(2) });
+    expect(prompts[0]).toContain("«Tertia, Iūlia's sister»");
+    expect(prompts[0]).toContain("Iūlia [id \"iulia\"]");
+    if (!("stranger" in res)) throw new Error("no one made");
+    expect(res.stranger).toMatchObject({ name: "Tertia", g: "f", story: true, invented: true, link: { to: "iulia", how: "her sister" } });
+    expect(res.stranger.happenings[0].en).toBe("caught reading letters");
+    expect(res.life.mood).toBeTruthy();
+    // someone who is already there is found, not made again
+    meta.strangers[res.stranger.id] = res.stranger;
+    expect(await meetFromStory("Tertia", meta, ctxFor(SEEN, at), { ask, opts: {}, lex, r: seeded(2) })).toEqual({ existing: res.stranger.id });
+    const known = async <T,>(): Promise<T> => ({ existing: "marcus" }) as T;
+    expect(await meetFromStory("Marcus", meta, ctxFor(SEEN, at), { ask: known, opts: {}, lex, r: seeded(2) })).toEqual({ existing: "marcus" });
   });
 });

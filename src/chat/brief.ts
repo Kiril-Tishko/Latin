@@ -6,7 +6,7 @@ import { PEOPLE } from "../content/people";
 import { Life, LifeSpec, lifeNow, Rand } from "./life";
 import { Meta, Who, whoOf } from "./model";
 import { bondBlock, dramaBlock, knownPeople, languageBlock, learnerBlock, PromptCtx, worldLine } from "./prompts";
-import { groupMembers, groupName } from "./model";
+import { groupIds, groupMembers, groupName } from "./model";
 import { allowedSpellings, calendarEntry, formsFor } from "./words";
 import { calendarBlock, calendarWords, romeDay } from "./calendar";
 import { PHOTOS } from "../content/photos";
@@ -31,8 +31,11 @@ export interface Brief {
   calendar: { day: string; text: string }[];
   /** The photos the people may send: id, what it shows, who would send it ("any": anyone). */
   photos: { id: string; en: string; who: string[] | "any" }[];
-  /** The group (its name and members now) and the storylines among them. */
+  /** The groups (their names and members now) and the storylines among them. */
   world: string;
+  /** Chats the learner muted (no notification for them) and people the learner blocked (nothing of theirs in private reaches the learner). */
+  muted: string[];
+  blocked: string[];
 }
 
 /** Their lives for the next hours, rolled ahead at random. */
@@ -99,6 +102,13 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
     lives,
     calendar,
     photos: PHOTOS.map((p) => ({ id: p.id, en: p.en, who: p.who })),
-    world: [`THE GROUP «${groupName(meta)}» (chat id "amici"): ${groupMembers(meta).map((id) => whoOf(id, meta)?.name ?? id).join(", ")} and the learner.`, dramaBlock(meta)].filter(Boolean).join("\n"),
+    world: [
+      ...groupIds(meta).map((g) => `THE GROUP «${groupName(meta, g)}» (chat id "${g}"): ${groupMembers(meta, g).map((id) => whoOf(id, meta)?.name ?? id).join(", ")} and the learner.`),
+      dramaBlock(meta),
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    muted: meta.mine?.muted ?? [],
+    blocked: meta.mine?.blocked ?? [],
   };
 }

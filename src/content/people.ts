@@ -264,6 +264,22 @@ export const PERSON_BY_ID = new Map(PEOPLE.map((p) => [p.id, p]));
 /** The group chat of all five. */
 export const GROUP = { id: "amici", name: "Amīcī", members: PEOPLE.map((p) => p.id) };
 
+/**
+ * People the story mentions whom the learner may want to write to ("write to
+ * anyone in the story"): offered under New chat; Claude makes them real when
+ * the learner picks one (or names anyone else).
+ */
+export const SIDE_PEOPLE: { text: string; en: string }[] = [
+  { text: "Pompōnia, Gāius's wife, who runs everything", en: "Pompōnia, Gāius's wife" },
+  { text: "Titus, Claudia's husband, a ship's captain, often at sea", en: "Titus, Claudia's husband (a ship's captain)" },
+  { text: "the boring senator's son Iūlia's father wants her to marry", en: "The senator's son Iūlia's father likes" },
+  { text: "Iūlia's father, a wine merchant on the Aventine", en: "Iūlia's father (a wine merchant)" },
+  { text: "Iūlia's Greek tutor, who teaches her poetry and the lyre", en: "Iūlia's Greek tutor" },
+  { text: "Marcus's boss at the record office", en: "Marcus's boss" },
+  { text: "the famous actor Iūlia saw at the baths", en: "The famous actor" },
+  { text: "the charioteer of the Greens Marcus worships", en: "The Greens' charioteer" },
+];
+
 /** Names the people may use in their messages (besides their own): family, pets, friends. */
 export const OTHER_NAMES: { name: string; gen: string; g: "m" | "f"; en: string }[] = [
   { name: "Tertia", gen: "Tertiae", g: "f", en: "Tertia (Iūlia's sister)" },

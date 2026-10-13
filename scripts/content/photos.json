@@ -1,0 +1,522 @@
+[
+ {
+  "id": "iulia-selfie",
+  "prompt": "selfie of a pretty young Roman woman of 21 with dark curly hair pinned up and small gold earrings, smiling, on the bank of the Tiber at sunset, old Rome and a stone bridge behind her"
+ },
+ {
+  "id": "iulia-figs",
+  "prompt": "close-up of a clay plate of fresh purple figs cut open with honey on a marble table, a young woman's hand with a gold ring reaching for one"
+ },
+ {
+  "id": "iulia-lyre",
+  "prompt": "a new wooden lyre with ivory and gold inlays lying on a bed with colourful cushions, morning light"
+ },
+ {
+  "id": "iulia-tertia",
+  "prompt": "a girl of twelve in a tunic hiding under a blanket reading a papyrus scroll, caught, looking guiltily at the camera"
+ },
+ {
+  "id": "iulia-suitor",
+  "prompt": "a stiff, boring young man in a white toga at a dinner couch, talking with his mouth full, candid shot from across the table, oil lamps"
+ },
+ {
+  "id": "iulia-theatre",
+  "prompt": "a crowded Roman stone theatre at dusk, actors in masks on the stage, seen from the upper seats, torches"
+ },
+ {
+  "id": "iulia-dressing-table",
+  "prompt": "a messy dressing table with open jewellery boxes, combs, little glass perfume bottles and a single gold earring, a bronze mirror"
+ },
+ {
+  "id": "iulia-wax-letter",
+  "prompt": "a folded wax tablet letter tied with a red cord and a dried rose on top, lying on a bed"
+ },
+ {
+  "id": "iulia-rain",
+  "prompt": "rain pouring into the pool of a Roman atrium, wet mosaic floor, grey light, a bored girl's bare feet on a bench in the corner"
+ },
+ {
+  "id": "iulia-stola",
+  "prompt": "a long saffron-yellow Roman dress laid out on a bed with a garland of flowers and gold sandals"
+ },
+ {
+  "id": "iulia-mirror",
+  "prompt": "a young Roman woman with dark curly hair making a funny face into a polished bronze hand mirror, her reflection visible"
+ },
+ {
+  "id": "iulia-tutor",
+  "prompt": "an old Greek tutor with a long white beard asleep in a wicker chair, a papyrus scroll sliding off his lap, a lyre on the wall"
+ },
+ {
+  "id": "iulia-fig-cake",
+  "prompt": "a round honey and fig cake on a plate with a big bite taken out of it"
+ },
+ {
+  "id": "iulia-garden",
+  "prompt": "a Roman house garden with a fountain, roses, laurel bushes and painted columns, morning sun"
+ },
+ {
+  "id": "marcus-selfie",
+  "prompt": "selfie of a young Roman man of 23 with short dark curly hair and stubble, pulling a bored face, in a dim office full of scroll shelves and wax tablets"
+ },
+ {
+  "id": "marcus-desk",
+  "prompt": "a wooden desk buried under papyrus scrolls, wax tablets, ink pots and a half-eaten bread roll"
+ },
+ {
+  "id": "marcus-greens",
+  "prompt": "a chariot race at the Circus Maximus, four horses at full gallop pulling a chariot with a charioteer in green, dust, a huge roaring crowd"
+ },
+ {
+  "id": "marcus-crash",
+  "prompt": "a racing chariot crashing on the track of the Circus Maximus, a wheel flying off, horses rearing, a dust cloud, the crowd on its feet"
+ },
+ {
+  "id": "marcus-lunch",
+  "prompt": "a Roman street food counter with clay pots set into a marble counter, a bowl of lentils, bread and a cup of wine, steam"
+ },
+ {
+  "id": "marcus-sausages",
+  "prompt": "sausages sizzling on a street grill with smoke, a Roman street vendor in a tunic, a narrow street"
+ },
+ {
+  "id": "marcus-landlord",
+  "prompt": "a fat grumpy old man in a dirty tunic shouting in a narrow stairwell of an apartment block, pointing a finger at the camera"
+ },
+ {
+  "id": "marcus-room",
+  "prompt": "a tiny messy room in a Roman apartment block, a straw mattress, clothes everywhere, a cracked amphora, a small window with a view of laundry"
+ },
+ {
+  "id": "marcus-dice",
+  "prompt": "bone dice on a wooden table in a smoky tavern, small bronze coins and clay wine cups, men's hands"
+ },
+ {
+  "id": "marcus-ink",
+  "prompt": "close-up of a young man's hands black with ink holding a reed pen over a papyrus"
+ },
+ {
+  "id": "marcus-coins",
+  "prompt": "three small bronze coins in an open palm"
+ },
+ {
+  "id": "marcus-boss",
+  "prompt": "a stern older man in a toga peeking through a doorway into an office full of scrolls, frowning"
+ },
+ {
+  "id": "marcus-morning-after",
+  "prompt": "a young man asleep face down on a tavern table among empty wine cups, morning light through the door"
+ },
+ {
+  "id": "marcus-crowd",
+  "prompt": "selfie of a young Roman man with short dark curly hair and a green scarf, screaming with joy in a crowd of men at the Circus Maximus"
+ },
+ {
+  "id": "gaius-goat",
+  "prompt": "selfie of a weathered grey-haired Roman farmer in his fifties with a short grey beard and a rough brown wool tunic, with a white goat, olive grove behind"
+ },
+ {
+  "id": "gaius-goats-tunic",
+  "prompt": "three goats tearing apart a tunic hanging on a wooden fence, an olive grove"
+ },
+ {
+  "id": "gaius-grapes",
+  "prompt": "ripe dark grapes on the vine, close-up, morning dew, a vineyard on a hillside"
+ },
+ {
+  "id": "gaius-treading",
+  "prompt": "farm workers in tunics treading grapes barefoot in a big stone vat, juice splashing, laughing"
+ },
+ {
+  "id": "gaius-wine",
+  "prompt": "dark red wine pouring from a clay jug into a rough clay cup on an old wooden table, a farmhouse"
+ },
+ {
+  "id": "gaius-crow",
+  "prompt": "a black crow on terracotta roof tiles against a grey stormy sky, looking at the camera"
+ },
+ {
+  "id": "gaius-wife",
+  "prompt": "a stern grey-haired Roman farmer's wife in her fifties with her arms crossed, glaring at the camera in a farmhouse kitchen with hanging herbs"
+ },
+ {
+  "id": "gaius-dawn",
+  "prompt": "sunrise over the hills near Tivoli, mist over olive groves and vineyards, a farmhouse with a red tile roof"
+ },
+ {
+  "id": "gaius-mud",
+  "prompt": "a muddy farmyard in the rain, an ox cart stuck in the mud, chickens running"
+ },
+ {
+  "id": "gaius-pig",
+  "prompt": "a big pig running through a vineyard, a farmer in a tunic chasing it with a stick"
+ },
+ {
+  "id": "gaius-amphorae",
+  "prompt": "rows of clay amphorae loaded on an ox cart in a farmyard"
+ },
+ {
+  "id": "gaius-ox",
+  "prompt": "a huge white ox staring straight at the camera in a field"
+ },
+ {
+  "id": "gaius-storm",
+  "prompt": "lightning over the hills, black storm clouds over a lonely farmhouse and vineyards"
+ },
+ {
+  "id": "gaius-shrine",
+  "prompt": "a small Roman household shrine painted on a wall, with little offerings of bread, wine and flowers and a burning oil lamp"
+ },
+ {
+  "id": "gaius-dog",
+  "prompt": "a big shaggy farm dog asleep by a stone hearth with a fire"
+ },
+ {
+  "id": "gaius-hail",
+  "prompt": "hailstones on torn grape leaves and broken vines, a ruined vineyard after a storm"
+ },
+ {
+  "id": "gaius-donkey",
+  "prompt": "a stubborn donkey sitting down on a country road, refusing to move, loaded with baskets"
+ },
+ {
+  "id": "claudia-selfie",
+  "prompt": "selfie of a Roman woman in her late thirties with dark hair in a neat bun and a calm smile, at the harbour of Ostia with ships and warehouses behind"
+ },
+ {
+  "id": "claudia-classroom",
+  "prompt": "a small Roman classroom under a portico, wooden benches, wax tablets and an abacus, a teacher's chair, morning light"
+ },
+ {
+  "id": "claudia-children",
+  "prompt": "two Roman children, a girl of ten and a boy of six, covered in flour in a kitchen, laughing, a mess of dough"
+ },
+ {
+  "id": "claudia-ship",
+  "prompt": "a Roman merchant ship with a big square sail coming into a harbour, a lighthouse, gulls"
+ },
+ {
+  "id": "claudia-fish-market",
+  "prompt": "a fish market stall with fresh fish, octopus and eels on stone counters, a loud fishwife, gulls"
+ },
+ {
+  "id": "claudia-tablets",
+  "prompt": "a stack of wax tablets and a stylus beside a burning oil lamp on a table at night"
+ },
+ {
+  "id": "claudia-lighthouse",
+  "prompt": "a tall Roman lighthouse at the harbour at dusk, its fire burning at the top, ships at anchor"
+ },
+ {
+  "id": "claudia-bread",
+  "prompt": "round Roman loaves of bread divided in eight, fresh from the oven, on a wooden board"
+ },
+ {
+  "id": "claudia-charcoal",
+  "prompt": "a white wall with a child's big charcoal drawing of a horse and a ship, a little boy holding charcoal looking guilty"
+ },
+ {
+  "id": "claudia-sea",
+  "prompt": "a stormy grey sea with big waves breaking on the beach at Ostia, dark clouds"
+ },
+ {
+  "id": "claudia-fever",
+  "prompt": "a little girl asleep in a small bed with a wet cloth on her forehead, an oil lamp, a mother's hand on the blanket"
+ },
+ {
+  "id": "claudia-dinner",
+  "prompt": "a simple dinner table with lentils, bread, olives and three cups, a fourth place empty, oil lamp"
+ },
+ {
+  "id": "claudia-pupil",
+  "prompt": "a boy of ten asleep with his head on his wax tablet in a Roman classroom, other children giggling"
+ },
+ {
+  "id": "claudia-books",
+  "prompt": "a wooden cabinet full of papyrus scrolls with little tags, one scroll open on a table"
+ },
+ {
+  "id": "lucius-moon",
+  "prompt": "a full moon over the dark rooftops of Rome at night, one oil lamp burning in a high window"
+ },
+ {
+  "id": "lucius-crow",
+  "prompt": "a black crow standing on a pile of papyrus scrolls on a desk, its head tilted, looking at the camera, candlelight"
+ },
+ {
+  "id": "lucius-selfie",
+  "prompt": "moody selfie of a pale young Roman man of 29 with long dark messy hair and dark circles under his eyes, sighing, by the light of an oil lamp"
+ },
+ {
+  "id": "lucius-desk",
+  "prompt": "a messy desk at night, crumpled papyrus, spilled ink, a half-empty wine cup, an oil lamp burning low"
+ },
+ {
+  "id": "lucius-roses",
+  "prompt": "wilted dark red roses in a clay vase on a windowsill, petals fallen, moonlight"
+ },
+ {
+  "id": "lucius-reading",
+  "prompt": "a nearly empty tavern, a young man with long dark hair reading from a scroll with passion to three bored listeners, one asleep"
+ },
+ {
+  "id": "lucius-tombs",
+  "prompt": "the Appian Way at dusk, an old stone road lined with tombs and tall cypress trees, mist"
+ },
+ {
+  "id": "lucius-empty-jug",
+  "prompt": "an empty wine jug tipped over on a desk among scrolls and two cups, morning light"
+ },
+ {
+  "id": "lucius-rain",
+  "prompt": "rain falling on wet terracotta roofs of Rome at night, seen through an open wooden shutter"
+ },
+ {
+  "id": "lucius-noon",
+  "prompt": "a rumpled bed covered with scrolls, an empty cup, bright sunlight through wooden shutters"
+ },
+ {
+  "id": "lucius-statue",
+  "prompt": "a marble statue of a young woman in a garden at dusk, ivy around its base"
+ },
+ {
+  "id": "lucius-sunrise",
+  "prompt": "sunrise over the Tiber with an old stone bridge, mist on the water, empty streets"
+ },
+ {
+  "id": "lucius-candle",
+  "prompt": "a single small clay oil lamp with a tiny flame in a completely dark room"
+ },
+ {
+  "id": "any-colosseum",
+  "prompt": "the Colosseum from outside, huge crowds streaming in under the arches, banners, bright day"
+ },
+ {
+  "id": "any-forum",
+  "prompt": "the Roman Forum crowded with people in togas and tunics, temples with columns, a market morning"
+ },
+ {
+  "id": "any-fire",
+  "prompt": "a burning Roman apartment block at night, flames from the windows, people passing buckets of water in a chain"
+ },
+ {
+  "id": "any-flood",
+  "prompt": "a flooded narrow Roman street, people wading knee-deep in brown water, carrying baskets above their heads"
+ },
+ {
+  "id": "any-carts",
+  "prompt": "a narrow Roman street at night jammed with ox carts and donkeys, torches, a man shouting"
+ },
+ {
+  "id": "any-feast",
+  "prompt": "a messy Roman dining room after a feast, overturned cups, food on the floor, a guest asleep on a couch, a peacock walking among the plates"
+ },
+ {
+  "id": "any-dormice",
+  "prompt": "close-up of roasted stuffed dormice with honey and poppy seeds on a silver plate at a Roman banquet"
+ },
+ {
+  "id": "any-peacock",
+  "prompt": "a live peacock with its tail spread on a banquet table among the dishes, Roman diners laughing"
+ },
+ {
+  "id": "any-oysters",
+  "prompt": "a big plate of fresh oysters on ice-cold stone with lemons, a cup of wine, Roman tavern"
+ },
+ {
+  "id": "any-donkey",
+  "prompt": "a donkey standing in the middle of a narrow Roman street, refusing to move, a line of angry people and carts behind it"
+ },
+ {
+  "id": "any-cat",
+  "prompt": "a cat running off with a big fish in its mouth from a market stall, a fishmonger shouting"
+ },
+ {
+  "id": "any-guard-dog",
+  "prompt": "a big angry guard dog chained at the doorway of a Roman house, barking at the camera"
+ },
+ {
+  "id": "any-snow",
+  "prompt": "rare snow on the terracotta roofs and temples of Rome, people staring at the sky"
+ },
+ {
+  "id": "any-market",
+  "prompt": "a busy Roman market with stalls of vegetables, cabbages, onions and fruit, sellers shouting, morning"
+ },
+ {
+  "id": "any-temple",
+  "prompt": "a Roman temple with tall columns at dawn, pink sky, pigeons"
+ },
+ {
+  "id": "any-aqueduct",
+  "prompt": "a Roman aqueduct with tall arches crossing the countryside at sunset"
+ },
+ {
+  "id": "any-gladiator",
+  "prompt": "selfie of a small smiling man in a tunic next to a huge muscular gladiator holding his helmet under his arm, outside the arena"
+ },
+ {
+  "id": "any-elephant",
+  "prompt": "an elephant being led through a narrow Roman street by handlers, people pressed against the walls"
+ },
+ {
+  "id": "any-giraffe",
+  "prompt": "a giraffe being led on a rope through a Roman street, astonished people, children running"
+ },
+ {
+  "id": "any-lion",
+  "prompt": "a lion in a wooden cage on a cart near the Colosseum, roaring, people keeping their distance"
+ },
+ {
+  "id": "any-tavern-fight",
+  "prompt": "two men wrestling in a Roman tavern, a table overturned, wine spilled, people cheering"
+ },
+ {
+  "id": "any-amphora",
+  "prompt": "a shattered clay amphora with red wine spreading over a stone floor"
+ },
+ {
+  "id": "any-wedding",
+  "prompt": "a Roman wedding procession at night with torches, a bride in an orange veil, flute players and laughing guests"
+ },
+ {
+  "id": "any-saturnalia",
+  "prompt": "a wild Roman Saturnalia party, people in felt caps drinking and laughing, a master serving food to his slaves, candles"
+ },
+ {
+  "id": "any-juggler",
+  "prompt": "a street performer juggling knives in front of a crowd in the Roman Forum"
+ },
+ {
+  "id": "any-astrologer",
+  "prompt": "an old astrologer with a star chart and a wax tablet reading a client's fortune at a little table in the street"
+ },
+ {
+  "id": "any-barber",
+  "prompt": "a Roman street barber shaving a nervous man with a razor, a small cut, people watching"
+ },
+ {
+  "id": "any-latrine",
+  "prompt": "a Roman public latrine with a long row of marble seats, men in tunics sitting side by side and chatting cheerfully"
+ },
+ {
+  "id": "any-rat",
+  "prompt": "a rat on a kitchen table eating bread in a Roman kitchen, a broom in the corner"
+ },
+ {
+  "id": "any-burnt-bread",
+  "prompt": "burnt black loaves of bread on a stone oven floor, smoke"
+ },
+ {
+  "id": "any-janiculum",
+  "prompt": "a wide view of ancient Rome from a hill at golden hour, temples, roofs, the Tiber, smoke from kitchens"
+ },
+ {
+  "id": "any-geese",
+  "prompt": "angry white geese running at the camera with their wings spread, a temple behind"
+ },
+ {
+  "id": "any-procession",
+  "prompt": "a Roman emperor in a golden chariot in a triumphal procession, soldiers, crowds cheering, flowers thrown"
+ },
+ {
+  "id": "any-legion",
+  "prompt": "Roman legionaries in armour marching in a column out of a city gate, standards and an eagle"
+ },
+ {
+  "id": "any-baby",
+  "prompt": "a crying baby in a wooden cradle in a Roman apartment, an oil lamp"
+ },
+ {
+  "id": "any-sandal",
+  "prompt": "close-up of a broken leather sandal on the paving stones of the Roman Forum, a foot in it"
+ },
+ {
+  "id": "any-chickens",
+  "prompt": "a cage of chickens refusing to eat grain scattered in front of them, a priest watching worried"
+ },
+ {
+  "id": "any-boat",
+  "prompt": "a view from a river boat on the Tiber, rowers, the riverbank, a warehouse, sunshine"
+ },
+ {
+  "id": "any-sea-sunset",
+  "prompt": "sunset over the sea from a Roman villa terrace, a cup of wine on the balustrade"
+ },
+ {
+  "id": "any-baths",
+  "prompt": "a huge Roman bath hall with a pool, marble columns, steam, people in tunics talking at the edge"
+ },
+ {
+  "id": "any-graffiti-wall",
+  "prompt": "a Roman street wall covered in painted red election notices and scratched drawings, a dog sleeping below"
+ },
+ {
+  "id": "any-funeral",
+  "prompt": "a Roman funeral procession with flute players, wailing mourners and men wearing ancestor masks, a street"
+ },
+ {
+  "id": "any-actor",
+  "prompt": "a famous Roman actor in a fine cloak surrounded by admirers in a street, smiling"
+ },
+ {
+  "id": "any-mosaic",
+  "prompt": "a beautiful Roman mosaic floor with sea creatures, octopus and fish, in a rich house"
+ },
+ {
+  "id": "any-vesuvius",
+  "prompt": "a big volcano with a broken top rising behind a bay with fishing boats, morning haze"
+ },
+ {
+  "id": "any-thermopolium",
+  "prompt": "a Roman street food shop with a painted counter, clay pots of stew, customers leaning on the counter"
+ },
+ {
+  "id": "any-chariot-fans",
+  "prompt": "a group of sad men in blue tunics at the Circus Maximus holding their heads in despair"
+ },
+ {
+  "id": "any-horse",
+  "prompt": "a horse chewing on a straw hat, a street, a laughing child"
+ },
+ {
+  "id": "any-octopus",
+  "prompt": "a live octopus on a kitchen table in a Roman kitchen, a cook backing away"
+ },
+ {
+  "id": "any-rome-night",
+  "prompt": "the streets of Rome at night lit by torches and oil lamps, a tavern full of light and noise"
+ },
+ {
+  "id": "any-library",
+  "prompt": "a Roman public library hall with shelves of scrolls in niches, a reader at a table, statues"
+ },
+ {
+  "id": "any-toga-mess",
+  "prompt": "a white toga with a big red wine stain, a man holding it up in despair"
+ },
+ {
+  "id": "any-sleeping-guard",
+  "prompt": "a Roman city guard asleep on a stool against a wall at night, his spear leaning beside him"
+ },
+ {
+  "id": "any-hairdo",
+  "prompt": "the back of a Roman woman's head with a towering hairstyle of curls, a hairdresser pinning it"
+ },
+ {
+  "id": "any-goat-roof",
+  "prompt": "a goat standing on top of a terracotta roof of a Roman house, people pointing up from the street"
+ },
+ {
+  "id": "any-stuck-cart",
+  "prompt": "an overturned cart in a Roman street with cabbages everywhere, the driver scratching his head"
+ },
+ {
+  "id": "any-pigeon",
+  "prompt": "a pigeon flying off with a piece of bread in a Roman piazza, a fountain"
+ },
+ {
+  "id": "any-dog-sleep",
+  "prompt": "a dog asleep on its back in the sun on Roman paving stones"
+ }
+]

@@ -762,6 +762,8 @@ async function loadPic(id: string) {
     const snap = await ref.get?.();
     const p = snap?.exists ? (snap.data() as unknown as Pic) : undefined;
     if (p) picCache.set(id, { ...p, id });
+    // still waiting after a quarter of an hour: the run that should have made it did not; ask again
+    if (p?.status === "wanted" && Date.now() - p.at > 15 * 60_000) void firePictures([id]);
     if ((!p || p.status === "wanted") && ref.onSnapshot) {
       picFollow.set(
         id,
@@ -820,10 +822,15 @@ function makePictures(made: Pic[]) {
 }
 
 let lastFire = 0;
+let refire: ReturnType<typeof setTimeout> | undefined;
 async function firePictures(ids: string[]) {
   const now = Date.now();
-  // one run makes every picture that waits
-  if (now - lastFire < 90_000) return;
+  // one run makes every picture that waits; a picture asked for meanwhile gets a run of its own a little later
+  if (now - lastFire < 90_000) {
+    clearTimeout(refire);
+    refire = setTimeout(() => void firePictures(ids), 90_000 - (now - lastFire) + 1000);
+    return;
+  }
   lastFire = now;
   try {
     await callConnector(CONNECTOR, "fire_trigger", { trigger_id: PICTURE_TRIGGER, text: `Pictures waiting: ${ids.join(", ")}` });
@@ -959,7 +966,7 @@ export function createGroup(name: string, members: string[]): string {
   const n = name.trim() || "Nova turba";
   changeGroups(id, () => ({ name: n, members }), [`You created the group «${n}».`, `You added ${namesOf(members)}.`]);
   // they find themselves in it, and say something (or not)
-  pending.set(id, setTimeout(() => void answer(id), 1500));
+  answerSoon(id);
   return id;
 }
 
@@ -969,7 +976,7 @@ export function addToGroup(id: string, who: string[]) {
   const fresh = who.filter((x) => !groupMembers(meta, id).includes(x));
   if (!fresh.length) return;
   changeGroups(id, (g) => ({ ...g, members: [...g.members, ...fresh] }), [`You added ${namesOf(fresh)}.`]);
-  pending.set(id, setTimeout(() => void answer(id), 1500));
+  answerSoon(id);
 }
 
 /** The learner takes someone out of a group: they notice, and it stays with them. */
@@ -979,6 +986,12 @@ export function removeFromGroup(id: string, who: string) {
   const day = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/Rome" });
   meta = { ...meta, bonds: { ...meta.bonds, [who]: { ...bond, moments: [...bond.moments, `${day}: the learner removed me from the group «${groupName(meta, id)}»`].slice(-MOMENTS), updatedAt: Date.now() } } };
   saveMeta();
+  answerSoon(id);
+}
+
+/** The people of a chat answer what just happened there, after a moment (one answer, however many changes). */
+function answerSoon(id: string) {
+  clearTimeout(pending.get(id));
   pending.set(id, setTimeout(() => void answer(id), 1500));
 }
 

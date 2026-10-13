@@ -756,7 +756,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     )}
                     {m.pic && <PicInBubble m={m} onOpen={() => setPhoto({ pic: m.pic, en: m.picEn })} />}
                     {m.voice && (
-                      <VoiceNote m={m} who={mine ? learnerVoice() : sender} open={voiceText.includes(m.id)} onText={() => setVoiceText(voiceText.includes(m.id) ? voiceText.filter((x) => x !== m.id) : [...voiceText, m.id])} />
+                      <VoiceNote m={m} who={mine ? null : sender} open={voiceText.includes(m.id)} onText={() => setVoiceText(voiceText.includes(m.id) ? voiceText.filter((x) => x !== m.id) : [...voiceText, m.id])} />
                     )}
                     {m.la && (!m.voice || voiceText.includes(m.id) || !audioReady()) && (
                       <span class="bubble-text">
@@ -818,7 +818,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
                   </div>
                 )}
                 {note && <WordCard note={note} id={`${m.id}-${card!.index}`} mine={mine} onOpen={setWordOpen} />}
-                {mine && !onlyEmoji(m.la) && (m.check || m.id === lastMine || openEn.includes(m.id)) && <Checked m={m} id={id} />}
+                {mine && m.la.trim() && !onlyEmoji(m.la) && !deletedNow(m, now) && (m.check || m.id === lastMine || openEn.includes(m.id)) && <Checked m={m} id={id} />}
                 {mine && m.id === lastMine && <NewWords m={m} />}
               </Fragment>
             );
@@ -1159,7 +1159,6 @@ function PicInBubble({ m, onOpen }: { m: Msg; onOpen: () => void }) {
 }
 
 /** The learner's own voice in their voice messages: the device's voice, as a man or a woman. */
-const learnerVoice = (): Who | null => null;
 const myVoice = () => ({ g: getProgress().settings.me?.g ?? ("m" as const), pitch: 1, rate: 0.9 });
 
 /** Read receipts: ✓ sent, ✓✓ read. */

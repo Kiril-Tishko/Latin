@@ -1277,6 +1277,14 @@ async function abilities() {
   if (!((await p.locator(".chat-head-name").textContent()) ?? "").includes("Tertia")) errors.push("abilities: writing to someone from the story does not open their chat");
   if (!(await p.locator(".chat-row-name", { hasText: "Tertia" }).count())) errors.push("abilities: someone from the story is not in the list");
   await p.screenshot({ path: `${out}/abilities-story.png` });
+  // on a phone: New chat and a group's sheet fit the screen
+  await p.setViewportSize({ width: 390, height: 844 });
+  await p.click(".chat-back");
+  await p.click("#new-chat");
+  await p.waitForTimeout(400);
+  const wide = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  if (wide > 1) errors.push(`abilities: New chat is ${wide}px wider than a phone`);
+  await p.screenshot({ path: `${out}/abilities-phone-new-chat.png` });
   await ctx.close();
 }
 

@@ -386,9 +386,9 @@ function makeSubject(k: Knowledge, r: Rand, o: SubjectOpts = {}) {
       opts.push({
         w: coordW,
         build: () => {
-          const a = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), require: o.who, adjChance: 0.15, possChance: 0, sillyScale: 0.5 });
+          const a = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), require: o.who, adjChance: o.adjChance ?? 0.15, possChance: 0, sillyScale: 0.5 });
           if (!a) return null;
-          const b = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), require: o.who, adjChance: 0.15, possChance: 0, exclude: [a.noun.id], sillyScale: 0.5 });
+          const b = makeNP(k, r, { case: "nom", num: "sg", prefer: agent(k), require: o.who, adjChance: o.adjChance ?? 0.15, possChance: 0, exclude: [a.noun.id], sillyScale: 0.5 });
           return b && { subj: { kind: "coord", nps: [a, b] }, person: 3, num: "pl", skills: ["s.sv", "s.pl", "s.et", ...npSkills(a), ...npSkills(b)] };
         },
       });

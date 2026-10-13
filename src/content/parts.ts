@@ -764,7 +764,7 @@ export const PARTS: Part[] = [
     title: "Rōmam: a city needs no in",
     explain: [
       "With a city there is no in or ad: «Rōmam ambulō» = I walk to Rome.",
-      "'In Rome' is «Rōmae#x», an old 'where' case that names of cities keep (and a couple of everyday words, such as the one for 'at home'): «Rōmae#x habitō» = I live in Rome.",
+      "'In Rome' is «Rōmae#x», an old 'where' case that cities keep: «Rōmae#x habitō» = I live in Rome.",
       "A country keeps its in: «Rōma in Italiā est».",
     ],
     examples: [

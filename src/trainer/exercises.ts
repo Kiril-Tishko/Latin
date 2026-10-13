@@ -665,13 +665,15 @@ function verbFormExercise(ctx: Ctx, skillId: string): Exercise | null {
   }
   const form = conjugate(verb)[key]!;
   const expected = full(form);
-  const shown = key === "inf" ? full(conjugate(verb)["pres.2sg"]!) : full(conjugate(verb).inf!);
+  // the infinitive and the "we" form come from the tū form, whose vowel they keep (ambulās → ambulāmus)
+  const fromYou = key === "inf" || key === "pres.1pl";
+  const shown = fromYou ? full(conjugate(verb)["pres.2sg"]!) : full(conjugate(verb).inf!);
   const token: LToken = { text: expected, role: "verb", analysis: { entry: verb, key, form }, skill: skillId };
   // the hints never spell out the answer
   const hints =
     key === "inf"
       ? ["The vowel before -s gives the infinitive: -ās → -āre, -ēs → -ēre, -īs → -īre, a short -is → -ere.", `${shown} = you ${verb.en}`]
-      : [SKILL_BY_ID.get(skillId)?.hint ?? "", `${shown} = to ${verb.irregular === "possum" ? "be able (can)" : verb.en}`];
+      : [SKILL_BY_ID.get(skillId)?.hint ?? "", fromYou ? `${shown} = you ${verb.en}` : `${shown} = to ${verb.irregular === "possum" ? "be able (can)" : verb.en}`];
   return {
     id: nextId(),
     kind: "form",
@@ -683,7 +685,8 @@ function verbFormExercise(ctx: Ctx, skillId: string): Exercise | null {
     words: [verb.id],
     context: `Give the form of "${shown}" for ${label}. Answer: ${expected}`,
     check(answer) {
-      const typed = words(answer).map(latinKey).filter((w) => w !== "ego" && w !== "tu");
+      // the pronoun may come along: «nōs scrībimus» is right too
+      const typed = words(answer).map(latinKey).filter((w) => w !== "ego" && w !== "tu" && w !== "nos");
       const ok = typed.length === 1 && typed[0] === latinKey(expected);
       const issues: Issue[] = [];
       if (!ok && typed.length) {

@@ -214,13 +214,13 @@ export function checkAnswer(text: string, lex: Lexicon): Finding[] {
     const finite = words.filter((t) => t.readings?.length && t.readings.every((r) => r.entry.kind === "verb") && t.readings.some((r) => r.key.startsWith("pres.")));
     if (finite.length === 1 && !words.some((t) => plain(t.text) === "et")) {
       const v = finite[0];
-      const pron = words.find((t) => t.readings?.[0]?.entry.id === "ego" || t.readings?.[0]?.entry.id === "tu");
+      const pron = words.find((t) => ["ego", "tu", "nos"].includes(t.readings?.[0]?.entry.id ?? ""));
       let need: PN | null = null;
       let who = "";
       // "Discipulus sum", "Poēta es": with I am / you are, the noun is what one is, not the subject
       const iOrYouAre = v.readings!.some((r) => r.entry.kind === "verb" && r.entry.irregular === "sum" && (r.key === "pres.1sg" || r.key === "pres.2sg"));
       if (pron) {
-        need = pron.readings![0].entry.id === "ego" ? "1sg" : "2sg";
+        need = pron.readings![0].entry.id === "ego" ? "1sg" : pron.readings![0].entry.id === "nos" ? "1pl" : "2sg";
         who = `«${pron.text}»`;
       } else if (!iOrYouAre) {
         // a word that can only be calling someone (Marce, Gāī) is never the subject

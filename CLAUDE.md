@@ -68,7 +68,7 @@ npm run typecheck
 npm run build       # -> dist/tabula-latina.html (the artifact page), its files, dist/publish.json, dist/preview.html
 npm run smoke       # clicks through the built page in Chromium, saves screenshots to dist/screens
 SMOKE_ONLY=messenger npm run smoke   # one part only (messenger, abilities, ownWords, learn, stories, conversations, chatScroll, askClaude, audio, pages)
-python3 -I scripts/content/photos.py  # makes any of the people's photos that is missing (AI Horde, free, ~2 min each)
+python3 -I scripts/content/photos.py  # makes any of the people's photos that is missing (AI Horde, free; anonymous jobs wait 2-15 min each)
 node scripts/build.mjs --dev   # unminified build for debugging
 ```
 

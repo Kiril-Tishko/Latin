@@ -1703,7 +1703,7 @@ function Profile({ who, t, now, onClose }: { who: Who; t: Thread; now: number; o
     <Modal onClose={onClose} label={`${who.name}'s profile`}>
       <div class="stack profile">
         <div class="spread">
-          <span class="eyebrow">{who.stranger ? "Met by chance" : who.g === "f" ? "Amīca" : "Amīcus"}</span>
+          <span class="eyebrow">{who.stranger ? (meta.strangers[who.id]?.story ? "From the story" : meta.strangers[who.id]?.invented ? "Came into the story" : "Met by chance") : who.g === "f" ? "Amīca" : "Amīcus"}</span>
           <button class="btn ghost small" onClick={onClose} aria-label="Close"><Icon.close /></button>
         </div>
         <div class="profile-top">

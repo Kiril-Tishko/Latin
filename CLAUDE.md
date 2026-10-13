@@ -51,7 +51,13 @@ published as a private claude.ai artifact.
   fully tied into the friends' lives, the learner still a foreigner far away.
   Above all: "don't make the rules/prompts very strict… let them have freedom,
   no scenario/script", things they do that the learner did not expect, and new
-  abilities added over time for the learner to discover.
+  abilities added over time for the learner to discover. For themselves they
+  asked to send voice messages and photos, to block, mute and delete, to make
+  groups of their own and to write to anyone in the story; for the people's
+  photos, "something wild, something they would send… no limits" made by an AI
+  generator instead of a museum's collection (no nudity or gore: the generator's
+  filter is on, and the prompts say so). Pace: "let it come naturally". Their
+  Latin stays out of it: the people know nothing of lessons.
 
 ## Commands
 
@@ -61,7 +67,8 @@ npm test            # engine, content and exercise self-tests (vitest)
 npm run typecheck
 npm run build       # -> dist/tabula-latina.html (the artifact page), its files, dist/publish.json, dist/preview.html
 npm run smoke       # clicks through the built page in Chromium, saves screenshots to dist/screens
-SMOKE_ONLY=messenger npm run smoke   # one part only (messenger, ownWords, learn, stories, conversations, chatScroll, askClaude, audio, pages)
+SMOKE_ONLY=messenger npm run smoke   # one part only (messenger, abilities, ownWords, learn, stories, conversations, chatScroll, askClaude, audio, pages)
+python3 -I scripts/content/photos.py  # makes any of the people's photos that is missing (AI Horde, free, ~2 min each)
 node scripts/build.mjs --dev   # unminified build for debugging
 ```
 
@@ -76,10 +83,12 @@ script is named by its content, so a browser never runs an old copy). Publish
 with the Artifact tool:
 
 - first publish: `file_path: dist/tabula-latina.html`, `files`: the map in
-  dist/publish.json, `icon: "scroll"`, `capabilities: {sample: {}, db: {}, user: {}}`
+  dist/publish.json, `icon: "scroll"`, `capabilities: {sample: {images: true}, db: {}, user: {},
+  mcp: {servers: [{server: "Claude Code Remote", tools: ["fire_trigger"]}]}}`
 - updates: the same plus `url: <artifact url>`, with the script the artifact
   holds now set to `null` in `files` (list them: `action: "list"`,
   `scope: "files"`), and omit `capabilities` so the stored ones are kept.
+  Files that are gone (old photos) are set to `null` too.
 
 Why the code is not inlined: with the minified code in the page, the publisher
 took the page for a code-review page ("carries the artifact-pr-review
@@ -181,7 +190,13 @@ Runtime capabilities used:
   into their chats and deletes them) and `…/messenger/brief/now` (what the
   routine needs, written by the page). The Ācta Diurna is the thread
   `…/messenger/threads/acta` (kind "channel"; `meta.actaAt` marks a board being
-  written, so two devices do not both write it).
+  written, so two devices do not both write it). Pictures (the people's fresh
+  ones and the learner's photos) are documents of their own,
+  `…/messenger/pics/<id>` (under the store's 256 KiB per document).
+- `sample` with `images: true`: the learner's photos in the messenger are shown
+  to Claude with the next answer.
+- `mcp` (the built-in "Claude Code Remote" connector, `fire_trigger` only): the
+  page fires the pictures routine when someone sends a fresh picture.
 
 ## The site: four tabs, one Continue
 
@@ -560,12 +575,27 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   `voiceOf`; a man's or a woman's voice by name when the device has one,
   `voiceFor`). No free online voice reads classical Latin, so the device's
   respelled voice it is; without one the words show at once.
-- Photos: now and then a message carries `"photo": "<id>"` from the people's
-  own world (src/content/photos.ts: 25 Roman paintings and things from The Met,
-  CC0, made small WebP files in src/content/photos by scripts/content/photos.py
-  and published beside the page;
-  each with what it shows as the sender sees it, what it really is, and who
-  would send it). Not one sent lately; a tap opens it with its credit.
+- Photos: what a Roman of AD 100 with a camera in their pocket would send
+  (selfies, lunch, the mess after a party, a goat on the roof, a chariot crash).
+  A message carries `"photo": "<id>"` from the library (src/content/photos.ts:
+  130 phone photos, each with what it shows and who would send it; made by AI
+  Horde, aihorde.net, free volunteers' generators that need no key, from the
+  scenes in scripts/content/photos.json by scripts/content/photos.py: small WebP
+  files published beside the page; not one sent lately), or `"picture": "<what
+  it shows>"` for a fresh one when nothing fits (`PICTURE`, only while
+  `PromptCtx.canMake`: eight a day, `MAKE_PER_DAY`). A fresh picture is a `Pic`
+  (model.ts) in its own document `…/messenger/pics/<id>` ("wanted" with its
+  prompt, then "done" with the image in base64, or "failed"); the message holds
+  `pic` and `picEn` and shows "Photo on its way…" until it is made
+  (`PicInBubble`, `picOf` follows the document). The page cannot reach the
+  internet (its network is closed), so a routine makes them: the page fires
+  "Nūntiī: pictures" (trig_01UuDAZrviveDMPR1sjce698, no schedule, a fresh
+  session per firing, no notification; scripts/pictures-routine.md with the
+  same helper embedded: it queries the wanted pictures, makes them with
+  `nuntii.py pictures` and updates their documents) through the Claude Code
+  Remote connector (`callConnector` in platform.ts, `firePictures`, at most once
+  in 90 s); without the connector the hourly routine makes them. The routine
+  also makes fresh pictures for its own messages (`nuntii.py picture`).
 - Claude is asked only on the learner's actions: Send (one answer per burst:
   2.5 s pause; answers still on their way are taken back and written again),
   opening the messenger (at most every 3 hours, `writeOwn`: what they write on
@@ -585,6 +615,31 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   (`ANY_WORD`; the engine's unknown-word note is no longer sent). Prompts: src/chat/prompts.ts
   (who they are, their day and mood now, the learner, the conversation, when the
   answer arrives, how to be real, and the strict language block).
+- The learner's own abilities: "New chat" (`NewChat` in messenger.tsx) writes
+  to anyone: the people they know; someone from the story (`SIDE_PEOPLE` in
+  people.ts, or any name typed: `storyPerson` → `meetFromStory` in engine.ts
+  with `storyPersonPrompt`: Claude makes them from the story, a face and a day
+  from the dice, `Stranger.story`, shown at once; someone already there is
+  found, not made again; anyone made is 18 or older); a group of their own
+  (`NewGroup`, `createGroup`: chat id "g-…", kept in `World.groups` as a
+  `GroupInfo` with its name, members and maker; the people find themselves in
+  it and answer); or Someone new. A group's sheet (`GroupSheet`, tap its name)
+  renames it, adds and removes people (someone removed remembers it: a bond
+  moment), mutes it and leaves it (not the friends' group). The people can
+  start groups too (act "newGroup", with "me" in it and its first messages),
+  remove someone and rename any group ("group": its chat id). The menu of a
+  chat: Mute (`Meta.mine.muted`: no notice, a grey count, nothing on the tab,
+  no phone notification), Clear chat (`Thread.clearedAt`: hidden on the
+  learner's side, remembered by them), Block (`Meta.mine.blocked`: the message
+  box gives way to Unblock; what they send in private never arrives; they are
+  told in their sheet and may suspect it). A tap on the learner's own message:
+  Reply, or Delete (a second tap: "Delete for everyone?"); the people are told
+  whether they had read it first. The ＋ holds Photo (only where Claude can be
+  shown pictures: `canSendPhotos`; shrunk to a JPEG under the store's limit and
+  kept as a `Pic`; the next answer shows Claude the learner's new photos, its
+  `saw` is kept as the message's `picEn`) and Voice message (the next message
+  goes as a voice note, read in the learner's voice). `tests/chat.test.ts`
+  ("the learner's own abilities") and the smoke test's `abilities` part.
 - Relationships (src/chat/model.ts `Bond`, `Meta.bonds`): each person keeps
   how they feel about the learner in their own words (`feel`, first person,
   private: never shown on the page), dated `moments` between them, and the
@@ -677,9 +732,11 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   have this repo: who is awake, moods, the chats; the word check; the
   notification line): it reads the brief (src/chat/brief.ts: the learner, the language block, every
   allowed spelling, everyone's sheet and their lives rolled 48 h ahead, the day
-  in Rome for today and the next two days, the photos), writes 0-3 messages into
-  the inbox (a voice message or a photo now and then), and ends with one line
-  about the unseen messages,
+  in Rome for today and the next two days, the photos, the groups, whom the
+  learner blocked and muted), makes the pictures still wanted, writes 0-3
+  messages into the inbox (a voice message, a photo or a fresh picture now and
+  then; none from someone the learner blocked, in private), and ends with one
+  line about the unseen messages (muted chats left out),
   which becomes the notification. Change its schedule or prompt with
   update_trigger (keep the prompt in sync with that file).
 

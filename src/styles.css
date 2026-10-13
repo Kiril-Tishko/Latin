@@ -1471,7 +1471,7 @@ main.page.msgr-page { padding-block: 14px; }
 .day-sprig { width: 28px; height: 28px; color: var(--gold-soft); }
 /* the Roman date beside Hodiē: a.d. IV Īd. Oct. */
 .day-roman { margin-left: 8px; padding-left: 9px; border-left: 1px solid var(--m-line); font-size: 0.86em; letter-spacing: 0.06em; text-transform: none; color: var(--ink-2); }
-.msgr-date { margin: -8px 20px 10px 24px; font-family: var(--f-display); font-size: 0.82rem; letter-spacing: 0.06em; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msgr-date { flex: none; margin: -8px 20px 10px 24px; font-family: var(--f-display); font-size: 0.82rem; letter-spacing: 0.06em; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 760px) { .msgr-date { margin: -4px 14px 8px 16px; } }
 
 /* a voice message: play, a waveform, its length, and its words a tap away */
@@ -1822,7 +1822,8 @@ main.page.msgr-page { padding-block: 14px; }
   .emoji-pop { left: 0; right: 0; }
   .emoji-grid { grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); max-height: 210px; }
   .phrase-list { width: auto; max-height: 260px; }
-  .arrival { right: 12px; left: 12px; max-width: none; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  /* on a phone a notice comes from the top, like a phone's, never over the message box */
+  .arrival { right: 12px; left: 12px; max-width: none; top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto; }
 }
 
 /* adding a word to the learner's own dictionary */

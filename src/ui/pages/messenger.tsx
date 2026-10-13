@@ -18,7 +18,9 @@ import { romanDate, romeDay, todayLine } from "../../chat/calendar";
 import { PHOTO_BY_ID, PHOTO_CREDIT, photoSrc } from "../../content/photos";
 import { speak, stopSpeaking, useSpeaking, useVoices } from "../../audio/speech";
 import { allowedWords, CHAT_WORD_LIST, headword, notLatin, strangeWords } from "../../chat/words";
-import { Analysis, annotate } from "../../latin/analyze";
+import { Analysis, annotate, Lexicon } from "../../latin/analyze";
+import { LESSONS } from "../../content/lessons";
+import { STORY_ONLY } from "../../content/words";
 import { plain, roman } from "../../latin/text";
 import { CASE_NAMES, Entry, PN, PN_NAMES } from "../../latin/types";
 import { enterSends, Icon, Modal, useSwipeAway } from "../components";
@@ -259,7 +261,7 @@ function Setup() {
       </p>
       <label class="stack" style={{ gap: "6px" }}>
         <span class="ui"><b>What should they call you?</b></span>
-        <input id="me-name" class="input" value={name} maxLength={24} placeholder="Your name" {...NO_CORRECTION} onInput={(e) => setName((e.target as HTMLInputElement).value)} />
+        <input id="me-name" class="input" value={name} maxLength={24} placeholder="Your name" {...NO_CORRECTION} enterkeyhint="next" onInput={(e) => setName((e.target as HTMLInputElement).value)} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
       </label>
       <div class="stack" style={{ gap: "6px" }}>
         <span class="ui"><b>Latin words about you end in…</b></span>
@@ -271,6 +273,7 @@ function Setup() {
       <button id="me-start" class="btn gold" disabled={!ok} onClick={() => ok && update((x) => void (x.settings.me = { name: name.trim(), g: g! }))}>
         Salvēte! Start
       </button>
+      {name.trim() && !g && <p class="small muted" role="note">Choose -us or -a above, and Start opens.</p>}
     </section>
   );
 }
@@ -578,6 +581,20 @@ function ChatView({ id, now }: { id: string; now: number }) {
     if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
+  // the find bar takes the typing at once
+  useEffect(() => {
+    if (search !== null) document.getElementById("chat-find")?.focus();
+  }, [search !== null]);
+  // a chat with unread messages opens at the "New" line, not past it
+  useLayoutEffect(() => {
+    const el = list.current;
+    const line = el?.querySelector<HTMLElement>(".chat-new");
+    if (!el || !line) return;
+    const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+    if (top + 200 > el.scrollHeight - el.clientHeight) return;
+    el.scrollTop = Math.max(0, top - 80);
+    atBottom.current = false;
+  }, [id]);
   // find in this chat: the messages that match, the current one in view
   const q = plain((search ?? "").trim());
   const hits = q ? shown.filter((m) => plain(m.la).includes(q) || plain(m.en ?? "").includes(q)).map((m) => m.id) : [];
@@ -1195,6 +1212,13 @@ function Intro({ who }: { who: Who }) {
   );
 }
 
+/** A form of a word the site keeps for a later lesson's story (volō, omnis). */
+let storyLex: Lexicon | null = null;
+function storyWord(w: string): boolean {
+  storyLex ??= new Lexicon(LESSONS.flatMap((l) => l.words).filter((e) => STORY_ONLY.has(e.id)));
+  return !!storyLex.analyze(w).length;
+}
+
 /**
  * Under the learner's last message: the words in it the site does not know
  * yet, each one tap from their dictionary (Claude fills in the card). Once
@@ -1202,7 +1226,8 @@ function Intro({ who }: { who: Who }) {
  */
 function NewWords({ m }: { m: Msg }) {
   useProgress();
-  const fresh = strangeWords(m.la, chatWords().lex).filter((w) => !knownWord(w)).slice(0, 4);
+  // (a word of a later lesson's story waits for its lesson: it is not added from here)
+  const fresh = strangeWords(m.la, chatWords().lex).filter((w) => !knownWord(w) && !storyWord(w)).slice(0, 4);
   if (!fresh.length) return null;
   return (
     <div class="new-words" role="note">

@@ -906,8 +906,8 @@ async function messenger() {
   await p.waitForTimeout(600);
   if ((await p.locator(".chat-row:not(.acta-row)").count()) !== 6) errors.push(`messenger: expected 6 chats, found ${await p.locator(".chat-row:not(.acta-row)").count()}`);
   // the Ācta Diurna: today's board, written once a day, pinned on top; a tap on a line shows its English, on a word what it is
-  await p.waitForTimeout(800);
-  if (!((await p.locator("#chat-acta .chat-row-preview").textContent()) ?? "").includes("Augustālia")) errors.push("messenger: today's Ācta Diurna is not on top of the chats");
+  await p.locator("#chat-acta .chat-row-preview", { hasText: "Augustālia" }).waitFor({ timeout: 6000 }).catch(() => {});
+  if (!((await p.locator("#chat-acta .chat-row-preview").textContent()) ?? "").includes("Augustālia")) errors.push(`messenger: today's Ācta Diurna is not on top of the chats (${await p.locator("#chat-acta").textContent()} | ${await p.evaluate(() => window.__prompts.filter((x) => String(x).includes("TODAY'S BOARD")).length)} asked)`);
   if (!(await p.locator("#chat-acta .unread-badge").count())) errors.push("messenger: a new board does not show as unread");
   await p.click("#chat-acta");
   await p.waitForTimeout(300);

@@ -13,7 +13,8 @@ export type VideoLine = Line & { from: { kind: "video"; lesson: number } };
 
 /** "Tū scrībis. Tū studēs." with its English, one sentence at a time when they pair up. */
 function pairs(la: string, en: string): [string, string][] {
-  const split = (s: string) => (s.match(/[^.!?]+[.!?]?/g) ?? []).map((x) => x.trim()).filter(Boolean);
+  // (a full stop inside a reading hint, agricolae#dat.sg, does not end a sentence)
+  const split = (s: string) => (s.match(/(?:[^.!?]|[.!?](?=[a-z]))+[.!?]*/g) ?? []).map((x) => x.trim()).filter(Boolean);
   const english = en.split(" / ")[0].trim();
   const ls = split(la);
   if (ls.length <= 1) return [[la, english]];

@@ -271,7 +271,7 @@ function learner(part: Part, right: number): Progress {
 function playRound(part: Part, seed: number, size = 12, startRight = 0) {
   const p = learner(part, startRight);
   const k = buildKnowledge(watched(part), [], 0, through(part));
-  const lines = practiceLines(lex, k);
+  const lines = practiceLines(lex, k, watched(part));
   const ctx = { k, lex, r: seeded(seed), audio: true };
   const seen = new Set<string>();
   const out: { ex: Exercise; phase: string; counted: boolean; right: number }[] = [];
@@ -362,7 +362,7 @@ describe("practice of each part", () => {
       for (const seed of [3, 9]) {
         const p = learner(part, 5);
         const k = buildKnowledge(watched(part), [], 0, through(part));
-        const lines = practiceLines(lex, k);
+        const lines = practiceLines(lex, k, watched(part));
         const ctx = { k, lex, r: seeded(seed), audio: true };
         const seen = new Set<string>();
         const prev: Exercise[] = [];

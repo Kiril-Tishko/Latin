@@ -65,6 +65,12 @@ describe("hidden links", () => {
     expect(links[0]).toMatchObject({ from: "ask", at: 410 });
     expect(links[1].text).toContain("Valentine");
     expect(links[2]).toMatchObject({ word: "fortis", from: "own" });
+    // a link Claude marks "Surprise:" outside a word card counts too, filed under the Latin it names (not "No")
+    const more = hiddenLinks([], [{ turns: [
+      { role: "user", content: "No, tell me about aqua", at: 500 },
+      { role: "assistant", content: "Water.\n**Surprise:** \"aquarium\" and \"Aquarius\" both come from «aqua».", at: 510 },
+    ] }]);
+    expect(more).toMatchObject([{ word: "aqua", from: "ask" }]);
   });
 });
 

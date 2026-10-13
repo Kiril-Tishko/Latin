@@ -188,6 +188,14 @@ export function checkAnswer(text: string, lex: Lexicon): Finding[] {
       if (!nouns.length) return;
       const agrees = nouns.some((n) => n.readings!.some((nr) => nr.entry.kind === "noun" && adjs.some((ar) => ar.key === nr.key && ar.gender === nr.gender)));
       if (agrees) return;
+      // two subjects or more joined by et («Agricola et taurus timidī sunt»): the adjective is plural, masculine if any of them is
+      const nomOf = (n: Token) => n.readings!.find((r) => r.entry.kind === "noun" && caseOf(r) === "nom");
+      const subjects = nouns.filter(nomOf);
+      if (subjects.length >= 2 && words.some((w) => plain(w.text) === "et")) {
+        const genders = new Set(subjects.map((n) => nomOf(n)!.gender));
+        const g = genders.has("m") ? "m" : genders.size === 1 ? [...genders][0] : "n";
+        if (adjs.some((ar) => ar.key === "nom.pl" && ar.gender === g)) return;
+      }
       // after est the adjective goes with the subject; otherwise with the noun beside it
       const beside = [words[i - 1], words[i + 1]].filter(isNoun) as Token[];
       const subject = hasSum ? nouns.find((w) => w.readings!.some((r) => r.entry.kind === "noun" && caseOf(r) === "nom")) : undefined;

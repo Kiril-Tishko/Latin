@@ -251,8 +251,7 @@ export const LESSON_WORDS_IN_ENGLISH: Record<string, WordInEnglish> = {
   // ------------------------------------------------------------ Lesson V
   via: {
     from: { en: ["via", "viaduct", "trivia", "trivial", "deviate", "obvious", "previous", "convey", "voyage", "envoy"], ru: ["виадук", "тривиальный"], uk: ["віадук", "тривіальний"] },
-    kin: { en: ["way"], ru: ["везти", "воз"], uk: ["везти", "віз"] },
-    note: "Trivia is tri-via, the place where three roads met and people stopped to chat; obvious is ob viam, 'lying in your way'; a voyage was first viāticum, the food for the road.",
+    note: "Perhaps a cousin of English way and of везти, воз (from an old root 'to carry'), but scholars disagree. Trivial is trivium, the place where three roads met, open to everyone, so trivialis came to mean common, everyday; obvious is ob viam, 'lying in your way'; a voyage was first viāticum, the food for the road.",
   },
   roma: {
     from: { en: ["Rome", "Roman", "romance", "romantic", "Romania"], ru: ["Рим", "роман", "романтика", "Румыния"], uk: ["Рим", "роман", "романтика", "Румунія"] },
@@ -287,7 +286,7 @@ export const LESSON_WORDS_IN_ENGLISH: Record<string, WordInEnglish> = {
   },
   optimus: {
     from: { en: ["optimal", "optimum", "optimism", "optimist", "optimize"], ru: ["оптимизм", "оптимальный", "оптимист"], uk: ["оптимізм", "оптимальний", "оптиміст"] },
-    note: "Jupiter of the Capitol was Iuppiter Optimus Maximus, 'the best and greatest'. In September AD 100 Pliny thanked Trajan in the Senate and called him optimus again and again; in 114 'Optimus' became part of his official name. Optimism (1737) was named for Leibniz's 'best of all possible worlds'.",
+    note: "Jupiter of the Capitol was Iuppiter Optimus Maximus, 'the best and greatest'. In September AD 100 Pliny thanked Trajan in the Senate and called him optimus again and again; in 114 'Optimus' became part of his official name. The word optimism (French optimisme, 1737; English a little later, through Voltaire's Candide) was named for Leibniz's 'best of all possible worlds'.",
   },
   omnis: {
     from: { en: ["omnibus", "bus", "omnipotent", "omniscient", "omnivore", "omnipresent"], ru: ["омнибус", "автобус"], uk: ["омнібус", "автобус"] },
@@ -295,7 +294,7 @@ export const LESSON_WORDS_IN_ENGLISH: Record<string, WordInEnglish> = {
   },
   clarus: {
     from: { en: ["clear", "clarify", "clarity", "declare", "clarinet", "Clara"], ru: ["кларнет", "Клара"], uk: ["кларнет", "Клара"] },
-    note: "clārus is 'bright, clear', and of a person 'famous': a name that shines. The clarinet is 'a little clear one', after a high, bright trumpet, the clarino.",
+    note: "clārus is 'bright, clear', and of a person 'famous': a name that shines. The clarinet is 'a little clear one': a diminutive, probably of French clarine (a little bell) or of the clarino, a high bright trumpet; both go back to clārus.",
   },
   rectus: {
     from: { en: ["rectangle", "rectify", "correct", "direct", "erect", "rectum"], ru: ["ректор", "корректный", "директор"], uk: ["ректор", "коректний", "директор"] },

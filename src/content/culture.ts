@@ -51,11 +51,11 @@ export const CULTURE: CultureStory[] = [
     id: "doctor",
     title: "Every doctor is a teacher",
     latin: "«doctor» · «disciplīna»",
-    teaser: "doceō and discō, two verbs you know, run through hospitals and armies.",
+    teaser: "doceō, discō and a pupil's name run through hospitals and armies.",
     words: ["doceo", "disco", "discipula", "discipulus"],
     text: [
       "«Doctor» is simply \"teacher\", the one who «docet». A doctor of medicine was first a learned man who could teach it. From «doceō» also come «documentum», \"a lesson, a proof\", our \"document\", and «docēns», \"teaching\", the Russian and Ukrainian «доцент».",
-      "«Discipulus», the one who «discit», gave \"disciple\"; «disciplīna» was teaching and learning. The strictness of \"discipline\" came later, from the training of monks and soldiers.",
+      "«Discipulus», a pupil, is usually linked with «discit», \"learns\" (some scholars derive it from dis- + capere, \"to grasp\"); it gave \"disciple\", and «disciplīna» was teaching and learning. Roman armies already prized «disciplīna mīlitāris#x», strict order; the sense of punishment came later, from monks.",
     ],
     modern: { en: ["doctor", "doctrine", "document", "disciple", "discipline"], ru: ["доктор", "документ", "доцент", "дисциплина"], uk: ["доктор", "документ", "доцент", "дисципліна"] },
   },
@@ -129,7 +129,7 @@ export const CULTURE: CultureStory[] = [
     teaser: "Jupiter, from Lesson III, is still in your calendar and your mood.",
     words: ["iuppiter", "deus"],
     text: [
-      "The Romans named the days after the seven planets, which were gods: «diēs Lūnae» (Moon), «Mārtis», «Mercuriī», «Iovis» (Jupiter), «Veneris», «Sāturnī», «Sōlis». French and Spanish still say them: lundi, mardi, jeudi, vendredi; lunes, martes, jueves, viernes.",
+      "The Romans named the days after the seven planets, which were gods: «diēs Lūnae» (Moon), «Mārtis», «Mercuriī», «Iovis» (Jupiter), «Veneris», «Sāturnī», «Sōlis#x». French and Spanish still say them: lundi, mardi, jeudi, vendredi; lunes, martes, jueves, viernes.",
       "English kept Saturn (Saturday), the Sun and the Moon, and swapped the rest for Germanic gods: Thursday is Thor's day, Jupiter's place; Friday is Frigg's, in Venus' place. Tuesday belongs to Tiw, whose name is a cousin of «deus»: \"the god's day\".",
       "Astrologers said that people born under Jupiter's planet were cheerful: «Iovis», Jove, gave \"jovial\" and \"by Jove!\".",
     ],
@@ -137,12 +137,12 @@ export const CULTURE: CultureStory[] = [
   },
   {
     id: "europa",
-    title: "A continent named after a girl on a bull",
+    title: "A continent with a girl's name",
     latin: "«Eurōpa»",
-    teaser: "The story of Lesson III is printed on a coin you may have in your pocket.",
+    teaser: "The story of Lessons III and IV is printed on a coin you may have in your pocket.",
     words: ["europa", "taurus", "iuppiter", "creta"],
     text: [
-      "Jupiter, as a white «taurus», carried the princess «Eurōpa» across the sea to «Crēta». The Greeks gave her name to the lands west of the Aegean, and it became the whole continent: Europe, «Европа», «Європа».",
+      "Jupiter, as a white «taurus», carried the princess «Eurōpa» across the sea to «Crēta». The Greeks used the name for the lands west of the Aegean, and it became the whole continent: Europe, «Европа», «Європа». Whether the land was named after the princess, nobody knows: Herodotus already wondered, since she never set foot there.",
       "What her name means, nobody knows for sure: perhaps Greek for \"wide-eyed\", perhaps a Semitic word for \"evening, the west\". The bull is in the sky too: the constellation Taurus. And the Greek two-euro coin shows Europa riding the bull.",
     ],
     modern: { en: ["Europe", "Taurus"], ru: ["Европа", "Телец (a calque)"], uk: ["Європа", "Телець (a calque)"] },
@@ -180,7 +180,7 @@ export const CULTURE: CultureStory[] = [
     words: [],
     text: [
       "«Mūsculus» means \"little mouse\" (from «mūs»): a muscle moving under the skin looks like a mouse running. It gave \"muscle\", «мускул», and also \"mussel\", the shellfish, for its shape.",
-      "Slavic had the same idea on its own: Russian «мышца», \"muscle\", comes from «мышь», \"mouse\". And «mūs», English \"mouse\" and «мышь», «миша» are cousins, one ancient word in three languages.",
+      "Slavic has the same image: Russian «мышца», \"muscle\", comes from «мышь», \"mouse\" (Greek μῦς, too, means both mouse and muscle: the picture may be very old). And «mūs», English \"mouse\" and «мышь», «миша» are cousins, one ancient word in Latin, English and the Slavic languages.",
     ],
     modern: { en: ["muscle", "mussel", "muscular"], ru: ["мускул"], uk: ["мускул"] },
   },
@@ -225,7 +225,7 @@ export const CULTURE: CultureStory[] = [
     id: "terra",
     title: "The sea in the middle of the land",
     latin: "«terra» · «Mediterrāneus»",
-    teaser: "terra, from Lesson III, names a sea, a dog and a patio.",
+    teaser: "terra, from Lesson III, names a sea, a dog and a terrace.",
     words: ["terra"],
     text: [
       "«Mediterrāneus» means \"in the middle of the land\": the Romans' sea lay between the lands they knew. Russian «Средиземное море» and Ukrainian «Середземне море» say exactly the same thing, word for word.",
@@ -241,7 +241,7 @@ export const CULTURE: CultureStory[] = [
     words: ["aqua"],
     text: [
       "From «aqua»: aquarium, aqueduct, aquatic and the watercolour \"aquarelle\", Russian «акварель», Ukrainian «акварель».",
-      "Medieval alchemists called strong spirits «aqua vītae», \"the water of life\". Scandinavians still say \"akvavit\"; Irish and Scottish Gaelic translated it as \"uisce beatha\", which English shortened to \"whisky\". Russian «водка» is just \"little water\", from «вода»: a different word on the same joke.",
+      "Medieval alchemists called strong spirits «aqua vītae», \"the water of life\". Scandinavians still say \"akvavit\"; Irish \"uisce beatha\" and Scottish Gaelic \"uisge beatha\" translated it, and English shortened it to \"whisky\". Russian «водка» is just \"little water\", from «вода»: a different word on the same joke.",
     ],
     modern: { en: ["aquarium", "aqueduct", "aquatic", "aquarelle"], ru: ["аквариум", "акварель"], uk: ["акваріум", "акварель"] },
   },

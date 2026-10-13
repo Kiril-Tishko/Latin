@@ -620,6 +620,15 @@ function ChatView({ id, now }: { id: string; now: number }) {
 
   let lastDay = "";
   const lastMine = shown.filter((m) => m.from === "me").at(-1)?.id;
+  // the learner sent something (also while scrolled up, answering an older message): the chat goes to it, and the answer follows
+  const sentRef = useRef(lastMine);
+  useLayoutEffect(() => {
+    if (lastMine === sentRef.current) return;
+    sentRef.current = lastMine;
+    const el = list.current;
+    atBottom.current = true;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [lastMine]);
   return (
     <section class="chat msgr-panel" aria-label={`Chat with ${who?.name ?? groupName(meta, id)}`}>
       <header class="chat-head">

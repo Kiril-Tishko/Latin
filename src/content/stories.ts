@@ -277,14 +277,14 @@ export const STORIES: Story[] = [
     step: 5,
     title: "Rōmam!",
     en: "To Rome!",
-    notice: "We: «ambulāmus», «vidēmus», «damus». To a city with no ad: «Rōmam». They are: «timidī sunt».",
+    notice: "We: «ambulāmus», «vidēmus», «damus». To a city with no ad: «Rōmam». They are: «timidī#nom.pl sunt».",
     lines: [
       { la: "Amīca et ego Rōmam ambulāmus.", en: "My friend and I walk to Rome.", prompt: "The friend (f) and I walk to Rome." },
       { la: "Via longa et rēcta est.", en: "The road is long and straight." },
       { la: "In viā agricolam et taurum vidēmus.", en: "On the road we see a farmer and a bull." },
-      { la: "Agricola et taurus timidī sunt.", en: "The farmer and the bull are timid." },
+      { la: "Agricola et taurus timidī#nom.pl sunt.", en: "The farmer and the bull are timid." },
       { la: "Agricolae#dat.sg et taurō#dat.sg aquam damus.", en: "We give the farmer and the bull water." },
-      { la: "Nunc agricola et taurus timidī nōn sunt.", en: "Now the farmer and the bull are not timid." },
+      { la: "Nunc agricola et taurus timidī#nom.pl nōn sunt.", en: "Now the farmer and the bull are not timid." },
       { la: "Nunc agricola, taurus, amīca et ego Rōmam ambulāmus!", en: "Now the farmer, the bull, my friend and I walk to Rome!", prompt: "Now the farmer, the bull, the friend (f) and I walk to Rome!" },
     ],
     questions: [

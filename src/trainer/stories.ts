@@ -54,8 +54,13 @@ const saysTwice = (l: Line) => {
   return new Set(words).size < words.length;
 };
 
-/** Every fixed sentence that needs only these rules: the videos' and the stories'. */
-export function practiceLines(lex: Lexicon, k: Knowledge): Line[] {
-  const stories = STORIES.flatMap((s) => storyLines(s, lex)).filter((l) => l.skills.every((sk) => k.skills.has(sk)));
-  return [...videoLines([1, 2, 3, 4], lex, k), ...stories].filter((l) => !saysTwice(l));
+/**
+ * Every fixed sentence that needs only these rules: the videos' and the
+ * stories' of the lessons watched (a later lesson's lines bring its words).
+ */
+export function practiceLines(lex: Lexicon, k: Knowledge, lessons: number[] = [1, 2, 3, 4]): Line[] {
+  const stories = STORIES.filter((s) => lessons.includes(s.step))
+    .flatMap((s) => storyLines(s, lex))
+    .filter((l) => l.skills.every((sk) => k.skills.has(sk)));
+  return [...videoLines(lessons, lex, k), ...stories].filter((l) => !saysTwice(l));
 }

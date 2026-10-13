@@ -24,7 +24,7 @@ interface Turn {
   at: number;
 }
 
-const LINK = /^\s*(?:[-*]\s*)?\*\*Hidden link:?\*\*:?\s*(.+)$/im;
+const LINK = /^\s*(?:[-*]\s*)?\*\*(?:Hidden link|Surprise|Surprising link|Hidden connection):?\*\*:?\s*(.+)$/im;
 
 /**
  * Every hidden link found so far, newest first, each once: from the words the
@@ -45,7 +45,10 @@ export function hiddenLinks(own: { dict: string; added: number; story?: { link?:
       // the word: the card's headline, else the first Latin in the link, else the question
       const asked = [...chat.turns.slice(0, i)].reverse().find((x) => x.role === "user")?.content.trim() ?? "";
       const quoted = m[1].match(/«([^»#]+)/)?.[1].split(/[\s,]+/)[0];
-      const word = cardWord(t.content) ?? quoted ?? asked.replace(/[?!.]$/, "").split(/[\s,]+/)[0] ?? "";
+      // (never the question's first word: "No", "Good", "Why")
+      const latinIn = (x: string) => x.match(/«([^»#]+)/)?.[1].split(/[\s,]+/)[0];
+      const bare = /^\s*\p{L}+\s*[?!.]?\s*$/u.test(asked) ? asked.trim().replace(/[?!.]$/, "") : undefined;
+      const word = cardWord(t.content) ?? quoted ?? latinIn(asked) ?? bare ?? latinIn(t.content) ?? "";
       out.push({ word, text: m[1].trim(), from: "ask", at: t.at });
     });
   }

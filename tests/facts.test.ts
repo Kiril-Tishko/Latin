@@ -41,6 +41,11 @@ describe("checking Claude's answers with the grammar engine", () => {
     expect(checkAnswer("«Agricola timidus spectat.» and «Poēta pulcher est.» and «Silva magna et pulchra est.»", lex)).toEqual([]);
   });
 
+  it("takes a plural adjective with two subjects joined by et, masculine if one of them is", () => {
+    expect(checkAnswer("«Agricola et taurus timidī sunt.» «Puella et amīca timidae sunt.» «Poēta et puella laetī sunt.»", lex)).toEqual([]);
+    expect(checkAnswer("«Agricola et taurus timidae sunt.»", lex).some((f) => f.kind === "agreement")).toBe(true);
+  });
+
   it("does not flag Latin quoted as a wrong example, word pieces or new words", () => {
     expect(checkAnswer("It is «agricola timidus», not «timida agricola».", lex)).toEqual([]);
     expect(checkAnswer("You wrote «Ego discis», but the ending is -ō.", lex)).toEqual([]);

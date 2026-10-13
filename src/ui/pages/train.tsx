@@ -140,7 +140,7 @@ export function startSession(mode: Mode): boolean {
       if (!part) return false;
       if (!p.parts[part.id]) return unseen(part.skills);
       // one exercise now; the next ones are made as the round goes, for the progress at that moment
-      const lines = practiceLines(c.lex, c.k);
+      const lines = practiceLines(c.lex, c.k, p.lessonsDone);
       const first = partExercise(p, c, part, lines, STEPWISE, new Set());
       if (!first) return unseen(part.skills);
       const extras = dayReview(p, c, vocab, first, part);
@@ -165,7 +165,7 @@ export function startSession(mode: Mode): boolean {
     default: {
       // everything learned: a mix of all the rules, the videos' and stories' own sentences among them, with the day's mistakes and words between
       items = buildSession(p, c, { size: SIZE - LINES_IN_MIX, ...adaptive, vocab });
-      const lines = linesSession(p, c, practiceLines(c.lex, c.k), LINES_IN_MIX).filter((e) => !items.some((x) => x.context === e.context));
+      const lines = linesSession(p, c, practiceLines(c.lex, c.k, p.lessonsDone), LINES_IN_MIX).filter((e) => !items.some((x) => x.context === e.context));
       lines.forEach((e, i) => items.splice(Math.min(items.length, 1 + i * 3), 0, e));
       const review = items.length ? dayReview(p, c, vocab, items[0]) : [];
       review.forEach((e, i) => items.splice(Math.min(items.length, 3 + i * 4), 0, e));
@@ -486,6 +486,18 @@ function Runner({ s }: { s: Session }) {
 
   // an answer in the learner's own words is read by the coach; meanwhile the box waits
   const [reading, setReading] = useState(false);
+  // the answer is saved once; leaving the round with an answer shown saves it and moves on
+  const saved = useRef(false);
+  const latest = useRef({ res, next: () => {}, save: () => {} });
+  latest.current = { res, next: () => next(), save: () => void save() };
+  useEffect(
+    () => () => {
+      if (!latest.current.res || saved.current) return;
+      if (session === s) latest.current.next();
+      else latest.current.save();
+    },
+    [],
+  );
   function check(given = answer) {
     if (res || reading) return;
     if (!given.trim() && ex.answer !== "choice") return;
@@ -509,18 +521,29 @@ function Runner({ s }: { s: Session }) {
     setRes({ ...r, verdict: "wrong", issues: [{ kind: "missing", message: "Skipped. Here is the answer; it will come back later." }] });
   }
 
+  /**
+   * Saves this exercise's answer, once: on Next, on ✕, or when the learner
+   * leaves the round by a tab (the "+1" shown is never lost).
+   */
+  function save(): { attempts: Session["attempts"]; done: string[] } {
+    if (!res) return { attempts: s.attempts, done: s.learned };
+    let learned: Part[] = [];
+    if (!saved.current) {
+      saved.current = true;
+      update((p) => {
+        learned = applyResult(p, ex, res, answer);
+        // the day's words round counts as given once it has begun (a round left before any answer comes back)
+        if (s.mode.kind === "words" && !s.attempts.length) wordsGiven(p);
+      });
+      // a rule that now holds: say so at once, and offer the next one at the end of the round
+      if (learned.length) toast(`Rēctē! ${partName(learned[0])} is learned: ${PART_GOAL} right answers.`);
+    }
+    return { attempts: [...s.attempts, { ex, answer, res }], done: [...s.learned, ...learned.map((x) => x.id)] };
+  }
+
   function next() {
     if (!res) return;
-    let learned: Part[] = [];
-    update((p) => {
-      learned = applyResult(p, ex, res, answer);
-      // the day's words round counts as given once it has begun (a round left before any answer comes back)
-      if (s.mode.kind === "words" && !s.attempts.length) wordsGiven(p);
-    });
-    // a rule that now holds: say so at once, and offer the next one at the end of the round
-    if (learned.length) toast(`Rēctē! ${partName(learned[0])} is learned: ${PART_GOAL} right answers.`);
-    const attempts = [...s.attempts, { ex, answer, res }];
-    const done = [...s.learned, ...learned.map((x) => x.id)];
+    const { attempts, done } = save();
     // the round's own rule is learned: the round ends here, with the way to the next rule
     if (s.part && done.includes(s.part)) {
       setSession({ ...s, attempts, index: s.items.length, learned: done, plan: s.made });
@@ -601,7 +624,15 @@ function Runner({ s }: { s: Session }) {
         <span class="counter" title={`Exercise ${s.index + 1} of ${total}`}>
           <strong>{s.index + 1}</strong> / {total}
         </span>
-        <button class="btn ghost small trainer-end" onClick={() => setSession({ ...s, index: s.items.length, plan: s.made })} aria-label="End the round" title="End the round">
+        <button
+          class="btn ghost small trainer-end"
+          onClick={() => {
+            const r = res ? save() : null;
+            setSession({ ...s, attempts: r?.attempts ?? s.attempts, learned: r?.done ?? s.learned, index: s.items.length, plan: s.made });
+          }}
+          aria-label="End the round"
+          title="End the round"
+        >
           <Icon.close />
         </button>
         {roundPart ? (

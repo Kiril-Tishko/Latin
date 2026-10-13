@@ -722,7 +722,7 @@ export const PARTS: Part[] = [
       },
       {
         q: "How do you say 'the girls are beautiful'?",
-        answer: "«Puellae pulchrae sunt.»",
+        answer: "«Puellae#nom.pl pulchrae#nom.pl sunt.»",
         keys: [["puellae"], ["pulchrae"], ["sunt"]],
       },
     ],
@@ -764,7 +764,7 @@ export const PARTS: Part[] = [
     title: "Rōmam: a city needs no in",
     explain: [
       "With a city there is no in or ad: «Rōmam ambulō» = I walk to Rome.",
-      "'In Rome' is «Rōmae#x», an old 'where' case that only cities keep: «Rōmae#x habitō» = I live in Rome.",
+      "'In Rome' is «Rōmae#x», an old 'where' case that names of cities keep (and a couple of everyday words, such as the one for 'at home'): «Rōmae#x habitō» = I live in Rome.",
       "A country keeps its in: «Rōma in Italiā est».",
     ],
     examples: [
@@ -772,7 +772,7 @@ export const PARTS: Part[] = [
       { la: "Rōmam ambulāmus.", en: "We walk to Rome." },
       { la: "Rōma in Italiā est.", en: "Rome is in Italy." },
     ],
-    slavic: "Russian and Ukrainian always say в / у: в Рим, у Рим. Latin drops it before a city.",
+    slavic: "Russian and Ukrainian always need a preposition: в Рим / до Риму. Latin drops it before a city.",
     questions: [
       {
         q: "Why is there no «ad» in «Via Rōmam dūcit»?",

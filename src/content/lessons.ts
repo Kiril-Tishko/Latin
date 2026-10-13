@@ -623,15 +623,15 @@ const lessons: Omit<Lesson, "words" | "skills">[] = [
     ],
     phrases: [
       { la: "Omnēs viae Rōmam dūcunt.", en: "All roads lead to Rome.", note: "omnēs is the plural of omnis (all): omnipotent, omnivore, and the omnibus, 'for all', which became the bus." },
-      { la: "Hīc sunt dracōnēs.", en: "Here be dragons.", note: "Written on old maps where the known world ended; dracōnēs (dragons) belongs to a later lesson." },
+      { la: "Hīc sunt dracōnēs.", en: "Here be dragons.", note: "Written in Latin on just two old globes (about 1504 and 1510), off the coast of Asia; the maps full of it are a modern legend. dracōnēs (dragons) belongs to a later lesson." },
     ],
     story: {
       title: "Rome",
       lines: [
         { la: "Rōma optima est.", en: "Rome is the best.", unverified: true },
-        { la: "Viae Rōmae#gen.sg rēctae sunt.", en: "The streets of Rome are straight.", unverified: true },
+        { la: "Viae#nom.pl Rōmae#gen.sg rēctae#nom.pl sunt.", en: "The streets of Rome are straight.", unverified: true },
         { la: "Aqua clāra est.", en: "The water is clear.", unverified: true },
-        { la: "Arma splendida sunt.", en: "The weapons are splendid.", unverified: true },
+        { la: "Arma#nom.pl splendida#nom.pl sunt.", en: "The weapons are splendid.", unverified: true },
         { la: "Volō hīc habitāre.", en: "I want to live here.", unverified: true },
       ],
     },
@@ -687,7 +687,7 @@ const lessons: Omit<Lesson, "words" | "skills">[] = [
           { la: "Via Rōmam dūcit.", en: "The road leads to Rome." },
           { la: "Rōma in Italiā est.", en: "Rome is in Italy." },
         ],
-        slavic: "Russian and Ukrainian always need в: в Рим, в Риме / у Рим, у Римі. Latin drops it for cities.",
+        slavic: "Russian and Ukrainian always need a preposition: в Рим, в Риме / до Риму, у Римі. Latin drops it for cities.",
         skills: ["s.city"],
       },
       {

@@ -560,6 +560,11 @@ export function headword(e: Entry): string {
 export function dictionaryForm(e: Entry): string {
   switch (e.kind) {
     case "noun":
+      // a word with no singular gives its plural: arma, armōrum, n. pl.
+      if (e.only === "pl" && !e.proper) {
+        const gen = declineNoun(e)["gen.pl"];
+        if (gen) return `${e.lemma}, ${gen.stem + gen.ending}, ${e.gender}. pl.`;
+      }
       return e.proper ? e.lemma : `${e.lemma}, ${e.gen}, ${e.gender}.`;
     case "adj":
       return e.cls === "12" || e.lemma !== e.fem || e.fem !== e.neut

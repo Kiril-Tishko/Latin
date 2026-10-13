@@ -44,6 +44,22 @@ export function hashOf(r: Route): string {
 const listeners = new Set<(r: Route) => void>();
 let current: Route = parse(location.hash);
 
+/** Where Lectiōnēs opens after a back link: the lesson's block (unfolded) and the row the learner came from. */
+let backTo: { lesson: number; row?: string } | null = null;
+
+/** Back to Lectiōnēs, at the lesson (and the rule or story) the learner came from. */
+export function backToLessons(lesson: number, row?: string) {
+  backTo = { lesson, row };
+  go({ page: "lessons" });
+}
+
+/** The place a back link asked for, once (Lectiōnēs takes it when it opens). */
+export function takeBackTo() {
+  const b = backTo;
+  backTo = null;
+  return b;
+}
+
 export function go(r: Route) {
   current = r;
   try {

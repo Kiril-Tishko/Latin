@@ -177,6 +177,16 @@ async function run(name, viewport, colorScheme) {
     }
     await p.locator("button", { hasText: "Next" }).click();
   }
+  // a round left half-way (another tab) is picked up again from Domus, where it was
+  await p.locator(nav, { hasText: "Lectiōnēs" }).first().click();
+  await p.waitForTimeout(150);
+  await p.locator(nav, { hasText: "Domus" }).first().click();
+  await p.waitForTimeout(150);
+  const resume = (await p.locator(".home-hero").textContent()) ?? "";
+  if (!/Your round · 5 \//.test(resume)) errors.push(`${name}: Domus does not offer the round left half-way (${resume.slice(0, 80)})`);
+  await p.locator("#continue").click();
+  await p.waitForTimeout(200);
+  if (!(await p.locator(".task-line .task-text").count())) errors.push(`${name}: Continue does not go back into the round`);
   // the round goes on to its end (every answer shown here), and ends with a question answered in your own Latin
   // (the "why" questions first: "Cūr aquam bibis?" also contains "bibis")
   const ANSWERS = { "Cūr labōrās": "Labōrō quod discō.", "Cūr aquam": "Aquam bibō quod labōrō.", legis: "Epistulam legō.", scrībis: "Epistulam scrībō.", bibis: "Aquam bibō.", vidēs: "Silvam videō.", habēs: "Librum habeō.", spectās: "Silvam spectō.", portās: "Aquam portō.", dēsīderās: "Amīcam dēsīderō.", discis: "Scrībere discō." };
@@ -406,12 +416,15 @@ async function askClaude() {
   await p.evaluate(() => { window.__fail = null; });
   // in a new conversation the quick questions add to what is written, never replace it
   await p.locator(".drawer-head button", { hasText: "New" }).click();
+  // with no word in view (Domus), general starters; they add to what is written
+  if (await p.locator(".drawer-body button", { hasText: "Where does this word come from?" }).count()) errors.push("ask: questions about 'this word' with no word in view");
   await p.locator("#ask-input").fill("agricola:");
-  await p.locator(".drawer-body button", { hasText: "Where does this word come from?" }).click();
-  await p.locator(".drawer-body button", { hasText: "Which words are related to it?" }).click();
+  await p.locator(".drawer-body button", { hasText: "How do I say this in Latin:" }).click();
+  await p.locator(".drawer-body button", { hasText: "Explain the rule I am learning, simply" }).click();
   const box = await p.locator("#ask-input").inputValue();
-  if (box !== "agricola: Where does this word come from? Which words are related to it?") errors.push(`ask: quick questions do not add to the text (${box})`);
+  if (box !== "agricola: How do I say this in Latin: Explain the rule I am learning, simply") errors.push(`ask: quick questions do not add to the text (${box})`);
   if (await p.locator(".drawer-body button", { hasText: /right ending|Explain this rule/ }).count()) errors.push("ask: the old quick questions are still there");
+  await p.locator("#ask-input").fill("Where does agricola come from? Which words are related to it?");
   await p.locator("#ask-input").press("Enter");
   await p.waitForTimeout(400);
   const originAsked = await lastAsked();

@@ -4,7 +4,7 @@
 // learner against a good answer). Only then do its exercises open, simple ones
 // first (trainer/path.ts).
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { LESSON_BY_N, Rule } from "../../content/lessons";
+import { Rule } from "../../content/lessons";
 import { Part, PART_BY_ID, PartQuestion, PARTS, partsOf, rulesOfPart } from "../../content/parts";
 import { roman } from "../../latin/text";
 import { currentPart, markSeen, meetsKeys, PART_GOAL, PART_PHASES, partProgress, partRight, partState } from "../../trainer/path";
@@ -14,7 +14,7 @@ import { Hedera, Icon, Laurel } from "../components";
 import { fitToWindow } from "../fit";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
-import { go } from "../nav";
+import { backToLessons, go } from "../nav";
 import { sampler } from "../platform";
 import { useScreen } from "../screen";
 import { Speak } from "../speak";
@@ -89,7 +89,7 @@ export function RuleList({ lesson }: { lesson: number }) {
         const state = partState(p, part);
         const here = part.id === current;
         return (
-          <button key={part.id} role="listitem" class={`rule-row ${state}${here ? " current" : ""}`} onClick={() => go({ page: "learn", id: part.id })}>
+          <button key={part.id} id={`rule-row-${part.id}`} role="listitem" class={`rule-row ${state}${here ? " current" : ""}`} onClick={() => go({ page: "learn", id: part.id })}>
             <span class="rule-row-id">{part.id}</span>
             <span class="rule-row-title">
               {part.title}
@@ -222,9 +222,16 @@ function Question({ part, q, n, onNext, last, autoFocus }: { part: Part; q: Part
   useEffect(() => {
     if (autoFocus) box.current?.focus({ preventScroll: true });
   }, []);
+  // the way forward comes into view (above a phone's tab bar) once there is a verdict or a good answer to compare with
+  const compareRow = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (result) next.current?.focus({ preventScroll: true });
+    if (!result) return;
+    next.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    next.current?.focus({ preventScroll: true });
   }, [result]);
+  useEffect(() => {
+    if (compare !== null) compareRow.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [compare]);
 
   async function check() {
     const answer = text.trim();
@@ -285,7 +292,7 @@ function Question({ part, q, n, onNext, last, autoFocus }: { part: Part; q: Part
             <p><Inline text={q.answer} /></p>
           </div>
           <span class="ui">Did you have the same idea?</span>
-          <div class="row">
+          <div class="row" ref={compareRow}>
             <button class="btn" onClick={() => setResult({ text: text.trim(), verdict: "right" })}>Yes, I had it</button>
             <button class="btn ghost" onClick={() => setResult({ text: text.trim(), verdict: "wrong" })}>Not quite</button>
           </div>
@@ -343,7 +350,6 @@ export function LearnPage({ id }: { id: string }) {
       : "",
   );
   if (!part) return <p>That rule isn't here.</p>;
-  const lesson = LESSON_BY_N.get(part.lesson);
   const index = PARTS.indexOf(part);
   const prev = PARTS[index - 1];
   const next = PARTS[index + 1];
@@ -361,8 +367,8 @@ export function LearnPage({ id }: { id: string }) {
   return (
     <div class="stack-lg learn-page">
       <div class="stack" style={{ gap: "8px" }} data-ask={`${partName(part)}: title`}>
-        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "lesson", n: part.lesson })}>
-          ← Lesson {roman(part.lesson)}{lesson ? `: ${lesson.title}` : ""}
+        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => backToLessons(part.lesson, `rule-row-${part.id}`)}>
+          ← Lectiōnēs
         </button>
         <span class="eyebrow">
           Lectiō {roman(part.lesson)} · rule {part.id.split(".")[1]} of {partsOf(part.lesson).length}

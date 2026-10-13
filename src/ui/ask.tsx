@@ -18,7 +18,7 @@ import { Chat, ChatTurn, deleteChat, getChat, newChatId, saveChat, useChats } fr
 import { enterSends, Icon, toast } from "./components";
 import { Inline, Markup } from "./markup";
 import { SampleFn, sampleErrorText, sampler, storage } from "./platform";
-import { currentScreen, Screen, sharedByDefault, useScreenLabel } from "./screen";
+import { currentScreen, Screen, sharedByDefault, useScreenLabel, wordInView } from "./screen";
 import { coachOpts, tierName } from "./models";
 import { derived, getProgress, useProgress } from "./store";
 import { knownWord, openAddWord } from "./addword";
@@ -276,7 +276,12 @@ ${engineFacts([{ text: answer, mixed: true }, { text: `${q.q} ${q.answer}`, mixe
 
 // ------------------------------------------------------------- drawer
 
-const QUICK = ["Where does this word come from?", "Which words are related to it?", "Give me a memory trick", "Compare it with Russian or Ukrainian"];
+/** Quick questions for a new conversation: about the word in view, or (with no word in view) general starters. */
+function quickQuestions(word: string, aboutAWord: boolean): string[] {
+  if (word) return [`Where does «${word}» come from?`, `Which words are related to «${word}»?`, `Give me a memory trick for «${word}»`, `Compare «${word}» with Russian or Ukrainian`];
+  if (aboutAWord) return ["Where does this word come from?", "Which words are related to it?", "Give me a memory trick", "Compare it with Russian or Ukrainian"];
+  return ["How do I say this in Latin:", "Explain the rule I am learning, simply", "Tell me something surprising about Roman life", "Which English words come from Latin words I know?"];
+}
 
 /** A suggested question joins what is already in the box (it never replaces the learner's words). */
 export function withQuestion(box: string, q: string): string {
@@ -686,7 +691,7 @@ export function AskDrawer() {
             {turns.length === 0 && !thisBusy && (
               <div class="stack small">
                 <div class="row" style={{ gap: "6px" }}>
-                  {QUICK.map((q) => (
+                  {quickQuestions(wordInView(), !!(chat?.context ?? state.context)).map((q) => (
                     <button
                       key={q}
                       class="btn ghost small"

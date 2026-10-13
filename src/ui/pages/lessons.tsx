@@ -11,7 +11,7 @@ import { partsOf } from "../../content/parts";
 import { CaseChip, Icon } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
-import { go } from "../nav";
+import { backToLessons, go, takeBackTo } from "../nav";
 import { derived, useProgress } from "../store";
 import { useScreen } from "../screen";
 import { NounTable, VerbTable } from "../tables";
@@ -34,6 +34,14 @@ export function Lessons({ focus }: { focus?: "stories" }) {
   const step = todayStep(p, vocabIds(), Date.now(), actaUnread());
   // #stories: the lesson in hand, with its stories
   useEffect(() => {
+    // back from a rule, a story or a lesson's page: that lesson, unfolded, with the row in the middle
+    const back = takeBackTo();
+    if (back) {
+      const block = document.getElementById(`lesson-block-${back.lesson}`) as HTMLDetailsElement | null;
+      if (block) block.open = true;
+      (document.getElementById(back.row ?? "") ?? block)?.scrollIntoView({ block: back.row ? "center" : "start" });
+      return;
+    }
     if (focus) document.getElementById(`lesson-block-${p.focusLesson}`)?.scrollIntoView({ block: "start" });
   }, [focus]);
   useScreen("page", "Lessons", () =>
@@ -124,7 +132,7 @@ function StoryRow({ id }: { id: string }) {
   const open = storyOpen(x, seenSkills(p));
   const read = !!p.stories[x.id];
   return (
-    <button class={`rule-row story-row${open ? "" : " locked"}`} onClick={() => go({ page: "story", id: x.id })}>
+    <button id={`story-row-${x.id}`} class={`rule-row story-row${open ? "" : " locked"}`} onClick={() => go({ page: "story", id: x.id })}>
       <span class="rule-row-id" aria-hidden="true"><Icon.scroll /></span>
       <span class="rule-row-title">
         <LatinText text={x.title} /> <span class="muted small">{x.en}</span>
@@ -170,7 +178,7 @@ export function LessonPage({ n }: { n: number }) {
   return (
     <div class="stack-lg">
       <div class="stack" style={{ gap: "8px" }} data-ask={`Lesson ${roman(l.n)}: introduction`}>
-        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "lessons" })}>← Lectiōnēs</button>
+        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => backToLessons(l.n)}>← Lectiōnēs</button>
         <span class="eyebrow">Lectiō {roman(l.n)}</span>
         <h1>{l.title}</h1>
         <p class="muted prose dropcap">{l.summary}</p>

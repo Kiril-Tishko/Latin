@@ -168,6 +168,12 @@ if (typeof document !== "undefined") {
   );
 }
 
+/** The Latin word tapped last, if it is still on screen and was tapped in the last ten minutes (for questions about "this word"). */
+export function wordInView(): string {
+  if (!tapped?.word || !tapped.word.isConnected || Date.now() - tapped.at > 10 * 60_000) return "";
+  return textOf(tapped.word, 40);
+}
+
 function ago(t: number): string {
   const s = Math.round((Date.now() - t) / 1000);
   return s < 45 ? "just now" : s < 90 ? "a minute ago" : `${Math.round(s / 60)} minutes ago`;

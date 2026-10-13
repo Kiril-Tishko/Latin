@@ -26,7 +26,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
           <span class="eyebrow">Lessons watched</span>
           <div class="row">
             {LESSONS.map((l) => (
-              <label key={l.n} class="row ui" style={{ gap: "6px" }}>
+              <label key={l.n} class="check ui">
                 <input
                   id={`lesson-done-${l.n}`}
                   type="checkbox"
@@ -47,10 +47,10 @@ export function Settings({ onClose }: { onClose: () => void }) {
         </div>
 
         <div class="stack" style={{ gap: "6px" }}>
-          <span class="eyebrow">Daily goal</span>
+          <span class="eyebrow">Daily goal: exercises a day</span>
           <div class="seg">
             {[10, 20, 30, 50].map((g) => (
-              <button key={g} aria-pressed={p.settings.dailyGoal === g} onClick={() => update((x) => void (x.settings.dailyGoal = g))}>{g} exercises</button>
+              <button key={g} aria-pressed={p.settings.dailyGoal === g} aria-label={`${g} exercises a day`} onClick={() => update((x) => void (x.settings.dailyGoal = g))}>{g}</button>
             ))}
           </div>
         </div>
@@ -75,7 +75,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
 
         {p.settings.me && <MessengerSettings />}
 
-        <label class="row ui">
+        <label class="check ui">
           <input id="macrons" type="checkbox" checked={p.settings.macrons} onChange={(e) => update((x) => void (x.settings.macrons = (e.target as HTMLInputElement).checked))} />
           Show long vowels (ā, ē, ī, ō, ū), as in the videos
         </label>
@@ -187,7 +187,7 @@ function RecordedVoice() {
   const p = useProgress();
   return (
     <div class="stack" style={{ gap: "4px" }}>
-      <label class="row ui small">
+      <label class="check ui small">
         <input id="recorded" type="checkbox" checked={p.settings.recorded !== false} onChange={(e) => update((x) => void (x.settings.recorded = (e.target as HTMLInputElement).checked))} />
         Recorded voice for the lessons' sentences, the stories, the rules' examples and every word
       </label>
@@ -258,7 +258,7 @@ function AudioSettings() {
         </div>
         <button class="btn ghost small" onClick={() => void speak("Salvē! Puella in silvā ambulat et agricola aquam portat.", { id: "test" })}>Test the voice</button>
       </div>
-      <label class="row ui small">
+      <label class="check ui small">
         <input id="autoplay" type="checkbox" checked={p.settings.autoplay} onChange={(e) => update((x) => void (x.settings.autoplay = (e.target as HTMLInputElement).checked))} />
         Read Latin prompts aloud as soon as they appear
       </label>

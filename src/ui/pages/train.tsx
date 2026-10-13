@@ -232,7 +232,15 @@ export const vocabIds = () => derived().words.filter((w) => w.kind !== "fixed").
  * opened, and once a day the words that are due; with everything learned, a
  * round of everything.
  */
+/** A round left half-way (by a tab, a notice), to pick up again: what it is, how far it got. */
+export function roundInProgress(): { label: string; done: number; total: number } | null {
+  const s = session;
+  return s && s.index < s.items.length ? { label: modeLabel(s.mode), done: s.index, total: roundSize(s) } : null;
+}
+
 export function continueLearning() {
+  // a round left half-way is picked up where it was
+  if (roundInProgress()) return go({ page: "train" });
   const step = todayStep(getProgress(), vocabIds(), Date.now(), actaUnread());
   switch (step.kind) {
     case "learn":
@@ -242,7 +250,6 @@ export function continueLearning() {
     case "acta":
       return go({ page: "messenger", thread: ACTA_ID });
     case "words":
-      update((p) => wordsGiven(p));
       return void (startSession({ kind: "words" }) && go({ page: "train" }));
     case "practise":
       return void (startSession({ kind: "part", id: step.part.id }) && go({ page: "train" }));
@@ -507,6 +514,8 @@ function Runner({ s }: { s: Session }) {
     let learned: Part[] = [];
     update((p) => {
       learned = applyResult(p, ex, res, answer);
+      // the day's words round counts as given once it has begun (a round left before any answer comes back)
+      if (s.mode.kind === "words" && !s.attempts.length) wordsGiven(p);
     });
     // a rule that now holds: say so at once, and offer the next one at the end of the round
     if (learned.length) toast(`Rēctē! ${partName(learned[0])} is learned: ${PART_GOAL} right answers.`);

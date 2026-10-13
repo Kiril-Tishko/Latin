@@ -2007,3 +2007,20 @@ button.person-row:hover { background: var(--m-line-soft); }
   .story-seek { flex-wrap: wrap; }
   .story-seek .btn { width: 100%; }
 }
+
+/* a checkbox with its text beside it, the text wrapping under itself (never the box alone on a line) */
+label.check { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 10px; cursor: pointer; }
+label.check input { flex: none; width: 18px; height: 18px; margin: 0.2em 0 0; accent-color: var(--gold); }
+/* segmented controls in a dialog are as wide as their buttons */
+.modal .seg { align-self: flex-start; }
+/* touch screens: the top bar's buttons and the dialogs' close buttons big enough for a finger */
+@media (pointer: coarse) {
+  .top-actions .btn, .modal button[aria-label="Close"], .drawer button[aria-label="Close"] { min-height: 40px; min-width: 40px; }
+}
+
+/* a lesson's block scrolled to the top is not hidden under the sticky top bar */
+.lesson-block { scroll-margin-top: 72px; }
+@media (max-width: 760px) {
+  /* "into view" clears the tab bar at the bottom of a phone */
+  html { scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+}

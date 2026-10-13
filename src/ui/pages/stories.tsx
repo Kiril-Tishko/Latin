@@ -13,7 +13,7 @@ import { storyRead } from "../../trainer/today";
 import { Hedera, Icon, Laurel } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
-import { go } from "../nav";
+import { backToLessons, go } from "../nav";
 import { useScreen } from "../screen";
 import { audioReady, Speak } from "../speak";
 import { getProgress, update, useProgress } from "../store";
@@ -119,7 +119,7 @@ export function StoryPage({ id }: { id: string }) {
   return (
     <div class="stack-lg story-page">
       <div class="stack" style={{ gap: "8px" }} data-ask="Story: title">
-        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => go({ page: "stories" })}>← Lectiōnēs</button>
+        <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => backToLessons(story.step, `story-row-${story.id}`)}>← Lectiōnēs</button>
         <span class="eyebrow">Fābula · Gradus {roman(story.step)}</span>
         <h1 class="story-title"><LatinText text={story.title} /></h1>
         <p class="muted story-en">{story.en}</p>

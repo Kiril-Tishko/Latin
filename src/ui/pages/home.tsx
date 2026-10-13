@@ -13,7 +13,7 @@ import { actaUnread, todaysBoard, useMessenger } from "../messenger";
 import { useScreen } from "../screen";
 import { useProgress } from "../store";
 import { PartDots, partName } from "./learn";
-import { continueLearning, vocabIds } from "./train";
+import { continueLearning, roundInProgress, vocabIds } from "./train";
 
 /** What Continue does next, in a few words: "rule 3.2 (new)", "a new story", "your words". */
 export function stepLabel(step: TodayStep): string {
@@ -62,6 +62,7 @@ export function Home() {
   const days = streak(p);
   useMessenger();
   const step = todayStep(p, vocabIds(), Date.now(), actaUnread());
+  const round = roundInProgress();
   const name = p.settings.me?.name;
   useScreen("page", "Home (Domus)", () => `The home page (Domus): one Continue button. Today: ${done} of ${goal} exercises done; ${days > 0 ? `a ${days}-day streak` : "no streak yet"}.\n${stepText(p, step)}`, { share: false });
 
@@ -69,9 +70,9 @@ export function Home() {
     <div class="stack-lg home">
       <section class="panel frame home-hero" data-ask="Continue">
         <span class="eyebrow">Salvē{name ? `, ${name}` : ""}!</span>
-        <StepCard step={step} />
+        {round ? <RoundCard {...round} /> : <StepCard step={step} />}
         <div class="home-go">
-          <button id="continue" class="btn big home-continue" onClick={continueLearning} disabled={step.kind === "none"}>
+          <button id="continue" class="btn big home-continue" onClick={continueLearning} disabled={step.kind === "none" && !round}>
             <Icon.play /> Continue
           </button>
           <div class="home-goal stack" aria-label={`${done} of ${goal} exercises today`}>
@@ -88,9 +89,20 @@ export function Home() {
           </div>
         </div>
       </section>
-      {step.kind === "review" && <NextLesson note="Every rule you watched is learned. Watch the next video, tick it, and Continue opens its first rule." />}
+      {step.kind === "review" && <NextLesson note="Watch it, tick it here, and Continue opens its first rule." />}
       {step.kind === "none" && <NextLesson />}
     </div>
+  );
+}
+
+/** A round left half-way: Continue picks it up where it was. */
+function RoundCard({ label, done, total }: { label: string; done: number; total: number }) {
+  return (
+    <>
+      <span class="home-step ui">Your round · {done + 1} / {total}</span>
+      <h1 class="home-title">{label}</h1>
+      <p class="muted">Continue where you left off.</p>
+    </>
   );
 }
 
@@ -157,8 +169,8 @@ function StepCard({ step }: { step: TodayStep }) {
     default:
       return (
         <>
-          <h1 class="home-title">Tick the lessons you have watched.</h1>
-          <p class="muted">Open the settings (the gear, top right) and tick them; the first rule then opens.</p>
+          <h1 class="home-title">Watch Lesson I first.</h1>
+          <p class="muted">Then tap "I have watched it" below: its first rule opens here.</p>
         </>
       );
   }

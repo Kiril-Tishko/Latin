@@ -241,4 +241,6 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
   each with its tests (349 in all), smoke tests, and two single-turn checks
   on the live chats; the seven library photos of the friends made again
   from their portrait looks. Stage 8: a six-step test over three days,
-  judged 4.3 of 5, and the tuning above. Stages 4-8 published together.
+  judged 4.3 of 5, and the tuning above. Stages 4-8 published together
+  as v42; both routines (the hourly phone one and the pictures one) now
+  hold the current instructions and helper, checked against the files.

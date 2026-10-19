@@ -64,17 +64,29 @@ export function sceneOf(members: Who[], meta: Meta, now: number, byId: Map<strin
   return { here, later, named, likely };
 }
 
+/** Why someone reads it when they do, in a few words ("free", "busy (teaching), looking in between", "asleep"). */
+export function whyShort(why: string): string {
+  const busy = /busy \(([^)]+)\)/.exec(why)?.[1];
+  const away = /away \(([^)]+)\)/.exec(why)?.[1];
+  if (/woke them/.test(why)) return "asleep, but woken by it";
+  if (/asleep/.test(why)) return "asleep";
+  if (away) return `away (${away})`;
+  if (busy) return /in between/.test(why) ? `busy (${busy}), looking in between` : `busy (${busy})`;
+  if (/away from their tablet/.test(why)) return "free, back at their tablet in a few minutes";
+  return "free";
+}
+
 /** The scene in words, for the group's prompt. */
 export function sceneBlock(scene: Scene, members: Who[], byId: Map<string, When>, meta: Meta): string {
   const who = (id: string) => members.find((w) => w.id === id);
   const name = (id: string) => who(id)?.name ?? id;
-  const why = (id: string) => byId.get(id)?.why ?? "";
-  const hereLine = scene.here.map((id) => `${name(id)} (${why(id).replace(/^they /, "").replace(/^are /, "")})`).join(", ");
+  const why = (id: string) => whyShort(byId.get(id)?.why ?? "");
+  const hereLine = scene.here.map((id) => `${name(id)} (${why(id)})`).join(", ");
   const laterLine = scene.later
     .map((id) => {
       const w = who(id);
       const at = byId.get(id)?.readAt;
-      return `${name(id)} (${why(id).replace(/^they /, "")}${w && at ? `; around ${localTime(at, w.tz).hm} their time` : ""})`;
+      return `${name(id)} (${why(id)}${w && at ? `; reads it around ${localTime(at, w.tz).hm} their time` : ""})`;
     })
     .join(", ");
   const quiet = members.filter((w) => (natureOf(w.id, meta)?.talk ?? 0.5) < QUIET).map((w) => w.name);

@@ -44,7 +44,8 @@ describe("the group as a group: who is around, who talks, who catches up later",
     expect(scene.named).toEqual(["claudia"]);
     expect(scene.likely[0]).toBe("claudia");
     const text = sceneBlock(scene, members, byId, meta);
-    expect(text).toContain("- not here: Gāius (were asleep and read it after waking up; around 05:30 their time)");
+    expect(text).toContain("- not here: Gāius (asleep; reads it around 05:30 their time)");
+    expect(text).toContain("Marcus (free)");
     expect(text).toContain("Gāius hardly ever says anything in a group");
     expect(text).toContain("The learner named Claudia");
     // everyone asleep: the first to wake starts the talk

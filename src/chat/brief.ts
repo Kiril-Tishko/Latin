@@ -15,6 +15,7 @@ import { specOf } from "./engine";
 import { Pace, paceOf } from "./pace";
 import { natureOf } from "./nature";
 import { memoryLines, Mind, recall } from "./mind";
+import { standingLine, tiesLine } from "./bond";
 
 export interface Brief {
   v: 1;
@@ -70,10 +71,11 @@ function sheet(w: Who, meta: Meta, now: number, minds?: Record<string, Mind>): s
     `How they text: ${w.style}`,
     ...natureLines(w, meta),
     w.heart ? `With people they care about: ${w.heart}` : "",
-    w.ties ? `With the others: ${Object.entries(w.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
+    tiesLine(w, meta, now),
     knownPeople(w, meta),
-    // how they feel about the learner now, and a silent treatment going on; blocked, away, a status line, the group
+    // how they feel about the learner now, where they stand, and a silent treatment going on; blocked, away, a status line, the group
     bondBlock(w, meta.bonds?.[w.id], now, !memories.length),
+    standingLine(w, meta, now, false),
     memories.length ? `What ${w.name} remembers (theirs alone; ${w.name} knows only this, their chats, and their own life):\n${memoryLines(memories, (id) => whoOf(id, meta)?.name ?? (id === "me" ? "the learner" : id)).join("\n")}` : "",
     worldLine(w, meta, now),
   ]
@@ -86,7 +88,7 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
   const people = ids
     .map((id) => whoOf(id, meta))
     .filter((w): w is Who => !!w)
-    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now, ctx.minds), pace: paceOf(w.id, meta), burst: natureOf(w.id, meta)?.burst ?? 4 }));
+    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now, ctx.minds), pace: paceOf(w.id, meta, ctx.now), burst: natureOf(w.id, meta)?.burst ?? 4 }));
   const lives: Brief["lives"] = {};
   for (const id of ids) {
     const spec = specOf(id, meta);

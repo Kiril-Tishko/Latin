@@ -11,6 +11,7 @@
 import { PERSON_BY_ID } from "../content/people";
 import { romeDay } from "./calendar";
 import { localTime } from "./life";
+import { bondPace, standing } from "./bond";
 import type { Meta, Msg, Thread } from "./model";
 import type { Stranger } from "./strangers";
 
@@ -38,12 +39,14 @@ const HOUR = 3600_000;
 export const strangerPace = (s: Pick<Stranger, "intensity">): Pace =>
   s.intensity === "extreme" ? { patience: 3, wait: 12, nudges: 2 } : s.intensity === "strong" ? { patience: 2, wait: 24, nudges: 1 } : { patience: 1, wait: 48, nudges: 1 };
 
-/** Someone's pace: a friend's own, a stranger's from their temper. */
-export function paceOf(id: string, meta: Meta): Pace {
+/** Someone's pace: a friend's own, a stranger's from their temper; with `now`, as their feelings about the learner change it (chat/bond.ts). */
+export function paceOf(id: string, meta: Meta, now?: number): Pace {
   const p = PERSON_BY_ID.get(id);
-  if (p) return p.pace;
   const s = meta.strangers[id];
-  return s ? strangerPace(s) : { patience: 1, wait: 48, nudges: 0 };
+  const pace = p ? p.pace : s ? strangerPace(s) : { patience: 1, wait: 48, nudges: 0 };
+  if (now === undefined) return pace;
+  const st = standing(id, meta, now);
+  return st.set ? bondPace(pace, st.lv) : pace;
 }
 
 /** Messages in order, split into bursts (one after another, each within BURST_GAP of the one before). */
@@ -207,7 +210,7 @@ export function overPace(thread: Thread, meta: Meta, group: boolean, burstOf: (i
   const drop: string[] = [];
   for (const m of sorted) {
     const unseen = m.at > thread.readAt && spoken(m) && (m.src === "own" || m.src === "routine");
-    if (unseen && !allowOwn({ ...thread, messages: kept }, m.from, m, m.at, paceOf(m.from, meta), group, burstOf(m.from)).ok) drop.push(m.id);
+    if (unseen && !allowOwn({ ...thread, messages: kept }, m.from, m, m.at, paceOf(m.from, meta, m.at), group, burstOf(m.from)).ok) drop.push(m.id);
     else kept.push(m);
   }
   return drop;

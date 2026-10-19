@@ -128,10 +128,22 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
 - [x] Published as v40 (19 Oct); the routines got the new helper.
 
 ### 4. Bonds
-- [ ] Relationship with the learner in a few dimensions, changed by
-      bounded steps, drifting with real time; the private inner voice kept.
-- [ ] Relationships among the people that evolve.
-- [ ] Romance by each person's own disposition.
+- [x] Relationship with the learner in six levels (warmth, trust, respect,
+      desire, hurt, interest; `src/chat/bond.ts`), moved by Claude's small
+      steps, growth limited per day, falls sudden; real time heals hurt at
+      each one's pace and lets interest, warmth and desire drift back. The
+      private inner voice ("feel") kept beside them.
+- [x] First measure: anyone never measured is set once by Claude from how
+      they feel and what happened (the live friends' week of story).
+- [x] Relationships among the people (`Meta.ties`): from each friend's
+      starting ties, moved by fights, kindness, jealousy, sparks; each sees
+      only their own feelings.
+- [x] Romance by each person's own disposition: how fast desire may grow
+      (`fall`: Lūcius fast, Iūlia quick, Marcus and Claudia slow, Gāius
+      hardly), and their `romance` text.
+- [x] Feelings change pacing: the deeply hurt never write first, the
+      smitten try once more, the bored stop chasing (also in the routine's
+      brief).
 
 ### 5. Lives
 - [ ] Goals and plans per person, moved on by events and by Claude.

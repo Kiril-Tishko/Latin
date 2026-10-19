@@ -11,6 +11,7 @@ import { Life, localTime, moodText, partOfDay, statusAt } from "./life";
 import { groupMayWrite, paceLine, paceNow, paceOf } from "./pace";
 import { discretionText, natureOf, openText, photoText, talkText } from "./nature";
 import { memoryLines, Mind, recall } from "./mind";
+import { standingLine, tiesLine } from "./bond";
 import { awayNow, Bond, CoachTurn, deletedNow, Drama, groupIds, groupMembers, groupName, groupsOf, iBlocked, isBlocked, isGroupId, Meta, Msg, REACTIONS, SYS, Thread, Who, membersOf, silentNow, whoOf } from "./model";
 import type { Stranger } from "./strangers";
 import type { AllowedWord } from "./words";
@@ -168,9 +169,10 @@ export function personBlock(who: Who, life: Life | undefined, now: number, meta?
     `How they text: ${who.style}`,
     ...natureLines(who, meta),
     who.heart ? `With people they care about: ${who.heart}` : "",
-    who.ties ? `With the others: ${Object.entries(who.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
+    meta ? tiesLine(who, meta, now) : who.ties ? `With the others: ${Object.entries(who.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
     knownPeople(who, meta),
     bondBlock(who, meta?.bonds?.[who.id], now, !minds?.[who.id]?.memories.length),
+    meta ? standingLine(who, meta, now) : "",
     meta ? worldLine(who, meta, now) : "",
     `Right now: ${dayNow(who, now)}; ${lifeLine(life)}.`,
   ];
@@ -290,8 +292,13 @@ const EXTRAS = `- "voice": true (optional) makes it a short voice message: they 
 /** A fresh picture: what they would really send, made by an image generator from what Claude says it shows. */
 const PICTURE = `- "picture": "<what the photo shows, in English, as their camera would see it: the scene, the people, the light, in one or two sentences>" (optional) instead of "photo", when nothing in the list fits and a picture really is worth it: what they are doing right now, something funny, wild, disgusting, beautiful or absurd in their day, a selfie, proof of something, a picture to tease or tempt. It is made for them, so it can show anything of their world (around AD 100: no modern things), except nudity and gore. A few a day at most.`;
 
+/** How Claude reports what moved between them and the learner, and among themselves (chat/bond.ts). */
+const BONDS = `- "bond" (for anyone this moved): how it changed where they stand with the learner, only the levels that moved, by small steps: ±1 for most things, ±2 for something that matters, ±3 for a shock. Real feelings move slowly: a crush grows over many conversations, trust is built slowly and lost at once, a joke at the wrong moment stings; each person moves in their own way (their nature and heart). Hurt heals with time by itself. Usually {}.
+- "levels" (only for someone whose standing says NOT SET YET): where they stand with the learner now, 0-10 each, read from how they feel and what has happened between them.
+- "ties" (when something between two of them changed: a fight, a kindness, a betrayal, jealousy, a spark, gossip that stung): who feels it ("from"), about whom ("to"), how they see them now in their own words ("note"), and the levels that moved, by small steps. Feelings among them are as real as toward the learner, and as private. Usually [].`;
+
 const OUTPUT = `Reply with only JSON:
-{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "re": <number>, "voice": true, "photo": "<photo id>", "picture": "<what a new photo shows>"}], "saw": "<what the learner's newest photo shows, a few English words>", "react": [{"from": "<person id>", "emoji": "<emoji>"}], "remember": [{"who": "<person id>", "text": "<what they will remember, in their own words>", "kind": "moment" | "fact" | "promise" | "plan" | "secret" | "joke" | "conflict" | "news", "weight": <1-5>, "about": ["me", "<person id>"], "secret": true, "until": "<YYYY-MM-DD>"}], "settled": ["<memory id>"], "outdated": ["<memory id>"], "feel": {"<person id>": "<how they feel about the learner now>"}, "mood": {"<person id>": "<their mood now>"}, "silent": {"<person id>": <hours>}}
+{"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "re": <number>, "voice": true, "photo": "<photo id>", "picture": "<what a new photo shows>"}], "saw": "<what the learner's newest photo shows, a few English words>", "react": [{"from": "<person id>", "emoji": "<emoji>"}], "remember": [{"who": "<person id>", "text": "<what they will remember, in their own words>", "kind": "moment" | "fact" | "promise" | "plan" | "secret" | "joke" | "conflict" | "news", "weight": <1-5>, "about": ["me", "<person id>"], "secret": true, "until": "<YYYY-MM-DD>"}], "settled": ["<memory id>"], "outdated": ["<memory id>"], "feel": {"<person id>": "<how they feel about the learner now>"}, "bond": {"<person id>": {"warmth": <change>, "trust": <change>, "respect": <change>, "desire": <change>, "hurt": <change>, "interest": <change>}}, "levels": {"<person id>": {"warmth": <0-10>, "trust": <0-10>, "respect": <0-10>, "desire": <0-10>, "hurt": <0-10>, "interest": <0-10>}}, "ties": [{"from": "<person id>", "to": "<person id>", "note": "<how they see them now, their own words>", "warmth": <change>, "trust": <change>, "desire": <change>, "hurt": <change>}], "mood": {"<person id>": "<their mood now>"}, "silent": {"<person id>": <hours>}}
 - How many messages: as many as the moment and the person need (each person's Length; Gāius one, Marcus a burst of three); one is often right; in a group not everyone answers. No answer at all ("messages": []) is an answer too: they read it and say nothing (hurt, sulking, playing it cool, busy). "gap": 1-40 (typing time is added by the page; a long gap is a pause to think).
 - "re" (optional): the number (#) of the message this one answers, shown quoted above it as in any messenger. Only when it answers something that is not simply the last message: one of several things the learner said, an earlier question, a message from someone else in the group. Usually leave it out.
 ${EXTRAS}
@@ -300,6 +307,7 @@ ${EXTRAS}
 - "settled": ids of their memories that are done now (a promise kept, a plan done or dropped, a fight made up); "outdated": ids no longer true (a newer fact replaces them). Usually [].
 - "saw" (only when the learner's newest photo is attached): what it shows, a few plain English words, so they remember it.
 - "feel" (for anyone whose feelings about the learner moved now): how they feel about the learner after this, in their own words, first person, one or two sentences (English): what they would never say aloud. Feelings move slowly or suddenly, as with real people.
+${BONDS}
 - "mood" (when this conversation changed someone's mood): their mood now, a word or two.
 - "silent" (when someone is hurt or angry enough to ignore the learner): the hours they will ignore them, 1 to 24; 0 when they end a silence.
 ${DEEDS}`;
@@ -414,7 +422,7 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
       const waiting = t.messages.some((m) => m.from !== "me" && m.at > ctx.now);
       // like real people: who may write here now, and who is waiting for an answer
       const who = whoOf(t.id, meta);
-      const pace = group ? `  [${groupMayWrite(t, ctx.now).why}]` : who ? `  [${paceLine(who.name, paceOf(who.id, meta), paceNow(t, who.id, ctx.now), ctx.now, who.tz, ctx.me.name)}]` : "";
+      const pace = group ? `  [${groupMayWrite(t, ctx.now).why}]` : who ? `  [${paceLine(who.name, paceOf(who.id, meta, ctx.now), paceNow(t, who.id, ctx.now), ctx.now, who.tz, ctx.me.name)}]` : "";
       return `${title} [chat id "${t.id}"]${waiting ? " (has messages still on their way)" : ""}${lastMine ? `, learner last wrote ${ago(ctx.now - lastMine.at)} ago` : ""}:\n${last.length ? last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${m.la}`).join("\n") : "  (nothing yet)"}\n${pace}`;
     })
     .join("\n");
@@ -435,7 +443,8 @@ Away from the learner they live and talk to each other too: news and gossip pass
     `Reply with only JSON:
 {"messages": [{"chat": "<chat id>", "from": "<person id>", "la": "<Latin>", "en": "<English>", "in": <minutes from now, 0-${hours * 60}>, "voice": true, "photo": "<photo id>", "picture": "<what a new photo shows>"}]}
 Messages of one chat in time order; a burst of messages is a minute or less apart. {"messages": []} when nobody writes.
-Optionally also "feel": {"<person id>": "<how they feel about the learner now, first person, one or two sentences>"} for anyone whose feelings moved while the learner was away (missing them, worrying, cooling off after days of silence, still angry); "remember": [{"who": "<person id>", "text": "<what they will remember, in their own words>", "kind": "moment" | "fact" | "promise" | "plan" | "secret" | "joke" | "conflict" | "news", "weight": <1-5>, "about": ["me", "<person id>"], "secret": true}] for what happened in their lives meanwhile that they will remember; "settled" and "outdated": [<memory ids>] for memories done or no longer true.
+Optionally also "feel": {"<person id>": "<how they feel about the learner now, first person, one or two sentences>"} for anyone whose feelings moved while the learner was away (missing them, worrying, cooling off after days of silence, still angry); "remember": [{"who": "<person id>", "text": "<what they will remember, in their own words>", "kind": "moment" | "fact" | "promise" | "plan" | "secret" | "joke" | "conflict" | "news", "weight": <1-5>, "about": ["me", "<person id>"], "secret": true}] for what happened in their lives meanwhile that they will remember; "settled" and "outdated": [<memory ids>] for memories done or no longer true; "bond": {"<person id>": {"<level>": <change>}}, "levels": {"<person id>": {"<level>": <0-10>}} and "ties": [{"from", "to", "note", "<level>": <change>}] as below.
+${BONDS}
 ${EXTRAS}
 ${DEEDS}
 Person ids: ${PEOPLE.map((p) => `"${p.id}"`).join(", ")}${met.length ? `, ${met.map((x) => `"${x.id}" (${x.name})`).join(", ")}` : ""}. A person's private chat has their id; the friends' group is "${GROUP.id}"${groupIds(meta).length > 1 ? `; other groups: ${groupIds(meta).filter((g) => g !== GROUP.id).map((g) => `"${g}" («${groupName(meta, g)}»)`).join(", ")}` : ""}.`,

@@ -7,6 +7,7 @@
 // content/people.ts; a stranger's comes from their rolled style and temper,
 // and from what Claude made of them.
 import { PERSON_BY_ID } from "../content/people";
+import type { Levels } from "./bond";
 import type { Meta } from "./model";
 import type { Stranger } from "./strangers";
 
@@ -31,6 +32,12 @@ export interface Nature {
   interests: string[];
   /** How they look, the same in every picture of them (from their portrait). */
   look: string;
+  /** Where they stand with the learner before anything has happened (chat/bond.ts). */
+  start: Levels;
+  /** How much hurt heals in a day by itself: 0.3 a grudge for weeks, 3 forgotten by tomorrow. */
+  forgive: number;
+  /** How fast they may fall for someone: the most desire grows in a day. */
+  fall: number;
 }
 
 const LENGTHS: Record<string, Pick<Nature, "burst" | "length">> = {
@@ -60,6 +67,17 @@ export function strangerNature(s: Stranger): Nature {
     romance: s.romance ?? "their own: as Claude made them",
     interests: s.interests ?? [],
     look: s.look ?? `a ${s.g === "m" ? "man" : "woman"} of ${s.age}`,
+    // first impressions are Claude's to set ("levels" at their first answer); until then, a little warmth or wariness by the dice
+    start: {
+      warmth: 3 + Math.round(steady(s.id, "warm") * 4),
+      trust: 2 + Math.round(steady(s.id, "trust") * 4),
+      respect: 3 + Math.round(steady(s.id, "respect") * 4),
+      desire: 0,
+      hurt: 0,
+      interest: Math.min(10, 4 + Math.round(steady(s.id, "interest") * 3) + (s.intensity === "extreme" ? 2 : s.intensity === "strong" ? 1 : 0)),
+    },
+    forgive: Math.round((0.3 + steady(s.id, "forgive") * 2.7) * 10) / 10,
+    fall: Math.round((s.intensity === "extreme" ? 1.5 : s.intensity === "strong" ? 1 : 0.5) * (0.5 + steady(s.id, "fall")) * 10) / 10,
   };
 }
 

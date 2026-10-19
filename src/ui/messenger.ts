@@ -16,6 +16,7 @@ import { typingTime } from "../chat/life";
 import { allowOwn, overPace, paceOf } from "../chat/pace";
 import { applyMinds, mergeMinds, migrateMinds, Mind } from "../chat/mind";
 import { natureOf } from "../chat/nature";
+import { mergeTies } from "../chat/bond";
 import { deviceZone, hashRand } from "../chat/life";
 import { CoachTurn, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
@@ -293,8 +294,9 @@ function follow(s: NonNullable<typeof store>) {
         strangers: { ...meta.strangers, ...(remote.strangers ?? {}) },
         world: mergeWorld(meta.world, remote.world),
         mine: mergeMine(meta.mine, remote.mine),
-        // feelings: for each person the newer, from either copy
+        // feelings: for each person the newer, from either copy; how they see each other, for each pair
         bonds: mergeBonds(meta.bonds, remote.bonds),
+        ties: mergeTies(meta.ties, remote.ties),
       };
       saveLocal();
       emit();
@@ -379,7 +381,7 @@ function takeFromInbox(d: DocSnap) {
   const from = String(x.from ?? chat);
   // like real people: what the routine wrote beyond someone's pace, a repeat, or a photo sent there lately never arrives
   const member = membersOf(chat, meta).find((w) => w.id === from);
-  if (!t.messages.some((m) => m.id === d.id) && (!member || !allowOwn(t, from, { la: String(x.la ?? ""), photo }, at, paceOf(from, meta), isGroupId(chat, meta), natureOf(from, meta)?.burst).ok)) {
+  if (!t.messages.some((m) => m.id === d.id) && (!member || !allowOwn(t, from, { la: String(x.la ?? ""), photo }, at, paceOf(from, meta, at), isGroupId(chat, meta), natureOf(from, meta)?.burst).ok)) {
     void store?.inbox.doc(d.id).delete().catch(() => undefined);
     return;
   }

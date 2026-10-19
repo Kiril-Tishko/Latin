@@ -14,6 +14,7 @@ import { awayNow, groupIds, iBlocked, isBlocked, isGroupId, Meta, MOMENTS, Msg, 
 import { allowOwn, paceOf } from "./pace";
 import { natureOf } from "./nature";
 import { MemoryDraft, memoriesOf, Tell, tellsOf } from "./mind";
+import { applyBondChanges, applyTieChanges, BondChange, bondChangesOf, TieChange, tieChangesOf } from "./bond";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, storyPersonPrompt, strangerPrompt } from "./prompts";
 import { inventStranger, NewPerson, rollStranger, Stranger } from "./strangers";
@@ -184,6 +185,9 @@ export interface Reply {
   /** How the conversation moved each person: feelings about the learner, and moods. */
   feelings: Record<string, Feeling>;
   moods: Record<string, string>;
+  /** Where they stand with the learner, and how they see each other, as it moved (chat/bond.ts). */
+  bonds: BondChange[];
+  ties: TieChange[];
   /** What they did besides writing (see world.ts). */
   deeds: Deeds;
   /** When the learner's messages were read (one-to-one chats). */
@@ -216,7 +220,7 @@ export function timingFor(members: Who[], now: number, r: Rand = Math.random, me
 export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps, timing?: Timing, images?: unknown[]): Promise<Reply> {
   const r = deps.r ?? Math.random;
   const members = membersOf(thread.id, meta);
-  if (!members.length) return { messages: [], memories: [], settled: [], outdated: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {}, deeds: noDeeds(), made: [] };
+  if (!members.length) return { messages: [], memories: [], settled: [], outdated: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {}, bonds: [], ties: [], deeds: noDeeds(), made: [] };
   refreshLives(meta, members.map((w) => w.id), ctx.now, r);
   const { first, byId } = timing ?? timingFor(members, ctx.now, r, meta);
   // the learner's last messages, read word by word: a mistake is taken literally
@@ -239,6 +243,9 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     moment?: Record<string, unknown>;
     mood?: Record<string, unknown>;
     silent?: Record<string, unknown>;
+    bond?: unknown;
+    levels?: unknown;
+    ties?: unknown;
     acts?: unknown;
     drama?: unknown;
     newPerson?: unknown;
@@ -288,7 +295,7 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   // what they did besides writing: blocking, leaving, renaming, travelling, new people, storylines
   const deeds = deedsOf(raw ?? {}, ids, allPeople(meta), shown, new Set(groupIds(meta)));
   const saw = images?.length ? clean(raw?.saw).slice(0, 200) || undefined : undefined;
-  return { messages: messages.filter((m) => m.la || m.photo || m.pic), memories, settled: idsOf(raw?.settled), outdated: idsOf(raw?.outdated), readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids), deeds, made, ...(saw ? { saw } : {}) };
+  return { messages: messages.filter((m) => m.la || m.photo || m.pic), memories, settled: idsOf(raw?.settled), outdated: idsOf(raw?.outdated), readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids), bonds: bondChangesOf(raw ?? {}, ids), ties: tieChangesOf(raw?.ties, ids, allPeople(meta)), deeds, made, ...(saw ? { saw } : {}) };
 }
 
 /** Memory ids Claude gave (to settle or outdate), checked. */
@@ -317,15 +324,20 @@ const dayStamp = (t: number) => new Date(t).toLocaleDateString("en-GB", { day: "
 
 /**
  * Keeps what a conversation did to the people: their feelings about the
- * learner (in their own words), the moment (dated), the silent treatment, and
- * a mood that lasts a few hours. Changes meta in place.
+ * learner (in their own words, and as levels: chat/bond.ts), how they see each
+ * other, the silent treatment, and a mood that lasts a few hours. Changes meta
+ * in place.
  */
-export function applyFeelings(meta: Meta, r: Pick<Reply, "feelings" | "moods">, now: number) {
+export function applyFeelings(meta: Meta, r: Pick<Reply, "feelings" | "moods"> & Partial<Pick<Reply, "bonds" | "ties">>, now: number) {
+  applyBondChanges(meta, r.bonds ?? [], now);
+  applyTieChanges(meta, r.ties ?? [], now);
   const bonds = { ...(meta.bonds ?? {}) };
   for (const [id, f] of Object.entries(r.feelings)) {
     const old = bonds[id] ?? { feel: "", moments: [], updatedAt: 0 };
     const silentUntil = f.silent === undefined ? old.silentUntil : f.silent > 0 ? now + f.silent * 3600_000 : undefined;
+    const { silentUntil: _, ...rest } = old;
     bonds[id] = {
+      ...rest,
       feel: f.feel || old.feel,
       moments: f.moment ? [...old.moments, `${dayStamp(now)}: ${f.moment}`].slice(-MOMENTS) : old.moments,
       ...(silentUntil ? { silentUntil } : {}),
@@ -358,6 +370,9 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
     remember?: unknown;
     settled?: unknown;
     outdated?: unknown;
+    bond?: unknown;
+    levels?: unknown;
+    ties?: unknown;
     acts?: unknown;
     drama?: unknown;
     newPerson?: unknown;
@@ -368,7 +383,7 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
   );
   // feelings move while the learner is away too (missing them, cooling off)
   const everyone = new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)));
-  applyFeelings(meta, feelingsOf({ feel: raw?.feel }, everyone), ctx.now);
+  applyFeelings(meta, { ...feelingsOf({ feel: raw?.feel }, everyone), bonds: bondChangesOf(raw ?? {}, everyone), ties: tieChangesOf(raw?.ties, everyone, allPeople(meta)) }, ctx.now);
   const memories = memoriesOf({ remember: raw?.remember, moment: raw?.moment }, [...everyone], allPeople(meta));
   // what they do besides writing; someone unblocking the learner now may write to them again
   const deeds = deedsOf(raw ?? {}, allPeople(meta), allPeople(meta), [], new Set(groupIds(meta)));
@@ -397,7 +412,7 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
       if (!group && iBlocked(meta, member.id)) return false;
       if (statusAt(member.day, member.tz, at).state === "asleep") return false;
       // like real people: when the learner does not answer, they wait; nobody repeats themselves
-      if (!allowOwn(t, member.id, m, at, paceOf(member.id, meta), group, natureOf(member.id, meta)?.burst).ok) return false;
+      if (!allowOwn(t, member.id, m, at, paceOf(member.id, meta, at), group, natureOf(member.id, meta)?.burst).ok) return false;
       sim.set(t.id, { ...t, messages: [...t.messages, { id: "planned", from: member.id, la: m.la, at, src: "own", ...(m.photo ? { photo: m.photo } : {}) }] });
       return true;
     })

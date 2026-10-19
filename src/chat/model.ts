@@ -3,6 +3,7 @@
 // data/users/<id>/messenger/threads/<thread> (one document per conversation).
 import type { Day } from "../content/people";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../content/people";
+import type { Gain, Levels, Tie } from "./bond";
 import type { Life } from "./life";
 import type { Stranger } from "./strangers";
 
@@ -183,6 +184,11 @@ export interface Bond {
   moments: string[];
   /** Ignoring the learner until then (ms): the silent treatment. */
   silentUntil?: number;
+  /** Where they stand with the learner, 0-10, as it was at `lvAt` (chat/bond.ts); unset until first measured. */
+  lv?: Levels;
+  lvAt?: number;
+  /** How much each level grew on one day (growth has a daily limit). */
+  gain?: Gain;
   updatedAt: number;
 }
 
@@ -211,6 +217,8 @@ export interface Meta {
   strangers: Record<string, Stranger>;
   /** How each person feels about the learner (see Bond). */
   bonds?: Record<string, Bond>;
+  /** How they see each other, where something has changed (chat/bond.ts; "from>to"). */
+  ties?: Record<string, Tie>;
   /** What the people did to the messenger itself (see World). */
   world?: World;
   /** What the learner chose: people they blocked, chats they muted. */

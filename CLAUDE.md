@@ -603,8 +603,11 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   their own and by the routine's vet), how long they write (`length`) and how
   when something matters (`deep`), showing feelings (`open`), keeping secrets
   (`discretion`), photos (`photos.rate`, `what`), love (`romance`), what fills
-  their days (`interests`) and their fixed look for pictures (`look`, from
-  their portrait). A stranger's comes from their rolled style and temper
+  their days (`interests`), their fixed look for pictures (`look`, from
+  their portrait), and their way with feelings: where they start with the
+  learner (`start`), how fast hurt heals (`forgive`: Gāius 0.3 a day, Marcus
+  3) and how fast they may fall for someone (`fall`: Lūcius 2 a day, Gāius
+  0.3). A stranger's comes from their rolled style and temper
   (`strangerNature`, steady by id), with the look, love and interests Claude
   gives when making them (`naturePartsOf`). `natureLines` puts it into every
   person block and the routine's sheets; the language block lets length follow
@@ -716,6 +719,29 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   own, feelings drift too (missing the learner, cooling off), and someone
   ignoring the learner writes nothing in private (`writeOwn`). Bonds merge per
   person, the newer winning (`mergeBonds`).
+- Bonds in levels (src/chat/bond.ts), beside the words: where each person
+  stands with the learner, 0-10, in six levels (warmth, trust, respect,
+  desire, hurt, interest: `Bond.lv` as at `lvAt`). Claude reports changes in
+  "bond", by small steps (±1, ±2 what matters, ±3 a shock; `stepLevels`):
+  growth has a daily limit (warmth 3, trust and respect 2, interest 3, desire
+  the person's `fall`: a crush takes days, at each one's pace), a fall is
+  sudden, and real time does the rest (`levelsNow`: hurt heals at `forgive` a
+  day, interest returns to their usual after two days apart, warmth and desire
+  fade slowly after a week). Someone never measured shows NOT SET YET in the
+  prompt, and Claude's "levels" set them once, read from how they feel and
+  what happened (the live friends had a week of story before levels existed);
+  after that only steps move them. `standingLine` puts them in every person
+  block in words ("desire 6 (falling for)"); the routine's sheets show them
+  without asking. They change the pace (`bondPace`, via `paceOf(id, meta,
+  now)`, also in the brief): deeply hurt (7+) never writes first, hurt (4+)
+  chases less, in love or devoted tries once more and waits less, bored stops
+  chasing. Among themselves: ties (`Meta.ties`, "from>to": levels, a `note`
+  in their own words) start from each friend's `feels` (content/people.ts:
+  Lūcius → Iūlia warmth 9, desire 8) and move with Claude's "ties" (fights,
+  kindness, betrayal, jealousy, a spark), the same limits and healing;
+  `tiesLine` shows each person only their own (Marcus does not see how Lūcius
+  feels about him). Merged per pair (`mergeTies`), 80 kept. Never shown on the
+  page. `tests/bond.test.ts`.
 - Freedom (src/chat/world.ts): the persona text describes people, not a plot
   ("BE THEM"), and `CAN_DO` lists what they may do, never must; Claude chooses.
   Besides messages a reply or their own writing may carry `acts` (block /

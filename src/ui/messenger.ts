@@ -10,7 +10,7 @@ import { useEffect, useState } from "preact/hooks";
 import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
 import { ACTA_ID, actaKey, boardOf, earlierBoards, writeActa } from "../chat/acta";
-import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, picId, refreshLives, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
+import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, picId, refreshLives, routineMinds, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
 import { allowOwn, overPace, paceOf } from "../chat/pace";
@@ -364,7 +364,7 @@ function follow(s: NonNullable<typeof store>) {
 }
 
 function takeFromInbox(d: DocSnap) {
-  const x = d.data() as { chat?: string; from?: string; la?: string; en?: string; at?: number; voice?: unknown; photo?: unknown; pic?: unknown; picEn?: unknown; gloss?: unknown } | undefined;
+  const x = d.data() as { chat?: string; from?: string; la?: string; en?: string; at?: number; voice?: unknown; photo?: unknown; pic?: unknown; picEn?: unknown; gloss?: unknown; remember?: unknown; tell?: unknown } | undefined;
   const chat = String(x?.chat ?? "");
   // a photo needs no caption; a photo the page does not have is dropped; a picture the routine made is in messenger/pics
   const photo = typeof x?.photo === "string" && PHOTO_BY_ID.has(x.photo) ? x.photo : undefined;
@@ -398,6 +398,9 @@ function takeFromInbox(d: DocSnap) {
       ...(glossOf(x.gloss) ? { gloss: glossOf(x.gloss) } : {}),
     };
     saveThread(merge(t, { ...t, messages: [...t.messages, msg] }));
+    // what they will remember of it, and what was told behind the scenes (the routine says so with the message)
+    const { memories, tells } = routineMinds(x, chat, meta);
+    if (memories.length || tells.length) remember({ memories, chat, tells }, at);
     // writing to the learner in private again: whoever blocked them has unblocked them
     if (t.kind !== "group" && isBlocked(meta, msg.from)) {
       const { [msg.from]: _, ...rest } = meta.world?.blocked ?? {};

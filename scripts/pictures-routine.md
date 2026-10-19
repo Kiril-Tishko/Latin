@@ -404,6 +404,10 @@ def vet(d, draft_path, out_path):
             print(f"NOT ALLOWED [{chat}] {who}: {la} -> {'; '.join(bad)}")
             continue
         doc = {k: v for k, v in x.items() if k in ("chat", "from", "la", "en", "voice", "photo", "pic", "picEn", "gloss") and v not in (None, "", {}, False)}
+        # what the people of the chat will remember of it, and what someone told someone (the page checks and keeps them)
+        for k in ("remember", "tell"):
+            if isinstance(x.get(k), list) and x[k]:
+                doc[k] = [y for y in x[k] if isinstance(y, dict)][:4]
         doc.update(id="r" + b36(when) + "".join(random.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(3)), at=when)
         t["messages"].append(dict(doc, src="routine"))
         at[chat] = when

@@ -122,8 +122,10 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
       (garbled or a lie: `untrue`); secrets flagged, kept or spilled by
       nature. Tests: a secret told to Iūlia stays out of Marcus's prompt
       until she tells someone.
-- [ ] Not yet: the phone routine cannot record memories or tells (its
-      messages are remembered when the page next sees them in a reply).
+- [x] The phone routine's messages carry what their people will remember
+      and what someone told someone; the page applies them when it takes the
+      message from the inbox (`routineMinds`; a test runs the helper).
+- [x] Published as v40 (19 Oct); the routines got the new helper.
 
 ### 4. Bonds
 - [ ] Relationship with the learner in a few dimensions, changed by
@@ -167,3 +169,10 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
 - 19 Oct: stage 1 (pacing) done: 10 new tests (295 in all), smoke tests of
   the messenger and the learner's abilities, a dry run on the live chats;
   routine updated; published as v38. Next: stage 2 (natures).
+- 19 Oct: stage 2 (natures) done: 4 new tests; published as v39.
+- 19 Oct: stage 3 (minds) done: 7 new tests (317 in all), smoke tests, a dry
+  run of the migration on the live chats, and an experience check (a fresh
+  model played Iūlia on her real prompt: the answer parsed into messages, a
+  first-person memory of a fight, feelings, a storyline with who knows it).
+  Published as v40, then v41 with the routine's memories. Next: stage 4
+  (bonds).

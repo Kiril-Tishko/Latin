@@ -71,6 +71,8 @@ describe("each person's memory: weighted, recalled when it matters", () => {
     expect(got[2].until).toBe(Date.parse("2026-10-15"));
     // in a private chat, a bare fact is the one person's
     expect(memoriesOf({ remember: ["likes wine"] }, ["gaius"], everyone)).toEqual([{ who: "gaius", text: "likes wine", kind: "fact", weight: 2, about: ["me"] }]);
+    // someone named who is not in the chat remembers nothing of it
+    expect(memoriesOf({ remember: [{ who: "iulia", text: "likes wine" }] }, ["gaius"], everyone)).toEqual([]);
   });
 });
 

@@ -13,7 +13,7 @@ import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from
 import { awayNow, groupIds, iBlocked, isBlocked, isGroupId, Meta, MOMENTS, Msg, msgId, Pic, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
 import { allowOwn, paceOf } from "./pace";
 import { natureOf } from "./nature";
-import { MemoryDraft, memoriesOf } from "./mind";
+import { MemoryDraft, memoriesOf, Tell, tellsOf } from "./mind";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, storyPersonPrompt, strangerPrompt } from "./prompts";
 import { inventStranger, NewPerson, rollStranger, Stranger } from "./strangers";
@@ -85,6 +85,12 @@ export function glossOf(x: unknown): Record<string, string> | undefined {
       .slice(0, 3),
   );
   return Object.keys(out).length ? out : undefined;
+}
+
+/** What the phone routine says the people of a chat remember of a message of theirs, and what someone told someone: checked like a reply's. */
+export function routineMinds(x: { remember?: unknown; tell?: unknown }, chat: string, meta: Meta): { memories: MemoryDraft[]; tells: Tell[] } {
+  const everyone = allPeople(meta);
+  return { memories: memoriesOf({ remember: x.remember }, membersOf(chat, meta).map((w) => w.id), everyone), tells: tellsOf(x.tell, everyone, everyone) };
 }
 
 /** A message taken back after this many seconds (a slip, regret), within reason. */

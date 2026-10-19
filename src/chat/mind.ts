@@ -192,7 +192,8 @@ export function memoriesOf(raw: { remember?: unknown; moment?: unknown }, rememb
   const list = Array.isArray(raw.remember) ? raw.remember : [];
   for (const x of list.slice(0, 8)) {
     const o = (typeof x === "string" ? { text: x } : x ?? {}) as Record<string, unknown>;
-    const who = rememberers.includes(str(o.who)) ? str(o.who) : one;
+    // someone named who is not here does not remember it; unnamed, in a private chat it is the one person's
+    const who = rememberers.includes(str(o.who)) ? str(o.who) : str(o.who) ? undefined : one;
     const text = str(o.text).slice(0, 300);
     if (!who || !text) continue;
     const kind = (MEMORY_KINDS as readonly string[]).includes(str(o.kind)) ? (str(o.kind) as MemoryKind) : "fact";

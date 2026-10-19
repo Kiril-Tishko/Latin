@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { allowOwn, BURST_MAX, groupMayWrite, mayWrite, overPace, paceNow, paceOf, paceLine, similar, strangerPace } from "../src/chat/pace";
-import { writeOwn } from "../src/chat/engine";
+import { routineMinds, writeOwn } from "../src/chat/engine";
 import { returnLine } from "../src/chat/prompts";
 import { Meta, Msg, newMeta, newThread, Thread } from "../src/chat/model";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../src/content/people";
@@ -184,7 +184,7 @@ describe("the phone routine's helper paces exactly like the page", () => {
     writeFileSync(join(base, "brief/now.json"), JSON.stringify(brief));
     const drafts = [
       { chat: "iulia", from: "iulia", la: "Cyrille, nunc scrībō", en: "x" },
-      { chat: "gaius", from: "gaius", la: "Aquam bibō", en: "x" },
+      { chat: "gaius", from: "gaius", la: "Aquam bibō", en: "x", remember: [{ who: "gaius", text: "I told Kiril I drink only water now", kind: "fact", weight: 2 }], tell: [{ from: "gaius", to: "claudia", what: "Kiril is quiet again" }] },
       { chat: "gaius", from: "gaius", la: "Et nunc", en: "x" },
       { chat: "gaius", from: "gaius", la: "Puella bene", en: "x" },
       { chat: "claudia", from: "claudia", la: "Ecce!", en: "x", photo: "claudia-books" },
@@ -224,5 +224,11 @@ describe("the phone routine's helper paces exactly like the page", () => {
     expect(out).toContain("NOT ALLOWED [iulia] iulia");
     expect(out).toContain("says again what they said lately");
     expect(saved.every((s) => /^r[0-9a-z]+[a-z]{3}$/.test(s.id) && s.at >= T0)).toBe(true);
+    // what Gāius will remember of it, and what he told Claudia, go with the message to the page
+    const gaius = saved.find((s) => s.la === "Aquam bibō") as unknown as { remember?: unknown; tell?: unknown };
+    const minds = routineMinds(gaius, "gaius", meta);
+    expect(minds.memories.map((m) => `${m.who}: ${m.text}`)).toEqual(["gaius: I told Kiril I drink only water now"]);
+    expect(minds.tells).toEqual([{ from: "gaius", to: "claudia", what: "Kiril is quiet again", about: [], weight: 3 }]);
+    expect(saved.find((s) => s.la === "Et nunc")).not.toHaveProperty("remember");
   });
 });

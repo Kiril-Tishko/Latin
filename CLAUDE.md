@@ -631,7 +631,10 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   carry who knows of them (`Drama.knows`) and show only to them (`dramaBlock`
   with viewers; the own-writing prompt, which decides for everyone, sees all
   with their knowers); a private chat sees the group's recent talk only if its
-  person is in the group. The routine's sheets carry each person's memories.
+  person is in the group. The routine's sheets carry each person's memories,
+  and its messages may carry `remember` and `tell` too (kept on the inbox
+  document; the page applies them, checked by `routineMinds`, when it takes
+  the message in).
   (The Ācta Diurna still prints the friends' current happenings as
   neighbourhood news: a public board.)
 - Pacing, as the learner chose ("like real people"; src/chat/pace.ts): plenty

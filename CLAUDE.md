@@ -631,7 +631,15 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   (model.ts) in its own document `…/messenger/pics/<id>` ("wanted" with its
   prompt, then "done" with the image in base64, or "failed"); the message holds
   `pic` and `picEn` and shows "Photo on its way…" until it is made
-  (`PicInBubble`, `picOf` follows the document). The page cannot reach the
+  (`PicInBubble`, `picOf` follows the document). The routine's helper makes a
+  fresh one with Pollinations first (gen.pollinations.ai, the learner's own
+  account: the environment's network secret adds its key; MAI Image 2.6 Flash,
+  which drew Rome best in a test of eight models, then the cheaper FLUX.2 Klein
+  4B, shrunk to a 576 px WebP by `small`; about 0.015 and 0.005 Pollen a picture,
+  paid from Quest Pollen), and with AI Horde when there is no key or no Pollen
+  (`pollinations`, `POLL_OFF`). The learner does not want to see test pictures
+  (it spoils the surprise): judge them yourself. Their Google AI Plus plan has no
+  API (the Gemini app only), so it cannot make them. The page cannot reach the
   internet (its network is closed), so a routine makes them: the page fires
   "Nūntiī: pictures" (trig_01UuDAZrviveDMPR1sjce698, no schedule, a fresh
   session per firing, no notification; scripts/pictures-routine.md with the

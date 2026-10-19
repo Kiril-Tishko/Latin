@@ -15,7 +15,7 @@ You are the phone side of the messenger (Nūntiī) of "Tabula Latina", a Latin t
 
 3. Decide, as life would, whether anyone writes now. Usually nobody does. Real people do not keep writing to someone who does not answer: when the learner goes quiet they send a message or two, then they wait, and after a last try they leave it to the learner. The [brackets] say it for each chat: someone WAITING writes nothing in that chat (they may still talk in a group, about their own things). When someone may write, they do it only with a reason of their own: their mood and what is going on for them (moods can be extreme, and the hour and what others said shift them), news, a festival or a birthday (theirs or a friend's), the news from Rome, a follow-up to the last conversation, missing the learner, the hour (good morning, good night). Each person's sheet also says how they feel about the learner now and what has happened between them: let it drive who writes and how, as with real people (someone who misses or fancies the learner writes; someone hurt writes something pointed, or nothing; someone giving the silent treatment, or who has blocked the learner, does not write to the learner in private, though they may complain about them in the group; someone the learner has blocked cannot reach them in private at all; someone away writes rarely). In a group they mostly talk to each other, about their own lives, not about the learner's silence. The friends know each other, but each knows only what they saw or were told: a sheet says what that person remembers, and what was said in a private chat stays there unless someone passes it on (a secret spreads only as fits the one who knows it). Strangers mostly know one of the friends (their sheets say how). Nobody repeats what they said lately (state lists it): every message brings something new, or is not sent. One burst of one to three short messages is usual; two chats at most. The brief (/tmp/nuntii/data/users/me/messenger/brief/now.json) has who everyone is (people[].sheet), the learner (learner) and the language rules (language).
 
-4. Write the messages in character, following the brief's language exactly: ONLY the words and forms it lists (names a festival or the news brings are in the allowed forms too), with long marks. Real texting: short, emoji welcome (also the Roman ones the language lists, written as codes like :lupa:); real people with moods, pride and opinions, warm or cold, flirty, sulky or rude as they feel (adult themes as in a Roman comedy; anything sexual stays implied); in a strong moment a message may carry one or two other simple Latin words, given with their meanings in "gloss"; never correct the learner and never mention lessons, rules, AI or phones. Now and then (about one message in eight) a message is a short voice message: add "voice": true (its "la" is what they say, 3-14 words). Now and then someone sends a photo: one from the list state printed that is theirs (or "anyone's"): add "photo": "<id>", with a short caption in "la" (or only an emoji); or, when nothing there fits and a picture is really worth it, a fresh one of exactly what they would send now (their lunch, a selfie, the mess, something wild in their day; their world around AD 100, never nudity or gore): pick an id ("p" + the time in base 36 + three random letters), run `python3 /tmp/nuntii.py picture <id> <person id> "<what the photo shows, in English, as their camera sees it>" /tmp/nuntii/pic-<id>.json /tmp/nuntii` (it takes a few minutes; the people in it are drawn as they look), save it with ArtifactData set: collection "data/users/me/messenger/pics", doc_id <id>, file_path /tmp/nuntii/pic-<id>.json; then the message carries "pic": <id> and "picEn": <what it shows> (if the helper printed FAILED, send the message without it).
+4. Write the messages in character, following the brief's language exactly: ONLY the words and forms it lists (names a festival or the news brings are in the allowed forms too), with long marks. Real texting: short, emoji welcome (also the Roman ones the language lists, written as codes like :lupa:); real people with moods, pride and opinions, warm or cold, flirty, sulky or rude as they feel (adult themes as in a Roman comedy; anything sexual stays implied); in a strong moment a message may carry one or two other simple Latin words, given with their meanings in "gloss"; never correct the learner and never mention lessons, rules, AI or phones. Now and then (about one message in eight) a message is a short voice message: add "voice": true (its "la" is what they say, 3-14 words). Now and then someone sends a photo: one from the list state printed that is theirs (or "anyone's"): add "photo": "<id>", with a short caption in "la" (or only an emoji); or, when nothing there fits and a picture is really worth it, a fresh one of exactly what they would send now (their lunch, a selfie, the mess, something wild in their day; their world around AD 100, never nudity or gore): pick an id ("p" + the time in base 36 + three random letters), run `python3 /tmp/nuntii.py picture <id> <person id> "<what the photo shows, in English, as their camera sees it>" /tmp/nuntii/pic-<id>.json /tmp/nuntii` (seconds with the learner's Pollen, or a few minutes when free volunteers' generators make it; the people in it are drawn as they look), save it with ArtifactData set: collection "data/users/me/messenger/pics", doc_id <id>, file_path /tmp/nuntii/pic-<id>.json; then the message carries "pic": <id> and "picEn": <what it shows> (if the helper printed FAILED, send the message without it).
 
 5. Put the messages, in the order they are sent, in /tmp/nuntii/draft.json as [{"chat": <chat id>, "from": <person id>, "la": <the Latin>, "en": <English translation>, and when it is one "voice": true, "photo": <photo id> or "pic": <id> with "picEn", "gloss": {<new word>: <meaning>}, and when the message matters (news, a promise, a plan, a confession) "remember": [{"who": <someone in that chat>, "text": <what they will remember, in their own words>, "kind": "moment" | "fact" | "promise" | "plan" | "secret" | "joke" | "conflict" | "news", "weight": <1-5>}], and when someone passes news on behind the scenes "tell": [{"from": <person id>, "to": <person id>, "what": <what they told, as they told it>, "untrue": true if it is garbled or a lie}]}], and run `python3 /tmp/nuntii.py vet /tmp/nuntii /tmp/nuntii/draft.json /tmp/nuntii/new.json`. It says OK or NOT ALLOWED (with the reason) for each one, and writes the allowed ones to /tmp/nuntii/new.json as finished inbox documents (each with its "id" and the moment it arrives, "at"). Rewrite a message whose words are not allowed, or send it without its photo when they have sent enough photos lately (each has their habit), and run vet again; a message refused for anything else (someone waiting for an answer, a repeat, asleep, blocked) is dropped, never forced. Then save every item of /tmp/nuntii/new.json as its own document in collection "data/users/me/messenger/inbox" with one ArtifactData batch (op "set", doc_id: the item's "id", data: the item). The page moves them into the chats.
 
@@ -517,7 +517,8 @@ def notify(d, new_path=None):
     print(line)
 
 
-# pictures, made by AI Horde (aihorde.net): free volunteers' image generators, no key, about two minutes each
+# pictures: from Pollinations when the learner has Pollen (below), else made by AI Horde (aihorde.net):
+# free volunteers' image generators, no key, about two minutes each
 HORDE = "https://aihorde.net/api/v2"
 HORDE_HEAD = {"apikey": "0000000000", "Content-Type": "application/json", "Client-Agent": "tabula-latina:1:anon", "User-Agent": "tabula-latina/1.0"}
 STYLE = ", amateur smartphone photo taken in ancient Rome around AD 100, candid, realistic, natural colours, sharp focus"
@@ -530,8 +531,71 @@ def horde(path, body=None):
         return json.load(r)
 
 
+# better pictures first, from Pollinations (gen.pollinations.ai), paid with the learner's Pollen: the
+# environment's network adds their key. MAI Image draws Rome best (a crash is a crash); FLUX.2 Klein costs a
+# third. Without a key or Pollen, the free AI Horde above.
+POLL = "https://gen.pollinations.ai/v1/images/generations"
+POLL_MODELS = ["microsoft/mai-image-2.6-flash", "black-forest-labs/flux.2-klein-4b"]
+POLL_STYLE = (". A candid photo taken in ancient Rome around AD 100, as if a Roman had a camera: natural light, realistic, sharp, true colours."
+              " Everyone wears ancient Roman tunics, togas or stolas; only ancient Roman objects, buildings and food (clay and bronze cups, no glass);"
+              " no modern people, clothes, phones or plastic. No text, no nudity, no gore.")
+POLL_OFF = {}  # model -> why it is not tried again in this run
+
+
+def small(raw):
+    """the picture as a WebP of 576 px, small enough for its document (None without Pillow)"""
+    try:
+        import io
+        from PIL import Image
+    except ImportError:
+        return None
+    img = Image.open(io.BytesIO(raw)).convert("RGB")
+    img.thumbnail((576, 576), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, "WEBP", quality=80)
+    return buf.getvalue()
+
+
+def pillow():
+    try:
+        import PIL  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def pollinations(prompt):
+    """(content type, base64) from Pollinations, or None (no key, no Pollen, refused, or down)"""
+    # without Pillow to shrink it, FLUX.2 Klein straight at 576 px (MAI draws 768 px at least)
+    models, size = (POLL_MODELS, "1024x1024") if pillow() else (POLL_MODELS[1:], "576x576")
+    for model in models:
+        if model in POLL_OFF or "all" in POLL_OFF:
+            continue
+        body = {"prompt": prompt + POLL_STYLE, "model": model, "size": size, "safe": "nsfw", "quality": "medium", "response_format": "b64_json"}
+        try:
+            req = urllib.request.Request(POLL, data=json.dumps(body).encode(), headers={"Content-Type": "application/json", "User-Agent": HORDE_HEAD["User-Agent"]}, method="POST")
+            with urllib.request.urlopen(req, timeout=240) as r:
+                raw = base64.b64decode(json.load(r)["data"][0]["b64_json"])
+            out = small(raw) or raw
+            if len(out) > 180_000:  # too big for its document (256 KiB in base64)
+                print(f"Pollinations {model}: too big ({len(out)} bytes)", file=sys.stderr)
+                continue
+            kind = "image/webp" if out[8:12] == b"WEBP" else "image/png" if out[:4] == b"\x89PNG" else "image/jpeg"
+            return kind, base64.b64encode(out).decode()
+        except urllib.error.HTTPError as e:
+            # no key (401, 403): none of them; no Pollen (402): this one, a cheaper one may still fit
+            POLL_OFF["all" if e.code in (401, 403) else model] = f"HTTP {e.code}"
+            print(f"Pollinations {model}: HTTP {e.code}", file=sys.stderr)
+        except Exception as e:  # noqa: BLE001 - refused, timed out, or down: the next one
+            print(f"Pollinations {model} failed ({e})", file=sys.stderr)
+    return None
+
+
 def make_picture(prompt, tries=2):
     """One picture of what someone sends: (content type, base64), or None."""
+    res = pollinations(prompt)
+    if res:
+        return res
     for _ in range(tries):
         try:
             job = horde("/generate/async", {"prompt": prompt + STYLE + " ### " + NEGATIVE, "params": {"width": 576, "height": 576, "steps": 25, "n": 1, "sampler_name": "k_euler_a", "cfg_scale": 6}, "models": ["AlbedoBase XL (SDXL)", "AlbedoBase XL 3.1", "Juggernaut XL", "SDXL 1.0"], "nsfw": False, "censor_nsfw": True, "r2": True})

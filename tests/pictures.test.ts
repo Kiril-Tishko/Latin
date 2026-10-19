@@ -93,3 +93,56 @@ describe("photos by each one's habit", () => {
     expect(PEOPLE.every((p) => p.nature.look.length > 40)).toBe(true);
   });
 });
+
+describe("pictures from the learner's Pollen first, the free generators after", () => {
+  it("shrinks a picture for its document, falls back to the cheaper model without Pollen, and stops without a key", () => {
+    // a fake Pollinations: MAI is out of Pollen (402), FLUX.2 Klein answers with a big PNG; then no key at all (401)
+    const code = `
+import base64, importlib.util, io, json, os, sys, urllib.error
+sys.stderr = open(os.devnull, "w")
+spec = importlib.util.spec_from_file_location("h", sys.argv[1]); h = importlib.util.module_from_spec(spec); spec.loader.exec_module(h)
+from PIL import Image
+buf = io.BytesIO(); Image.effect_noise((1024, 1024), 60).convert("RGB").save(buf, "PNG"); big = buf.getvalue()
+asked = []
+class R:
+    def __init__(s, body): s.body = body
+    def __enter__(s): return s
+    def __exit__(s, *a): return False
+    def read(s): return s.body
+def fake(req, timeout=0):
+    model = json.loads(req.data)["model"]; asked.append(model)
+    if h.KEY_GONE: raise urllib.error.HTTPError(req.full_url, 401, "no key", {}, None)
+    if "mai" in model: raise urllib.error.HTTPError(req.full_url, 402, "no pollen", {}, None)
+    return R(json.dumps({"data": [{"b64_json": base64.b64encode(big).decode()}]}).encode())
+h.urllib.request.urlopen = fake
+h.KEY_GONE = False
+kind, b64 = h.pollinations("a goat on the roof")
+pic = Image.open(io.BytesIO(base64.b64decode(b64)))
+again = h.pollinations("a goat in the kitchen")
+first = list(asked)
+h.POLL_OFF.clear(); h.KEY_GONE = True; asked.clear()
+gone = h.pollinations("a goat in the forum"), h.pollinations("a goat in the baths")
+print(json.dumps({"kind": kind, "size": pic.size, "len": len(b64), "big": len(big), "again": again is not None, "first": first, "gone": gone, "asked": asked, "off": h.POLL_OFF}))
+`;
+    const helper = new URL("../scripts/nuntii-routine.py", import.meta.url).pathname;
+    let out: string;
+    try {
+      out = execFileSync("python3", ["-I", "-c", code, helper], { encoding: "utf8" });
+    } catch (e) {
+      if ((e as { code?: string }).code === "ENOENT") return; // no python here
+      throw e;
+    }
+    const res = JSON.parse(out);
+    expect(res.kind).toBe("image/webp");
+    expect(res.size).toEqual([576, 576]);
+    expect(res.len).toBeLessThan(250_000); // a document holds 256 KiB
+    expect(res.big * 1.34).toBeGreaterThan(256 * 1024);
+    // MAI is not asked again once it ran out; FLUX.2 Klein goes on
+    expect(res.again).toBe(true);
+    expect(res.first).toEqual(["microsoft/mai-image-2.6-flash", "black-forest-labs/flux.2-klein-4b", "black-forest-labs/flux.2-klein-4b"]);
+    // without a key, Pollinations is asked once, then left for the free generators
+    expect(res.gone).toEqual([null, null]);
+    expect(res.asked).toEqual(["microsoft/mai-image-2.6-flash"]);
+    expect(res.off).toEqual({ all: "HTTP 401" });
+  });
+});

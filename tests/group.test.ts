@@ -81,6 +81,17 @@ describe("the group as a group: who is around, who talks, who catches up later",
     await writeReply(group("Gāī, ubi es?"), meta, ctxAt(T), { ask: async <T,>(p: string): Promise<T> => ((prompt = p), { messages: [] } as T), opts: {}, lex, r: seeded(3) }, timing);
     expect(prompt).toContain("WHO IS AROUND IN THE GROUP NOW:");
     expect(prompt).toContain("The learner named Gāius: they will want to answer (when they come back).");
+    // the live talk is capped at eight; someone catching up later is not counted in it
+    const busy = async <T,>(): Promise<T> =>
+      ({
+        messages: [
+          ...["Ō!", "Euge!", "Hahae!", "Ita!"].flatMap((la) => [{ from: "marcus", la }, { from: "iulia", la: `${la} ${la}` }]),
+          { from: "gaius", la: "Salvē." },
+        ].map((m) => ({ ...m, en: "x" })),
+      }) as T;
+    const many = await writeReply(group("Salvēte! Gāī, ubi es?"), meta, ctxAt(T), { ask: busy, opts: {}, lex, r: seeded(3) }, timing);
+    expect(many.messages.map((m) => m.from).filter((f) => f === "gaius")).toHaveLength(1);
+    expect(many.messages.filter((m) => m.from !== "gaius").length).toBeLessThanOrEqual(8);
     // a private chat has no scene
     let dmPrompt = "";
     await writeReply({ ...newThread("marcus", "dm"), messages: [{ id: "d1", from: "me", la: "Salvē!", at: T }] }, meta, ctxAt(T), { ask: async <T,>(p: string): Promise<T> => ((dmPrompt = p), { messages: [] } as T), opts: {}, lex, r: seeded(3) }, timingFor([who("marcus")], T, seeded(1)));

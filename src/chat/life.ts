@@ -135,7 +135,7 @@ export const COMMON_HAPPENINGS: Happening[] = [
   { en: "had a loud fight with a neighbour", mood: "angry", hours: [3, 10], public: true },
   { en: "has a toothache", mood: "miserable", hours: [8, 30] },
   { en: "got bad news in a letter from far away", mood: "sad", hours: [12, 48] },
-  { en: "it is a public holiday with games in the arena", mood: "festive", hours: [8, 20], public: true },
+  { en: "spent the day at the games in the arena", mood: "festive", hours: [6, 14] },
   { en: "it is terribly hot today", mood: "lazy", hours: [6, 12] },
   { en: "lost something important and cannot find it", mood: "anxious", hours: [3, 16] },
   { en: "someone gave them an unexpected gift", mood: "happy", hours: [4, 16] },

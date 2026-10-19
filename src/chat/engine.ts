@@ -285,10 +285,12 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
       const n = (said.get(m.from) ?? 0) + 1;
       said.set(m.from, n);
       return n <= (natureOf(m.from, meta)?.burst ?? 4);
-    })
-    .slice(0, members.length > 1 ? 8 : 5);
+    });
+  // a few messages for the live talk; someone catching up later has their own limit (groupCaps), not counted here
+  let live = 0;
+  const capped = drafts.filter((m) => scene?.later.includes(m.from) || ++live <= (members.length > 1 ? 8 : 5));
   // photos by each sender's habit (what they sent here and in the group counts)
-  const kept = photoHabits(scene ? groupCaps(drafts, scene, meta) : drafts, meta, [thread, ...(ctx.group && ctx.group.id !== thread.id ? [ctx.group] : [])], ctx.now);
+  const kept = photoHabits(scene ? groupCaps(capped, scene, meta) : capped, meta, [thread, ...(ctx.group && ctx.group.id !== thread.id ? [ctx.group] : [])], ctx.now);
   const vetted = await vetAll(kept, ctx, deps);
   // each message arrives after the one before it: a pause, then the typing; a sleeper answers when awake.
   // In a group, someone not around catches up on their own time, without holding up the others.

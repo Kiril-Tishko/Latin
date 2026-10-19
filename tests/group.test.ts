@@ -117,3 +117,22 @@ describe("the short listings of what was said", () => {
     expect(p).toContain("Iūlia: [voice message] Valē!");
   });
 });
+
+describe("echoing the learner", () => {
+  it("lets someone write back a word the learner just wrote, in the same form, without a rewrite", async () => {
+    let calls = 0;
+    const ask = async <T,>(): Promise<T> => {
+      calls++;
+      return (calls === 1 ? { messages: [{ from: "lucius", la: "Carmen?! Ō!", en: "A poem?! Oh!" }] } : { messages: [{ la: "Ō!", en: "Oh!" }] }) as T;
+    };
+    const t: Thread = { ...newThread("lucius", "dm"), messages: [{ id: "a", from: "me", la: "Carmen tuum lēgī.", at: T }] };
+    const reply = await writeReply(t, meta, ctxAt(T), { ask, opts: {}, lex, r: seeded(1) }, timingFor([who("lucius")], T, seeded(1)));
+    expect(reply.messages[0].la).toBe("Carmen?! Ō!");
+    expect(calls).toBe(1);
+    // the reading of the learner's words is certain only about the words it knows
+    let prompt = "";
+    await writeReply(t, meta, ctxAt(T), { ask: async <T,>(p: string): Promise<T> => ((prompt = p), { messages: [] } as T), opts: {}, lex, r: seeded(1) }, timingFor([who("lucius")], T, seeded(1)));
+    expect(prompt).toContain("a word it does not know may well be correct Latin the learner learned elsewhere");
+    expect(prompt).toContain("A word the learner wrote themselves may be written back to them in the same form");
+  });
+});

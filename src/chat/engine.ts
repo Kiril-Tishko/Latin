@@ -148,9 +148,14 @@ export const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+
  */
 export async function vetAll<T extends Draft>(drafts: T[], ctx: PromptCtx, deps: Deps, texting = true): Promise<(T & { newWords?: string[] })[]> {
   const out: (T & { newWords?: string[] })[] = drafts.map((d) => ({ ...d, la: withMacrons(clean(d.la), deps.lex), en: clean(d.en) }));
-  // one or two new words a person used in a strong moment, each with its meaning, are theirs to use
+  // one or two new words a person used in a strong moment, each with its meaning, are theirs to use;
+  // so are the words the learner just wrote, echoed back in the same form. Only when unknown words are the one issue.
+  const echoed = (w: string) => !!ctx.echo?.has(plainWord(w));
   const glossed = (d: T, v: ReturnType<typeof vetMessage>) =>
-    !!d.gloss && v.unknown.length <= 2 && v.issues.length === 1 && v.unknown.every((w) => Object.keys(d.gloss!).some((g) => plainWord(g) === plainWord(w)));
+    v.issues.length === 1 &&
+    v.unknown.length > 0 &&
+    v.unknown.every((w) => echoed(w) || Object.keys(d.gloss ?? {}).some((g) => plainWord(g) === plainWord(w))) &&
+    v.unknown.filter((w) => !echoed(w)).length <= 2;
   const bad = out.map((d, i) => ({ i, v: vetMessage(d.la, deps.lex, ctx.seen) })).filter((x) => !x.v.ok && out[x.i].la && !glossed(out[x.i], x.v));
   if (bad.length) {
     try {
@@ -291,7 +296,7 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   const capped = drafts.filter((m) => scene?.later.includes(m.from) || ++live <= (members.length > 1 ? 8 : 5));
   // photos by each sender's habit (what they sent here and in the group counts)
   const kept = photoHabits(scene ? groupCaps(capped, scene, meta) : capped, meta, [thread, ...(ctx.group && ctx.group.id !== thread.id ? [ctx.group] : [])], ctx.now);
-  const vetted = await vetAll(kept, ctx, deps);
+  const vetted = await vetAll(kept, { ...ctx, echo: new Set(burst.join(" ").match(/\p{L}+/gu)?.map(plainWord) ?? []) }, deps);
   // each message arrives after the one before it: a pause, then the typing; a sleeper answers when awake.
   // In a group, someone not around catches up on their own time, without holding up the others.
   let t = first.t.startAt;

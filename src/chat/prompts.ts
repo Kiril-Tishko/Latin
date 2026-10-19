@@ -6,6 +6,7 @@ import { emojiList } from "./emoji";
 import { PHOTO_BY_ID, photosFor } from "../content/photos";
 import { GROUP, PEOPLE } from "../content/people";
 import { SKILLS } from "../latin/skills";
+import { stripMarks } from "../latin/text";
 import type { Me } from "../trainer/progress";
 import { Life, localTime, moodText, partOfDay, statusAt } from "./life";
 import { groupMayWrite, paceLine, paceNow, paceOf } from "./pace";
@@ -34,6 +35,8 @@ export interface PromptCtx {
   minds?: Record<string, Mind>;
   /** Fresh pictures may be made now (a few a day). */
   canMake?: boolean;
+  /** Words the learner just wrote (plain forms): the people may echo them back. */
+  echo?: Set<string>;
 }
 
 // ------------------------------------------------------------ language
@@ -65,9 +68,13 @@ export function rulesBlock(seen: Set<string>): string {
 }
 
 export function languageBlock(ctx: PromptCtx, texting = true): string {
+  // small common words that are not the learner's (not "est" once it is listed)
+  const listed = new Set(ctx.words.flatMap((w) => w.forms.map((f) => stripMarks(f).toLowerCase())));
+  const small = ["est", "sunt", "cum", "mihi", "tibi", "hic", "iam", "sī", "ut", "valdē"].filter((w) => !listed.has(stripMarks(w)));
   return `LANGUAGE: strict, because the learner is a beginner and must understand every word.
 - Write in Latin with long marks (ā ē ī ō ū) exactly as in the lists.
-- Use ONLY the words and forms listed here. Nothing else, not even small common words (est, sunt, cum, mihi, tibi, hic, iam, sī, ut, valdē…) unless they are listed. Names from the list are fine; other names only if a person's own.${texting ? `
+- Use ONLY the words and forms listed here. Nothing else, not even small common words (${small.join(", ")}…). Names from the list are fine; other names only if a person's own.${texting ? `
+- A word the learner wrote themselves may be written back to them in the same form, as people echo each other.` : ""}${texting ? `
 - Except in a strong moment (love, rage, an insult, grief, a joke that needs it): then a message may carry one or two other simple Latin words, each given with its meaning in the message's "gloss". Not in every message: rarely, when it matters.` : ""}
 - If you cannot say something with these words, say something simpler, leave it out, or let an emoji say it. Emoji are welcome and carry feelings the words cannot.
 - Roman emoji drawn for this tabula, written as codes exactly like this, never inside a word: ${emojiList()}. Use them now and then, when they fit, like any emoji.
@@ -361,7 +368,7 @@ export function groupLately(thread: Thread, meta: Meta, ctx: PromptCtx): string 
 /** The learner's last message as the grammar engine reads it, and how to take a mistake: literally, as a Roman would. */
 export function literalBlock(literal: string): string {
   if (!literal) return "";
-  return `HOW THE LEARNER'S LAST MESSAGE READS, word by word (the site's grammar engine; it is certain):
+  return `HOW THE LEARNER'S LAST MESSAGE READS, word by word (the site's grammar engine: certain about the words it knows; a word it does not know may well be correct Latin the learner learned elsewhere, so take it as meant and never mock it for that):
 ${literal}
 Read it LITERALLY, as a Roman would. If a mistake makes it say something other than they meant (a wrong ending makes the water drink them, a wrong person makes someone else do it, a wrong word means something else), react to what it literally says, in character: amused, puzzled, alarmed or teasing («Aqua tē bibit?! 😂»), and then maybe go on with what they meant. Never explain the grammar or correct them like a teacher. When a slip changes nothing (a missing long mark, a small spelling slip), simply answer.`;
 }

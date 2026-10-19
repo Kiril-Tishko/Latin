@@ -536,6 +536,14 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   (src/chat/vet.ts: unknown words, forms and constructions not met, the engine's
   grammar checks); one rewrite is asked for (`vetAll`), and what still slips is
   kept with its new words marked. Long marks are put back (`withMacrons`).
+  A word the learner just wrote may be echoed back in the same form
+  (`PromptCtx.echo`: no rewrite for it, though it is still offered to their
+  dictionary); «sunt» waits for its own rule (`v.sunt`, Lesson V), «possunt»
+  comes with the plural. The literal reading of the learner's message is
+  certain only about the words the engine knows: a word it does not know may
+  be correct Latin learned elsewhere, never mocked for that. The rules not
+  learned yet are named as constructions, not as banned words (models had
+  read "Rōmam, Rōmae: a city needs no in" as banning the forms).
 - Lives (src/chat/life.ts): `lifeNow` rolls a mood (slightly / plainly /
   extremely, by the person's swing) and maybe a happening (their own, an everyday
   one, or now and then an odd one) and keeps them for hours; the profile shows
@@ -552,7 +560,11 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   Goals (`Meta.goals`, `goalsOf`: each friend's `wants` at first; `goalsLine`
   in every person block with ids): Claude reports "goals" (a step, done,
   dropped, or a new want; four open at most); done or dropped goes on the
-  timeline. The timeline (`Meta.world.timeline`, 60 kept, merged by id) is
+  timeline. What they do goes on it too (`applyDeeds`: a storyline begun or
+  ended, someone leaving, joining or thrown out of a group, a group started,
+  a block, going away, someone new joining), each known to those who would
+  know. A happening's mood keeps coming back while it lasts (`eventMood`: a
+  late ship keeps Claudia anxious). The timeline (`Meta.world.timeline`, 60 kept, merged by id) is
   the world's shared history, shown to a chat only as far as its people know
   of it (`timelineBlock`, `knowsOf`), all of it with who knows in the
   own-writing prompt and the brief; after four quiet days the own-writing
@@ -655,7 +667,10 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   chat, and flags: `secret`, `untrue` (believed but false), `done` (settled),
   `outdated`. `recall` picks for a prompt what weighs, what is recent, what is
   open (promises, plans, fights), and what the conversation touches (its
-  people, its chat, its words); `prune` keeps 80, the most salient. Replies and
+  people, its chat, its words), and beside what they were told in the last
+  three days, a couple of their own memories of the same people (so a
+  two-faced compliment can be caught: "he called Lūcius a bad poet to me");
+  `prune` keeps 80, the most salient. Replies and
   their own writing return `remember` (per person: in a group each may
   remember it differently), `settled`, `outdated`, and `tell` (someone passes
   something on out of the learner's sight; it may be garbled or a lie;
@@ -755,13 +770,15 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   stands with the learner, 0-10, in six levels (warmth, trust, respect,
   desire, hurt, interest: `Bond.lv` as at `lvAt`). Claude reports changes in
   "bond", by small steps (±1, ±2 what matters, ±3 a shock; `stepLevels`):
-  growth has a daily limit (warmth 3, trust and respect 2, interest 3, desire
+  growth has a daily limit (warmth, trust, respect and interest 2, desire
   the person's `fall`: a crush takes days, at each one's pace), a fall is
   sudden, and real time does the rest (`levelsNow`: hurt heals at `forgive` a
   day, interest returns to their usual after two days apart, warmth and desire
   fade slowly after a week). Someone never measured shows NOT SET YET in the
-  prompt, and Claude's "levels" set them once, read from how they feel and
-  what happened (the live friends had a week of story before levels existed);
+  prompt, and Claude's "levels" set them once (where they stood just before
+  that moment), read from how they feel and what happened (the live friends
+  had a week of story before levels existed), within four of where their
+  nature starts (`FIRST_REACH`: first impressions are not extremes);
   after that only steps move them. `standingLine` puts them in every person
   block in words ("desire 6 (falling for)"); the routine's sheets show them
   without asking. They change the pace (`bondPace`, via `paceOf(id, meta,
@@ -784,7 +801,12 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   `groupCaps`: someone not around sends two messages at most (`CATCH_UP`), a
   quiet one (talk under 0.3: Gāius) one, unless named. Someone not around is
   scheduled on their own clock, from when they read it: before, a sleeper's
-  line held up every message after it until morning. `tests/group.test.ts`.
+  line held up every message after it until morning. Not everyone looks at
+  the same minute (`timingFor`): after the first two readers of a group
+  message, most of those who would read it at once read it 10 to 90 minutes
+  later (the experience test's welcome came as a chorus of four in a
+  minute). The live talk keeps eight messages; a latecomer's are not counted
+  in it. `tests/group.test.ts`.
 - Freedom (src/chat/world.ts): the persona text describes people, not a plot
   ("BE THEM"), and `CAN_DO` lists what they may do, never must; Claude chooses.
   Besides messages a reply or their own writing may carry `acts` (block /

@@ -31,6 +31,8 @@ export const BURST_GAP = 30 * 60_000;
 export const BURST_MAX = 4;
 /** The most messages in a row in a group's talk among themselves (a lively stretch among five). */
 export const GROUP_RUN = 14;
+/** The most messages in one turn of their own writing, in all chats. */
+export const OWN_MAX = 20;
 /** Old messages that no longer count as repeating oneself, or a photo as sent lately. */
 export const REPEAT_DAYS = 14;
 export const PHOTO_DAYS = 21;

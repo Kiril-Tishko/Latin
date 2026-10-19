@@ -44,6 +44,26 @@ describe("each person's memory: weighted, recalled when it matters", () => {
     expect(got).not.toContain("Kiril slept a lot on Tuesday");
   });
 
+  it("puts what someone was told lately beside what they know themselves of the same people", () => {
+    const mind: Mind = {
+      id: "iulia",
+      memories: [
+        // his secret to her, two days ago, small among weightier things
+        mem("Cyrillus told me, only me: Lūcius is a bad poet", T0 - 2 * DAY, { weight: 2, about: ["me", "lucius"], secret: true }),
+        ...Array.from({ length: 3 }, (_, i) => mem(`something weighty ${i}`, T0 - DAY, { weight: 5 })),
+        // what Lūcius told her this morning
+        mem("Your foreigner wrote to me that I am a great poet!", T0 - 3600_000, { weight: 4, about: ["me", "lucius"], from: "lucius" }),
+      ],
+      updatedAt: 0,
+    };
+    const got = recall(mind, { now: T0, with: ["me", "iulia"], chat: "iulia", text: "", k: 4 }).map((m) => m.text);
+    expect(got).toContain("Your foreigner wrote to me that I am a great poet!");
+    expect(got).toContain("Cyrillus told me, only me: Lūcius is a bad poet");
+    // with nothing told lately, nothing extra
+    expect(got).toHaveLength(5);
+    expect(recall({ ...mind, memories: mind.memories.slice(0, 4) }, { now: T0, with: ["me"], chat: "iulia", text: "", k: 3 })).toHaveLength(3);
+  });
+
   it("keeps what matters when there are too many, and merges two devices' copies", () => {
     const many = [mem("never forgotten", T0 - 300 * DAY, { weight: 5 }), ...Array.from({ length: 30 }, (_, i) => mem(`small thing ${i}`, T0 - i * 3600_000, { weight: 1 }))];
     const kept = prune(many, T0, 10);

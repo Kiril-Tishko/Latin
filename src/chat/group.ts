@@ -73,6 +73,7 @@ export function whyShort(why: string): string {
   if (away) return `away (${away})`;
   if (busy) return /in between/.test(why) ? `busy (${busy}), looking in between` : `busy (${busy})`;
   if (/away from their tablet/.test(why)) return "free, back at their tablet in a few minutes";
+  if (/not looking at their tablet/.test(why)) return "not looking at their tablet just then";
   return "free";
 }
 

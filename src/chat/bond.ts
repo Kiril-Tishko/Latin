@@ -24,7 +24,9 @@ export type Levels = Record<Dim, number>;
 export const NEUTRAL: Levels = { warmth: 5, trust: 5, respect: 5, desire: 0, hurt: 0, interest: 5 };
 
 /** How much a level may grow in one Rome day, at most (desire: the person's own `fall`). Falling is never limited. */
-const DAILY: Record<Exclude<Dim, "desire" | "hurt">, number> = { warmth: 3, trust: 2, respect: 2, interest: 3 };
+const DAILY: Record<Exclude<Dim, "desire" | "hurt">, number> = { warmth: 2, trust: 2, respect: 2, interest: 2 };
+/** How far a first measure may be from where their nature starts (first impressions are not extremes). */
+export const FIRST_REACH = 4;
 /** One change at most: ±1 most things, ±2 what matters, ±3 a shock. */
 export const STEP = 3;
 /** The most ties among the people kept (the newest). */
@@ -158,7 +160,8 @@ export function applyBondChanges(meta: Meta, changes: BondChange[], now: number)
     const now0 = standing(c.who, { ...meta, bonds }, now);
     let lv = now0.lv;
     // a first measure sets them where they are (a week of history may lie behind it); later "levels" are ignored: only steps move them
-    if (!now0.set && c.levels) for (const d of DIMS) if (c.levels[d] !== undefined) lv = { ...lv, [d]: clamp(c.levels[d]!) };
+    if (!now0.set && c.levels)
+      for (const d of DIMS) if (c.levels[d] !== undefined) lv = { ...lv, [d]: clamp(Math.max(now0.lv[d] - FIRST_REACH, Math.min(now0.lv[d] + FIRST_REACH, c.levels[d]!))) };
     let gain = old.gain;
     if (c.delta) ({ lv, gain } = stepLevels(lv, now0.set ? old.gain : undefined, c.delta, now, heartOf(c.who, meta).fall));
     bonds[c.who] = { ...old, lv, lvAt: now, ...(gain ? { gain } : {}), updatedAt: now };

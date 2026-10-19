@@ -5,7 +5,7 @@ import { applyFeelings, refreshLives, writeReply } from "../src/chat/engine";
 import { actaPrompt } from "../src/chat/acta";
 import { MemoryDraft } from "../src/chat/mind";
 import { clip, Meta, mergeWorld, newMeta, newThread, Thread } from "../src/chat/model";
-import { deedsOf } from "../src/chat/world";
+import { applyDeeds, deedsOf } from "../src/chat/world";
 import { ownPrompt, replyPrompt } from "../src/chat/prompts";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../src/content/people";
 import { allowedWords, chatEntries, chatLexicon, nameEntry } from "../src/chat/words";
@@ -209,5 +209,31 @@ describe("their texts, kept whole", () => {
     const d = deedsOf({ drama: [{ id: "taurus", en: "x ".repeat(400), who: ["me", "iulia", "ghost"] }] }, everyone, everyone);
     expect(d.dramas[0].who).toEqual(["me", "iulia"]);
     expect(d.dramas[0].en.length).toBeLessThanOrEqual(600);
+  });
+});
+
+describe("what they do goes on the timeline", () => {
+  it("records a storyline begun and ended, someone leaving a group, a block, each known to those who would know", () => {
+    const meta = newMeta();
+    const threads = Object.fromEntries([...PEOPLE.map((p) => [p.id, newThread(p.id, "dm")]), [GROUP.id, newThread(GROUP.id, "group")]]);
+    const deeds = deedsOf(
+      {
+        acts: [{ who: "lucius", do: "leave" }, { who: "gaius", do: "block" }],
+        drama: [{ id: "debt", en: "Marcus owes a bookmaker", who: ["marcus"], knows: ["marcus", "lucius"] }],
+      },
+      everyone,
+      everyone,
+    );
+    applyDeeds(meta, threads, deeds, T0, GROUP.id);
+    const tl = meta.world!.timeline!;
+    expect(tl.find((e) => e.en === "Marcus owes a bookmaker")).toMatchObject({ knows: ["marcus", "lucius"] });
+    expect(tl.find((e) => e.en.startsWith("Lūcius left the group"))!.knows).toEqual(PEOPLE.map((p) => p.id));
+    expect(tl.find((e) => e.en === "Gāius blocked the learner")!.knows).toEqual(["gaius"]);
+    // over: known to those who knew of it
+    applyDeeds(meta, threads, deedsOf({ drama: [{ id: "debt", over: true }] }, everyone, everyone), T0 + DAY, GROUP.id);
+    expect(meta.world!.timeline!.at(-1)).toMatchObject({ en: "over: Marcus owes a bookmaker", knows: ["marcus", "lucius"] });
+    // the timeline shows it only to those who know
+    expect(timelineBlock(meta, ["iulia"], T0 + DAY)).not.toContain("bookmaker");
+    expect(timelineBlock(meta, ["lucius"], T0 + DAY)).toContain("over: Marcus owes a bookmaker");
   });
 });

@@ -220,6 +220,7 @@ export function applyHappen(meta: Meta, hs: Happen[], now: number): MemoryDraft[
       event: h.en,
       eventUntil: now + h.hours * HOUR,
       eventAt: now,
+      ...(h.mood ? { eventMood: h.mood } : {}),
       ...(h.public ? { public: true } : {}),
       ...(heavy ? { heavy: true } : {}),
       recent: [h.en, ...(life?.recent ?? [])].slice(0, 4),

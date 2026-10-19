@@ -9,9 +9,10 @@ import { PEOPLE } from "../content/people";
 import { knownEmojiOnly } from "./emoji";
 import { Rand } from "./life";
 import { GROUP } from "../content/people";
-import { clip, Drama, GroupInfo, groupMembers, Meta, Msg, msgId, newThread, SYS, Thread, whoOf } from "./model";
+import { clip, Drama, GroupInfo, groupMembers, groupName, Meta, Msg, msgId, newThread, SYS, Thread, whoOf } from "./model";
 import { inventStranger, NewPerson, Stranger } from "./strangers";
 import { Tell, tellsOf } from "./mind";
+import { addEvent, WorldEvent } from "./lives";
 
 const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+/g, " ").trim());
 
@@ -192,6 +193,9 @@ export function applyDeeds(meta: Meta, threads: Record<string, Thread>, deeds: D
   let at = now;
   const tick = () => (at += 1500);
   const byName = (name: string) => Object.values(meta.strangers).find((s) => s.name.toLowerCase() === name.toLowerCase())?.id ?? (whoOf(name, meta) ? name : undefined);
+  // what goes on the timeline (chat/lives.ts), known to those who would know
+  const events: Omit<WorldEvent, "id">[] = [];
+  const note = (en: string, who: string[], knows: string[]) => events.push({ at: now, en, who, knows: [...new Set(knows)].filter((k) => k !== "me") });
   for (const a of deeds.acts) {
     const who = nameOf(meta, a.who);
     const g = a.group ?? groupId;
@@ -199,6 +203,7 @@ export function applyDeeds(meta: Meta, threads: Record<string, Thread>, deeds: D
     switch (a.do) {
       case "block":
         world.blocked = { ...world.blocked, [a.who]: now };
+        note(`${who} blocked the learner`, [a.who], [a.who]);
         break;
       case "unblock": {
         const { [a.who]: _, ...rest } = world.blocked ?? {};
@@ -209,12 +214,14 @@ export function applyDeeds(meta: Meta, threads: Record<string, Thread>, deeds: D
         if (inGroup.includes(a.who)) {
           setMembers(g, inGroup.filter((id) => id !== a.who));
           push(g, sysLine(`${who} left the group.`, a.who, tick()));
+          note(`${who} left the group «${groupName(meta, g)}»`, [a.who], inGroup);
         }
         break;
       case "join":
         if (!inGroup.includes(a.who)) {
           setMembers(g, [...inGroup, a.who]);
           push(g, sysLine(`${who} joined the group.`, a.who, tick()));
+          note(`${who} joined the group «${groupName(meta, g)}» again`, [a.who], [...inGroup, a.who]);
         }
         break;
       case "add": {
@@ -234,6 +241,7 @@ export function applyDeeds(meta: Meta, threads: Record<string, Thread>, deeds: D
         } else if (id && id !== "me" && inGroup.includes(id) && inGroup.includes(a.who)) {
           setMembers(g, inGroup.filter((x) => x !== id));
           push(g, sysLine(`${who} removed ${nameOf(meta, id)}.`, a.who, tick()));
+          note(`${who} threw ${nameOf(meta, id)} out of the group «${groupName(meta, g)}»`, [a.who, id], inGroup);
         }
         break;
       }
@@ -251,6 +259,7 @@ export function applyDeeds(meta: Meta, threads: Record<string, Thread>, deeds: D
         const list = [a.who, ...a.with!.filter((x) => x !== "me")];
         groups[id] = { name: a.text!, members: list, by: a.who, at: now, updatedAt: now };
         push(id, sysLine(`${who} created the group «${a.text}» and added you.`, a.who, tick()));
+        note(`${who} started a group «${a.text}» with the learner and ${list.filter((x) => x !== a.who).map((x) => nameOf(meta, x)).join(", ") || "nobody else"}`, [a.who], list);
         let t = tick();
         for (const m of a.messages ?? []) push(id, { id: msgId(), from: m.from, la: m.la, en: m.en, at: (t += 6000 + m.la.length * 90), src: "own" });
         break;
@@ -266,6 +275,7 @@ export function applyDeeds(meta: Meta, threads: Record<string, Thread>, deeds: D
         break;
       case "away":
         world.away = { ...world.away, [a.who]: { until: now + a.hours! * HOUR, where: a.text ?? "away" } };
+        note(`${who} went away (${a.text ?? "away"})`, [a.who], [a.who]);
         break;
       case "back": {
         const { [a.who]: _, ...rest } = world.away ?? {};
@@ -280,14 +290,19 @@ export function applyDeeds(meta: Meta, threads: Record<string, Thread>, deeds: D
     if (inGroup.includes(s.id)) continue;
     setMembers(groupId, [...inGroup, s.id]);
     push(groupId, sysLine(s.link ? `${nameOf(meta, s.link.to)} added ${s.name}.` : `${s.name} joined the group.`, s.link?.to ?? s.id, tick()));
+    note(`${s.name} came into their lives and joined the group «${groupName(meta, groupId)}»`, [s.id], [...inGroup, s.id]);
   }
   // storylines: new ones start, going ones move on, finished ones end
   const dramas = new Map((world.dramas ?? []).map((d) => [d.id, d]));
   for (const d of deeds.dramas) {
-    if (d.over) dramas.delete(d.id);
-    else {
+    const was = dramas.get(d.id);
+    if (d.over) {
+      dramas.delete(d.id);
+      if (was) note(`over: ${was.en}`, was.who.filter((x) => x !== "me"), was.knows ?? was.who);
+    } else {
       const old = dramas.get(d.id);
       const knows = d.knows ?? old?.knows;
+      if (!old) note(d.en, d.who.filter((x) => x !== "me"), knows ?? d.who);
       dramas.set(d.id, { id: d.id, en: d.en || old?.en || "", who: d.who.length ? d.who : old?.who ?? [], ...(knows ? { knows } : {}), since: old?.since ?? now, updatedAt: now } satisfies Drama);
     }
   }
@@ -299,5 +314,6 @@ export function applyDeeds(meta: Meta, threads: Record<string, Thread>, deeds: D
   world.groups = groups;
   world.updatedAt = now;
   meta.world = world;
+  for (const e of events) addEvent(meta, e);
   return [...changed.values()];
 }

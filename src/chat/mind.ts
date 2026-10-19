@@ -118,7 +118,7 @@ export interface RecallCtx {
 export function recall(mind: Mind | undefined, c: RecallCtx): Memory[] {
   if (!mind) return [];
   const kw = keywords(c.text);
-  return mind.memories
+  const scored = mind.memories
     .filter((m) => !m.outdated)
     .map((m) => {
       let s = salience(m, c.now);
@@ -128,10 +128,17 @@ export function recall(mind: Mind | undefined, c: RecallCtx): Memory[] {
       for (const w of keywords(m.text)) if (kw.has(w)) hits++;
       return { m, s: s + Math.min(3, hits) };
     })
-    .sort((a, b) => b.s - a.s)
-    .slice(0, c.k)
+    .sort((a, b) => b.s - a.s);
+  const top = scored.slice(0, c.k).map((x) => x.m);
+  // side by side: what they were told lately, with what they know themselves of the same people (two that do not fit
+  // may catch someone out: he called Lūcius a bad poet to me, and a great one to his face); a couple more at most
+  const told = top.filter((m) => m.from !== "saw" && c.now - m.at < 3 * DAY);
+  const others = (m: Memory) => m.about.filter((a) => a !== "me");
+  const beside = scored
     .map((x) => x.m)
-    .sort((a, b) => a.at - b.at);
+    .filter((m) => !top.includes(m) && told.some((t) => t.id !== m.id && others(t).some((a) => others(m).includes(a) || m.about.includes(a))))
+    .slice(0, 2);
+  return [...top, ...beside].sort((a, b) => a.at - b.at);
 }
 
 const dayStamp = (t: number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/Rome" });

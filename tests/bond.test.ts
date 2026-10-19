@@ -39,16 +39,16 @@ describe("where each of them stands with the learner: levels that move like real
   it("moves by small steps, grows no faster than a day allows, and falls at once", () => {
     const cur = { ...NEUTRAL };
     let { lv, gain } = stepLevels(cur, undefined, { warmth: 9, trust: -9, desire: 3 }, T0, 1.5);
-    expect(lv.warmth).toBe(8); // +3 at most in one step
+    expect(lv.warmth).toBe(7); // +3 at most in one step, and +2 a day
     expect(lv.trust).toBe(2); // lost at once, but −3 at most per step
     expect(lv.desire).toBe(1.5); // she may fall only 1.5 a day
     ({ lv, gain } = stepLevels(lv, gain, { warmth: 2, desire: 2, hurt: 3 }, T0 + 3600_000, 1.5));
-    expect(lv.warmth).toBe(8); // the day's warmth is spent
+    expect(lv.warmth).toBe(7); // the day's warmth is spent
     expect(lv.desire).toBe(1.5);
     expect(lv.hurt).toBe(3); // a hurt has no daily limit
     // a new day, a new allowance
     ({ lv } = stepLevels(lv, gain, { warmth: 1, desire: 1 }, T0 + DAY, 1.5));
-    expect([lv.warmth, lv.desire]).toEqual([9, 2.5]);
+    expect([lv.warmth, lv.desire]).toEqual([8, 2.5]);
   });
 
   it("makes a crush take days: Lūcius falls fast, Gāius hardly at all, however often Claude says so", () => {
@@ -168,7 +168,10 @@ describe("feelings change how they write first", () => {
     const meta = newMeta();
     // until measured, their own pace
     expect(paceOf("iulia", meta, T0)).toEqual(PERSON_BY_ID.get("iulia")!.pace);
-    applyBondChanges(meta, [{ who: "iulia", levels: { hurt: 9 } }], T0);
+    // a first measure stays within reach of their nature (hurt 4 at most), then a shock
+    applyBondChanges(meta, [{ who: "iulia", levels: { hurt: 9 }, delta: { hurt: 3 } }], T0);
+    expect(standing("iulia", meta, T0).lv.hurt).toBe(7);
+    applyBondChanges(meta, [{ who: "iulia", delta: { hurt: 2 } }], T0);
     const p = paceOf("iulia", meta, T0 + 3600_000);
     expect(p.patience).toBe(0);
     expect(mayWrite(p, { unanswered: 0, lastAt: 0, learnerAt: T0 - DAY, seen: false }, T0 + 3600_000).ok).toBe(false);

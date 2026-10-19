@@ -111,6 +111,8 @@ export interface Life {
   eventUntil?: number;
   /** When it began. */
   eventAt?: number;
+  /** The mood it brings, which keeps coming back while it lasts. */
+  eventMood?: string;
   /** It is known around them (see Happening.public). */
   public?: boolean;
   /** A big thing in their life: something comes after it (`then`). */
@@ -315,16 +317,17 @@ export function lifeNow(spec: LifeSpec, prev: Life | undefined, now: number, r: 
     const fresh = pool.filter((p) => !recent.includes(p.en));
     h = pick(r, fresh.length ? fresh : pool);
   }
-  const mood = h?.mood && r() < 0.8 ? h.mood : r() < 0.12 ? pick(r, ANY_MOODS) : weightedPick(r, spec.moods);
   const going = eventGoes ? prev! : undefined;
+  // a happening's mood: when it begins, and most of the time while it lasts (a late ship keeps her anxious)
+  const mood = h?.mood && r() < 0.8 ? h.mood : going?.eventMood && r() < 0.6 ? going.eventMood : r() < 0.12 ? pick(r, ANY_MOODS) : weightedPick(r, spec.moods);
   const life: Life = {
     mood,
     level: rollLevel(r, spec.swing),
     moodUntil: now + between(r, [2, 9]) * HOUR,
     ...(h
-      ? { event: h.en, eventUntil: now + between(r, h.hours) * HOUR, eventAt: now, ...(h.public ? { public: true } : {}), ...(h.heavy ? { heavy: true } : {}), ...(h.then?.length ? { then: h.then } : {}) }
+      ? { event: h.en, eventUntil: now + between(r, h.hours) * HOUR, eventAt: now, ...(h.mood ? { eventMood: h.mood } : {}), ...(h.public ? { public: true } : {}), ...(h.heavy ? { heavy: true } : {}), ...(h.then?.length ? { then: h.then } : {}) }
       : going
-        ? { event: going.event, eventUntil: going.eventUntil, ...(going.eventAt ? { eventAt: going.eventAt } : {}), ...(going.public ? { public: true } : {}), ...(going.heavy ? { heavy: true } : {}), ...(going.then ? { then: going.then } : {}) }
+        ? { event: going.event, eventUntil: going.eventUntil, ...(going.eventAt ? { eventAt: going.eventAt } : {}), ...(going.eventMood ? { eventMood: going.eventMood } : {}), ...(going.public ? { public: true } : {}), ...(going.heavy ? { heavy: true } : {}), ...(going.then ? { then: going.then } : {}) }
         : {}),
     recent: h && h.en !== prev?.event ? [h.en, ...recent].slice(0, 4) : recent,
     rolled: now,

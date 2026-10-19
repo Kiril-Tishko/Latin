@@ -188,13 +188,31 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
       What they found was fixed (an ambiguous "levels", «sunt» offered before
       its lesson, a group cap that would have cut a lively scene, unclear
       wording about stretches of talk and last tries).
-- [~] A multi-turn test over three days (a harness drives the real engine;
+- [x] A multi-turn test over three days (a harness drives the real engine;
       a fresh model plays the people at each step; a judge reads the record
       against the learner's criteria): the learner introduces himself in the
       group, tells Iūlia a secret about Lūcius, they write on their own, he
-      praises Lūcius to his face, announces in the group that he comes to
-      Rome, and they write on their own again.
-- [ ] Tuning from the judge's findings.
+      praises Lūcius to his face, announces in the group that he walks to
+      Rome, and they write on their own again. The judge: 4.3 of 5. Five
+      out of five for distinct people, surprises with consequences, secrets
+      kept, a real group, continuity across chats, message length; 4 for
+      emotions, memory, ties among them, lives, goals, the relationship with
+      the learner, the Latin, pacing; 3 for the shared timeline.
+- [x] Tuning from the steps and the judge: memories of messages a batch cap
+      cut (the cap now 20, matching the group's 14), the timeline now holds
+      what they do (storylines, leaving, groups, blocks, newcomers), what
+      someone was told lately is recalled beside their own memories of the
+      same people (the two-faced compliment), a happening's mood lasts with
+      it, a group welcome is no longer a chorus, first measures stay near
+      their nature, warmth and interest grow at most two a day, plans with
+      their day are remembered and come due; and on the way: a latecomer's
+      line no longer cut by the live cap, the arena day personal, «sunt» in
+      its lesson, the learner's words echoed, the literal reading not
+      mocking correct Latin, messages taken back marked, everyone's ids in a
+      private chat, texts cut at a word, the learner in a storyline.
+- [ ] Known limits: a memory is kept even when its message is later cut by
+      pacing (rare now); the friends' knowledge of the learner's home is
+      common knowledge from his profile.
 
 ## Notes and trade-offs
 
@@ -219,3 +237,8 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
   first-person memory of a fight, feelings, a storyline with who knows it).
   Published as v40, then v41 with the routine's memories. Next: stage 4
   (bonds).
+- 19 Oct: stages 4 (bonds), 5 (lives), 6 (the group) and 7 (pictures) done,
+  each with its tests (349 in all), smoke tests, and two single-turn checks
+  on the live chats; the seven library photos of the friends made again
+  from their portrait looks. Stage 8: a six-step test over three days,
+  judged 4.3 of 5, and the tuning above. Stages 4-8 published together.

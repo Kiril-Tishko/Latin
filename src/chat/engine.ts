@@ -11,7 +11,7 @@ import { checkAnswer, literalReading } from "../latin/facts";
 import { PHOTO_BY_ID, photoSrc } from "../content/photos";
 import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from "./life";
 import { awayNow, clip, groupIds, iBlocked, isBlocked, isGroupId, Meta, MOMENTS, Msg, msgId, Pic, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
-import { allowOwn, paceOf } from "./pace";
+import { allowOwn, OWN_MAX, paceOf } from "./pace";
 import { natureOf } from "./nature";
 import { MemoryDraft, memoriesOf, Tell, tellsOf } from "./mind";
 import { applyBondChanges, applyTieChanges, BondChange, bondChangesOf, TieChange, tieChangesOf } from "./bond";
@@ -230,6 +230,14 @@ export function timingFor(members: Who[], now: number, r: Rand = Math.random, me
     const readAt = Math.max(t.readAt, Math.min(away.until + 30 * 60_000, now + (2 + r() * 10) * 3600_000));
     return { w, t: { readAt, startAt: readAt + 20_000 + r() * 120_000, why: `they are away (${away.where}) and read it much later` } };
   });
+  all.sort((a, b) => a.t.readAt - b.t.readAt);
+  // a group: not everyone is looking at their tablet the same minute; after the first two, most read it a while later
+  if (all.length > 2)
+    for (const x of all.slice(2))
+      if (x.t.readAt - all[0].t.readAt < 10 * 60_000 && r() < 0.6) {
+        const later = (10 + r() * 80) * 60_000;
+        x.t = { readAt: x.t.readAt + later, startAt: x.t.startAt + later, why: "they were not looking at their tablet just then" };
+      }
   all.sort((a, b) => a.t.readAt - b.t.readAt);
   return { first: all[0], byId: new Map(all.map((x) => [x.w.id, x.t])) };
 }
@@ -464,7 +472,7 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
       sim.set(t.id, { ...t, messages: [...t.messages, { id: "planned", from: member.id, la: m.la, at, src: "own", ...(m.photo ? { photo: m.photo } : {}) }] });
       return true;
     })
-    .slice(0, 10);
+    .slice(0, OWN_MAX);
   // photos by each sender's habit, across all their chats
   const vetted = await vetAll(photoHabits(drafts, meta, live, ctx.now), ctx, deps);
   const last = new Map<string, number>();

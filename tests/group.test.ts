@@ -137,3 +137,18 @@ describe("echoing the learner", () => {
     expect(prompt).toContain("A word the learner wrote themselves may be written back to them in the same form");
   });
 });
+
+describe("not everyone looks at the same minute", () => {
+  it("lets the first two read a group message at once and most of the others a while later", () => {
+    // 15:00 in Rome on a Sunday-like quiet afternoon: all five free
+    const at = Date.UTC(2026, 9, 18, 13, 0);
+    let together = 0;
+    for (let i = 1; i <= 40; i++) {
+      const { byId } = timingFor(members, at, seeded(i));
+      const reads = [...byId.values()].map((w) => w.readAt).sort((a, b) => a - b);
+      together += reads.filter((x) => x - reads[0] <= AROUND).length;
+    }
+    expect(together / 40).toBeGreaterThanOrEqual(2);
+    expect(together / 40).toBeLessThan(4);
+  });
+});

@@ -254,3 +254,11 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
   reached the learner (not sent, taken back, cut by pacing) is forgotten with
   it, and only the friends know where the learner lives.
   Published as v43; both routines updated and checked against the files.
+- 19 Oct, night: pictures. Eight generators were tried on the same four scenes
+  (AI Horde: Z-Image Turbo, Qwen-Image, FLUX.1 Schnell, Krea 2; Pollinations on
+  the learner's account: Z-Image, FLUX.2 Klein, MAI Image 2.6 Flash, GPT Image
+  1 Mini, FLUX.1 Kontext from the portraits) and judged here: the learner does
+  not want to see them first. MAI Image 2.6 Flash drew Rome best, FLUX.2 Klein
+  nearly as well for a third of the price; both now make the fresh pictures,
+  AI Horde as before when there is no Pollen. The test spent the account's
+  0.25 Quest Pollen. Google AI Plus has no API, so it cannot help.

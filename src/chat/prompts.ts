@@ -57,7 +57,7 @@ export function rulesBlock(seen: Set<string>): string {
   const notYet = SKILLS.filter((s) => !seen.has(s.id)).map((s) => s.title);
   return [
     `Grammar the learner knows (build every sentence with these only):\n${met.join("\n") || "- almost nothing yet: single words and very short sentences"}`,
-    notYet.length ? `Not learned yet, so never use: ${notYet.join("; ")}.` : "",
+    notYet.length ? `Not learned yet, so never use these constructions (the words in them may still be listed for other uses): ${notYet.join("; ")}.` : "",
     "Questions are plain sentences with a question mark («Labōrās?»), or start with quid, quis, ubi, quō or cūr. The present tense only.",
   ]
     .filter(Boolean)

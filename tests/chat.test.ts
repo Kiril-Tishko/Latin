@@ -94,7 +94,7 @@ describe("the messenger's words", () => {
     expect(block).toContain("epistula / epistulae / epistulam = letter");
     expect(block).toContain("salvē = hello");
     expect(block).toContain("Marcus / Marcī / Marcum / Marce");
-    expect(block).toMatch(/Not learned yet, so never use: .*sum, es, est/);
+    expect(block).toMatch(/Not learned yet, so never use these constructions \(the words in them may still be listed for other uses\): .*sum, es, est/);
     expect(block).not.toContain("quī");
   });
 });

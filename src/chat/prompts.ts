@@ -316,7 +316,7 @@ const OUTPUT = `Reply with only JSON:
 - "re" (optional): the number (#) of the message this one answers, shown quoted above it as in any messenger. Only when it answers something that is not simply the last message: one of several things the learner said, an earlier question, a message from someone else in the group. Usually leave it out.
 ${EXTRAS}
 - "react" (optional): a reaction to the learner's last message, as people do in messengers: one emoji per person, from ${REACTIONS.join(" ")}. When it fits (a joke 😂, sweet words ❤️, news 😮, sad news 😢, thanks 🙏); often none. Rarely a reaction is the whole answer, when the message needs no words: then "messages" may be [].
-- "remember": 0-3 things worth remembering later, each for the one who remembers it, in their own words ("about": whom it is about besides themselves: "me" for the learner, others by id) (in a group each may remember the same thing differently, or only some of them notice): something new about the learner, a promise, a plan, a confession, a fight, a shared joke, a secret ("secret": true when they were asked to keep it, or it is theirs to hide). "weight": 1 a small thing, 3 worth remembering, 5 never forgotten. Small talk is not worth remembering: often [].
+- "remember": 0-3 things worth remembering later, each for the one who remembers it, in their own words ("about": whom it is about besides themselves: "me" for the learner, others by id; "until": the day a promise or plan is for) (in a group each may remember the same thing differently, or only some of them notice): something new about the learner, a promise, a plan, a confession, a fight, a shared joke, a secret ("secret": true when they were asked to keep it, or it is theirs to hide). "weight": 1 a small thing, 3 worth remembering, 5 never forgotten. Small talk is not worth remembering: often [].
 - "settled": ids of their memories that are done now (a promise kept, a plan done or dropped, a fight made up); "outdated": ids no longer true (a newer fact replaces them). Usually [].
 - "saw" (only when the learner's newest photo is attached): what it shows, a few plain English words, so they remember it.
 - "feel" (for anyone whose feelings about the learner moved now): how they feel about the learner after this, in their own words, first person, one or two sentences (English): what they would never say aloud. Feelings move slowly or suddenly, as with real people.
@@ -414,7 +414,7 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
     languageBlock(ctx),
     // photos only from those whose habit allows one now (chat/pictures.ts)
     photosBlock(members.filter((w) => photoRoom(w.id, meta, [thread, ctx.group], ctx.now) > 0), recentPhotos(thread), ctx.canMake),
-    `${OUTPUT}\nPerson ids: ${ids}${Object.keys(meta.strangers).length ? `; others by id: ${Object.values(meta.strangers).map((x) => `"${x.id}" (${x.name})`).join(", ")}` : ""}.`,
+    `${OUTPUT}\nPerson ids: ${ids}; everyone else by id (for "about", "tell", "ties", "happen"): ${[...PEOPLE.filter((p) => !members.some((w) => w.id === p.id)).map((p) => `"${p.id}" (${p.name})`), ...Object.values(meta.strangers).filter((x) => !members.some((w) => w.id === x.id)).map((x) => `"${x.id}" (${x.name})`)].join(", ")}.`,
   ]
     .filter(Boolean)
     .join("\n\n");

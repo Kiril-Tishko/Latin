@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AROUND, CATCH_UP, groupCaps, namedIn, sceneBlock, sceneOf, When } from "../src/chat/group";
 import { timingFor, writeReply } from "../src/chat/engine";
+import { ownPrompt } from "../src/chat/prompts";
 import { membersOf, newMeta, newThread, Thread } from "../src/chat/model";
 import { GROUP, PERSON_BY_ID } from "../src/content/people";
 import { allowedWords, chatEntries, chatLexicon, nameEntry } from "../src/chat/words";
@@ -96,5 +97,23 @@ describe("the group as a group: who is around, who talks, who catches up later",
     let dmPrompt = "";
     await writeReply({ ...newThread("marcus", "dm"), messages: [{ id: "d1", from: "me", la: "Salvē!", at: T }] }, meta, ctxAt(T), { ask: async <T,>(p: string): Promise<T> => ((dmPrompt = p), { messages: [] } as T), opts: {}, lex, r: seeded(3) }, timingFor([who("marcus")], T, seeded(1)));
     expect(dmPrompt).not.toContain("WHO IS AROUND");
+  });
+});
+
+describe("the short listings of what was said", () => {
+  it("show a message taken back as taken back, and a voice message or photo as such", () => {
+    const iulia: Thread = {
+      ...newThread("iulia", "dm"),
+      messages: [
+        { id: "a", from: "me", la: "Salvē!", at: T - 3600_000 },
+        { id: "b", from: "iulia", la: "Ego quoque scrībō...", at: T - 3500_000, deletedAt: T - 3490_000 },
+        { id: "c", from: "iulia", la: "Ecce!", at: T - 3400_000, photo: "iulia-figs" },
+        { id: "d", from: "iulia", la: "Valē!", at: T - 3300_000, voice: true },
+      ],
+    };
+    const p = ownPrompt([iulia, newThread(GROUP.id, "group")], meta, ctxAt(T), 1);
+    expect(p).toContain("Iūlia: Ego quoque scrībō... (taken back: the learner saw only «message deleted»)");
+    expect(p).toMatch(/Iūlia: \[photo: [^\]]+\] Ecce!/);
+    expect(p).toContain("Iūlia: [voice message] Valē!");
   });
 });

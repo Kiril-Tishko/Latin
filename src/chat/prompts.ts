@@ -346,12 +346,16 @@ export function photosBlock(people: Who[], recent: string[], canMake = false): s
 // (made pictures are new each time)
 const recentPhotos = (t: Thread) => t.messages.slice(-60).flatMap((m) => (m.photo ? [m.photo] : []));
 
+/** A message in a line: a voice message, a photo or a picture as such, and one taken back marked (the learner saw only «message deleted»). */
+const briefly = (m: Msg, now: number) =>
+  `${m.voice ? "[voice message] " : m.photo ? `[photo: ${PHOTO_BY_ID.get(m.photo)?.en ?? "a photo"}] ` : m.pic ? `${picText(m)} ` : ""}${m.la}${deletedNow(m, now) ? " (taken back: the learner saw only «message deleted»)" : ""}`;
+
 /** What was said lately in the group chat, for a private chat with one of the friends. */
 export function groupLately(thread: Thread, meta: Meta, ctx: PromptCtx): string {
   if (thread.kind !== "dm" || !ctx.group || !groupMembers(meta).includes(thread.id)) return "";
   const last = ctx.group.messages.filter((m) => m.at <= ctx.now && ctx.now - m.at < 3 * 86400000).slice(-6);
   if (!last.length) return "";
-  return `LATELY IN THE GROUP «${groupName(meta)}» (the friends and the learner together):\n${last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${m.la}`).join("\n")}`;
+  return `LATELY IN THE GROUP «${groupName(meta)}» (the friends and the learner together):\n${last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${briefly(m, ctx.now)}`).join("\n")}`;
 }
 
 /** The learner's last message as the grammar engine reads it, and how to take a mistake: literally, as a Roman would. */
@@ -441,7 +445,7 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
       // like real people: who may write here now, and who is waiting for an answer
       const who = whoOf(t.id, meta);
       const pace = group ? `  [${groupMayWrite(t, ctx.now).why}]` : who ? `  [${paceLine(who.name, paceOf(who.id, meta, ctx.now), paceNow(t, who.id, ctx.now), ctx.now, who.tz, ctx.me.name)}]` : "";
-      return `${title} [chat id "${t.id}"]${waiting ? " (has messages still on their way)" : ""}${lastMine ? `, learner last wrote ${ago(ctx.now - lastMine.at)} ago` : ""}:\n${last.length ? last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${m.la}`).join("\n") : "  (nothing yet)"}\n${pace}`;
+      return `${title} [chat id "${t.id}"]${waiting ? " (has messages still on their way)" : ""}${lastMine ? `, learner last wrote ${ago(ctx.now - lastMine.at)} ago` : ""}:\n${last.length ? last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${briefly(m, ctx.now)}`).join("\n") : "  (nothing yet)"}\n${pace}`;
     })
     .join("\n");
   return [

@@ -29,7 +29,7 @@ export interface Brief {
   /** Every allowed spelling, without long marks, lower case: a quick check of any message. */
   forms: string[];
   /** Who everyone is (without the time of day and mood, which change). */
-  people: { id: string; name: string; tz: string; wake: number; sleep: number; busy: [number, number, string][]; sheet: string; pace: Pace; burst: number }[];
+  people: { id: string; name: string; g: "m" | "f"; tz: string; wake: number; sleep: number; busy: [number, number, string][]; sheet: string; pace: Pace; burst: number; look?: string; photoRate?: string }[];
   /** Moods and happenings rolled ahead: each from its time on. */
   lives: Record<string, (Life & { from: number })[]>;
   /** The day in Rome for today and the next two days (date in Rome, YYYY-MM-DD): festivals, birthdays, news. */
@@ -90,7 +90,11 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
   const people = ids
     .map((id) => whoOf(id, meta))
     .filter((w): w is Who => !!w)
-    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now, ctx.minds), pace: paceOf(w.id, meta, ctx.now), burst: natureOf(w.id, meta)?.burst ?? 4 }));
+    .map((w) => {
+      const n = natureOf(w.id, meta);
+      // their look, for pictures of them; their photo habit (chat/pictures.ts)
+      return { id: w.id, name: w.name, g: w.g, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now, ctx.minds), pace: paceOf(w.id, meta, ctx.now), burst: n?.burst ?? 4, ...(n ? { look: n.look, photoRate: n.photos.rate } : {}) };
+    });
   const lives: Brief["lives"] = {};
   for (const id of ids) {
     const spec = specOf(id, meta);

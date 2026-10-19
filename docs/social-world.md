@@ -173,9 +173,13 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
       answer, now or when they come back.
 
 ### 7. Pictures
-- [ ] Photo habits per person.
-- [ ] One fixed look per person in every picture of them.
-- [ ] Library selfies made again with the fixed looks.
+- [x] Photo habits per person (`src/chat/pictures.ts`): often three a day
+      (Iūlia), sometimes one (Marcus, Claudia, Lūcius), rarely one in three
+      days (Gāius); enforced in replies, their own writing and the routine.
+- [x] One fixed look per person in every fresh picture of them (from the
+      portraits): named people and a selfie's sender are drawn from their
+      look; the routine's helper does the same (a test checks they agree).
+- [x] The library's seven photos of the friends made again from their looks.
 
 ### 8. Experience tests
 - [ ] Simulated multi-turn conversations, judged against the criteria

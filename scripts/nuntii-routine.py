@@ -7,7 +7,8 @@
 #   python3 nuntii.py vet    DIR DRAFT.json OUT.json   each planned message allowed (words, pace, repeats,
 #                                            photos, blocked, asleep)? OUT gets the inbox documents to save
 #   python3 nuntii.py notify DIR [new.json]  the line for the phone notification
-#   python3 nuntii.py picture ID FROM "what it shows" OUT.json   a fresh picture someone sends
+#   python3 nuntii.py picture ID FROM "what it shows" OUT.json [DIR]   a fresh picture someone sends (DIR: drawn as they look)
+#   python3 nuntii.py looks  DIR FROM "what it shows"            the prompt a picture is made from
 #   python3 nuntii.py pictures WANTED.json OUTDIR                every picture waiting to be made
 # DIR holds data/users/me/messenger.json, data/users/me/messenger/brief/now.json,
 # data/users/me/messenger/threads/*.json and data/users/me/messenger/inbox/*.json
@@ -187,6 +188,7 @@ def check(d, msgs):
 # The group keeps a rhythm of its own. Nobody repeats themselves.
 BURST_GAP = 30 * 60_000
 BURST_MAX = 4
+GROUP_RUN = 14  # the most messages in a row in a group's talk among themselves
 REPEAT_DAYS = 14
 PHOTO_DAYS = 21
 HOUR = 3600_000
@@ -261,11 +263,11 @@ def group_may_write(t, now):
     away = now - learner_at
     allowed = 4 if away < 24 * HOUR else 2 if away < 72 * HOUR else 1
     if today >= allowed:
-        return False, f"the group has talked enough today ({today} of {allowed})"
+        return False, f"the group has talked enough today ({today} of {allowed} stretches of talk; a stretch: messages less than half an hour apart)"
     last = started[-1][-1]["at"] if started else 0
     if now - last < 3 * HOUR:
         return False, "they talked in the group less than three hours ago"
-    return True, f"the group may talk ({today} of {allowed} today)"
+    return True, f"the group may talk now ({today} of {allowed} stretches of talk today; a stretch: messages less than half an hour apart)"
 
 
 def plain_words(text):
@@ -288,6 +290,42 @@ def photo_sent_lately(t, photo, now):
     return any(m.get("photo") == photo and now - m.get("at", 0) < PHOTO_DAYS * 24 * HOUR for m in t.get("messages", []))
 
 
+# each sends photos by their habit (src/chat/pictures.ts): (how many, in how many hours)
+PHOTO_LIMIT = {"often": (3, 24), "sometimes": (1, 24), "rarely": (1, 72)}
+
+
+def photo_room(brief, threads, who, now):
+    """how many more photos someone may send now, by their habit (what they sent in every chat counts)"""
+    rate = next((p.get("photoRate") for p in (brief or {}).get("people", []) if p.get("id") == who), None) or "sometimes"
+    n, hours = PHOTO_LIMIT.get(rate, PHOTO_LIMIT["sometimes"])
+    sent = {m.get("id") for t in threads.values() for m in t.get("messages", []) if m.get("from") == who and (m.get("photo") or m.get("pic")) and m.get("at", 0) <= now and now - m.get("at", 0) < hours * HOUR}
+    return max(0, n - len(sent))
+
+
+VOWELS = {"a": "[aā]", "e": "[eē]", "i": "[iī]", "o": "[oō]", "u": "[uū]"}
+
+
+def name_re(name):
+    return re.compile(r"(?<![^\W\d_])" + "".join(VOWELS.get(c.lower(), re.escape(c)) for c in plain(name)) + r"(?![^\W\d_])", re.I)
+
+
+def with_looks(text, by, brief):
+    """a fresh picture's prompt with the people in it as they look (src/chat/pictures.ts): the named ones, a selfie's sender"""
+    people = [p for p in (brief or {}).get("people", []) if p.get("look")]
+    shown, out = [], text
+    for p in people:
+        if not name_re(p["name"]).search(out):
+            continue
+        shown.append(p)
+        out = name_re(p["name"] + "'s").sub("his" if p.get("g") == "m" else "her", out)
+        out = name_re(p["name"]).sub("the man" if p.get("g") == "m" else "the woman", out)
+    sender = next((p for p in people if p["id"] == by), None)
+    if re.search(r"selfie", text, re.I) and sender and sender not in shown:
+        shown.insert(0, sender)
+    looks = [p["look"] for p in shown[:2]]
+    return f"{'; and '.join(looks)}. {out}" if looks else out
+
+
 def burst_of(brief, pid):
     """the most messages someone sends in a row (their nature; the brief carries it)"""
     return next((p.get("burst") or BURST_MAX for p in (brief or {}).get("people", []) if p.get("id") == pid), BURST_MAX)
@@ -303,7 +341,7 @@ def allow_own(t, who, la, photo, at, pace, group, burst=BURST_MAX):
         run.insert(0, m)
     going = last is not None and bool(run) and run[-1] is last
     # a burst is as long as the person's own (Gāius two at most); a group's talk, a few people's
-    if going and (len([m for m in run if m.get("from") == who]) >= burst or len(run) >= BURST_MAX * 2):
+    if going and (len([m for m in run if m.get("from") == who]) >= burst or len(run) >= (GROUP_RUN if group else BURST_MAX * 2)):
         return False, "enough messages in a row"
     if not going:
         if group:
@@ -395,6 +433,8 @@ def vet(d, draft_path, out_path):
             bad.append("empty")
         if photo and photo not in photos:
             bad.append(f"no such photo: {photo}")
+        if (photo or x.get("pic")) and who in people and photo_room(brief, threads, who, when) <= 0:
+            bad.append(f"{who} has sent enough photos lately (their habit): send it without the photo")
         gloss = {plain(k) for k in (x.get("gloss") or {})}
         unknown = [w for w in re.findall(r"[^\W\d_]+", CODE.sub(" ", la)) if plain(w) not in forms and not re.fullmatch(r"(ha)+e?", plain(w))]
         if unknown and not (len(unknown) <= 2 and all(plain(w) in gloss for w in unknown)):
@@ -484,9 +524,9 @@ def make_picture(prompt, tries=2):
     return None
 
 
-def picture(pid, by, prompt, out):
-    """A fresh picture someone sends now: the whole messenger/pics document, written to OUT."""
-    res = make_picture(prompt)
+def picture(pid, by, prompt, out, d=None):
+    """A fresh picture someone sends now: the whole messenger/pics document, written to OUT (with DIR, the people in it as they look)."""
+    res = make_picture(with_looks(prompt, by, docs(d)[1]) if d else prompt)
     doc = {"id": pid, "by": by, "en": prompt, "prompt": prompt, "at": int(time.time() * 1000), "status": "done" if res else "failed"}
     if res:
         doc["type"], doc["b64"] = res
@@ -515,7 +555,10 @@ def pictures(wanted_path, outdir):
 if __name__ == "__main__":
     cmd, d = sys.argv[1], sys.argv[2]
     if cmd == "picture":
-        picture(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+        picture(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6] if len(sys.argv) > 6 else None)
+        sys.exit()
+    if cmd == "looks":
+        print(with_looks(sys.argv[4], sys.argv[3], docs(d)[1]))
         sys.exit()
     if cmd == "pictures":
         pictures(sys.argv[2], sys.argv[3])

@@ -17,6 +17,7 @@ import { MemoryDraft, memoriesOf, Tell, tellsOf } from "./mind";
 import { applyBondChanges, applyTieChanges, BondChange, bondChangesOf, TieChange, tieChangesOf } from "./bond";
 import { applyGoalChanges, applyHappen, GoalChange, goalChangesOf, Happen, happensOf, heavyOk, noteHappening } from "./lives";
 import { groupCaps, sceneBlock, sceneOf } from "./group";
+import { photoHabits, withLooks } from "./pictures";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, storyPersonPrompt, strangerPrompt } from "./prompts";
 import { inventStranger, NewPerson, rollStranger, Stranger } from "./strangers";
@@ -121,7 +122,8 @@ function extras(m: { voice?: unknown; photo?: unknown; picture?: unknown }, canM
 
 /** A picture to be made for a message: its id goes on the message, the rest waits in messenger/pics until it is made. */
 export const picId = () => `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-const wanted = (d: { from?: string; picture?: string }, at: number, id: string): Pic => ({ id, by: d.from ?? "", en: d.picture!, prompt: d.picture!, status: "wanted", at });
+/** A fresh picture to make: what it shows, as Claude said, and the prompt with the looks of the people in it (chat/pictures.ts). */
+const wanted = (d: { from?: string; picture?: string }, at: number, id: string, meta: Meta): Pic => ({ id, by: d.from ?? "", en: d.picture!, prompt: withLooks(d.picture!, d.from ?? "", meta), status: "wanted", at });
 
 /** The message fields of a vetted draft: its Latin and English, a voice message, photo or picture, the words that slipped. */
 const fields = (d: Draft & { newWords?: string[] }, pic?: string) => ({ la: d.la, en: d.en, ...(d.voice ? { voice: true } : {}), ...(d.photo ? { photo: d.photo } : {}), ...(pic ? { pic, picEn: d.picture } : {}), ...(d.re ? { re: d.re } : {}), ...(d.newWords ? { newWords: d.newWords } : {}), ...(d.gloss ? { gloss: d.gloss } : {}) });
@@ -285,7 +287,9 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
       return n <= (natureOf(m.from, meta)?.burst ?? 4);
     })
     .slice(0, members.length > 1 ? 8 : 5);
-  const vetted = await vetAll(scene ? groupCaps(drafts, scene, meta) : drafts, ctx, deps);
+  // photos by each sender's habit (what they sent here and in the group counts)
+  const kept = photoHabits(scene ? groupCaps(drafts, scene, meta) : drafts, meta, [thread, ...(ctx.group && ctx.group.id !== thread.id ? [ctx.group] : [])], ctx.now);
+  const vetted = await vetAll(kept, ctx, deps);
   // each message arrives after the one before it: a pause, then the typing; a sleeper answers when awake.
   // In a group, someone not around catches up on their own time, without holding up the others.
   let t = first.t.startAt;
@@ -298,13 +302,13 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
       const at = Math.max(own.get(d.from!) ?? 0, when?.startAt ?? t) + step;
       own.set(d.from!, at);
       const pic = d.picture && !made.length ? picId() : undefined;
-      if (pic) made.push(wanted(d, ctx.now, pic));
+      if (pic) made.push(wanted(d, ctx.now, pic, meta));
       return { id: msgId(), from: d.from!, at: Math.round(at), src: "reply", ...fields(d, pic), ...deletedAtOf(d, Math.round(at)) };
     }
     t = Math.max(t, when?.startAt ?? t) + step;
     // a fresh picture: one a reply at most
     const pic = d.picture && !made.length ? picId() : undefined;
-    if (pic) made.push(wanted(d, ctx.now, pic));
+    if (pic) made.push(wanted(d, ctx.now, pic, meta));
     return { id: msgId(), from: d.from!, at: Math.round(t), src: "reply", ...fields(d, pic), ...deletedAtOf(d, Math.round(t)) };
   });
   // what each will remember (only the people of this chat), and memories now done or no longer true
@@ -454,7 +458,8 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
       return true;
     })
     .slice(0, 10);
-  const vetted = await vetAll(drafts, ctx, deps);
+  // photos by each sender's habit, across all their chats
+  const vetted = await vetAll(photoHabits(drafts, meta, live, ctx.now), ctx, deps);
   const last = new Map<string, number>();
   const made: Pic[] = [];
   const messages = vetted.map((d) => {
@@ -464,7 +469,7 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
     last.set(d.chat, at);
     // fresh pictures: two at most in a turn
     const pic = d.picture && made.length < 2 ? picId() : undefined;
-    if (pic) made.push(wanted(d, ctx.now, pic));
+    if (pic) made.push(wanted(d, ctx.now, pic, meta));
     return { chat: d.chat, msg: { id: msgId(), from: d.from, at, src: "own" as const, ...fields(d, pic), ...deletedAtOf(d, at) } };
   });
   return { messages: messages.filter((x) => x.msg.la || x.msg.photo || x.msg.pic), deeds, made, memories, settled: idsOf(raw?.settled), outdated: idsOf(raw?.outdated) };

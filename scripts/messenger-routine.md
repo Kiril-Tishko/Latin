@@ -15,9 +15,9 @@ You are the phone side of the messenger (Nūntiī) of "Tabula Latina", a Latin t
 
 3. Decide, as life would, whether anyone writes now. Usually nobody does. Real people do not keep writing to someone who does not answer: when the learner goes quiet they send a message or two, then they wait, and after a last try they leave it to the learner. The [brackets] say it for each chat: someone WAITING writes nothing in that chat (they may still talk in a group, about their own things). When someone may write, they do it only with a reason of their own: their mood and what is going on for them (moods can be extreme, and the hour and what others said shift them), news, a festival or a birthday (theirs or a friend's), the news from Rome, a follow-up to the last conversation, missing the learner, the hour (good morning, good night). Each person's sheet also says how they feel about the learner now and what has happened between them: let it drive who writes and how, as with real people (someone who misses or fancies the learner writes; someone hurt writes something pointed, or nothing; someone giving the silent treatment, or who has blocked the learner, does not write to the learner in private, though they may complain about them in the group; someone the learner has blocked cannot reach them in private at all; someone away writes rarely). In a group they mostly talk to each other, about their own lives, not about the learner's silence. The friends know each other, but each knows only what they saw or were told: a sheet says what that person remembers, and what was said in a private chat stays there unless someone passes it on (a secret spreads only as fits the one who knows it). Strangers mostly know one of the friends (their sheets say how). Nobody repeats what they said lately (state lists it): every message brings something new, or is not sent. One burst of one to three short messages is usual; two chats at most. The brief (/tmp/nuntii/data/users/me/messenger/brief/now.json) has who everyone is (people[].sheet), the learner (learner) and the language rules (language).
 
-4. Write the messages in character, following the brief's language exactly: ONLY the words and forms it lists (names a festival or the news brings are in the allowed forms too), with long marks. Real texting: short, emoji welcome (also the Roman ones the language lists, written as codes like :lupa:); real people with moods, pride and opinions, warm or cold, flirty, sulky or rude as they feel (adult themes as in a Roman comedy; anything sexual stays implied); in a strong moment a message may carry one or two other simple Latin words, given with their meanings in "gloss"; never correct the learner and never mention lessons, rules, AI or phones. Now and then (about one message in eight) a message is a short voice message: add "voice": true (its "la" is what they say, 3-14 words). Now and then someone sends a photo: one from the list state printed that is theirs (or "anyone's"): add "photo": "<id>", with a short caption in "la" (or only an emoji); or, when nothing there fits and a picture is really worth it, a fresh one of exactly what they would send now (their lunch, a selfie, the mess, something wild in their day; their world around AD 100, never nudity or gore): pick an id ("p" + the time in base 36 + three random letters), run `python3 /tmp/nuntii.py picture <id> <person id> "<what the photo shows, in English, as their camera sees it>" /tmp/nuntii/pic-<id>.json` (it takes a few minutes), save it with ArtifactData set: collection "data/users/me/messenger/pics", doc_id <id>, file_path /tmp/nuntii/pic-<id>.json; then the message carries "pic": <id> and "picEn": <what it shows> (if the helper printed FAILED, send the message without it).
+4. Write the messages in character, following the brief's language exactly: ONLY the words and forms it lists (names a festival or the news brings are in the allowed forms too), with long marks. Real texting: short, emoji welcome (also the Roman ones the language lists, written as codes like :lupa:); real people with moods, pride and opinions, warm or cold, flirty, sulky or rude as they feel (adult themes as in a Roman comedy; anything sexual stays implied); in a strong moment a message may carry one or two other simple Latin words, given with their meanings in "gloss"; never correct the learner and never mention lessons, rules, AI or phones. Now and then (about one message in eight) a message is a short voice message: add "voice": true (its "la" is what they say, 3-14 words). Now and then someone sends a photo: one from the list state printed that is theirs (or "anyone's"): add "photo": "<id>", with a short caption in "la" (or only an emoji); or, when nothing there fits and a picture is really worth it, a fresh one of exactly what they would send now (their lunch, a selfie, the mess, something wild in their day; their world around AD 100, never nudity or gore): pick an id ("p" + the time in base 36 + three random letters), run `python3 /tmp/nuntii.py picture <id> <person id> "<what the photo shows, in English, as their camera sees it>" /tmp/nuntii/pic-<id>.json /tmp/nuntii` (it takes a few minutes; the people in it are drawn as they look), save it with ArtifactData set: collection "data/users/me/messenger/pics", doc_id <id>, file_path /tmp/nuntii/pic-<id>.json; then the message carries "pic": <id> and "picEn": <what it shows> (if the helper printed FAILED, send the message without it).
 
-5. Put the messages, in the order they are sent, in /tmp/nuntii/draft.json as [{"chat": <chat id>, "from": <person id>, "la": <the Latin>, "en": <English translation>, and when it is one "voice": true, "photo": <photo id> or "pic": <id> with "picEn", "gloss": {<new word>: <meaning>}, and when the message matters (news, a promise, a plan, a confession) "remember": [{"who": <someone in that chat>, "text": <what they will remember, in their own words>, "kind": "moment" | "fact" | "promise" | "plan" | "secret" | "joke" | "conflict" | "news", "weight": <1-5>}], and when someone passes news on behind the scenes "tell": [{"from": <person id>, "to": <person id>, "what": <what they told, as they told it>, "untrue": true if it is garbled or a lie}]}], and run `python3 /tmp/nuntii.py vet /tmp/nuntii /tmp/nuntii/draft.json /tmp/nuntii/new.json`. It says OK or NOT ALLOWED (with the reason) for each one, and writes the allowed ones to /tmp/nuntii/new.json as finished inbox documents (each with its "id" and the moment it arrives, "at"). Rewrite a message whose words are not allowed and run vet again; a message refused for anything else (someone waiting for an answer, a repeat, asleep, blocked) is dropped, never forced. Then save every item of /tmp/nuntii/new.json as its own document in collection "data/users/me/messenger/inbox" with one ArtifactData batch (op "set", doc_id: the item's "id", data: the item). The page moves them into the chats.
+5. Put the messages, in the order they are sent, in /tmp/nuntii/draft.json as [{"chat": <chat id>, "from": <person id>, "la": <the Latin>, "en": <English translation>, and when it is one "voice": true, "photo": <photo id> or "pic": <id> with "picEn", "gloss": {<new word>: <meaning>}, and when the message matters (news, a promise, a plan, a confession) "remember": [{"who": <someone in that chat>, "text": <what they will remember, in their own words>, "kind": "moment" | "fact" | "promise" | "plan" | "secret" | "joke" | "conflict" | "news", "weight": <1-5>}], and when someone passes news on behind the scenes "tell": [{"from": <person id>, "to": <person id>, "what": <what they told, as they told it>, "untrue": true if it is garbled or a lie}]}], and run `python3 /tmp/nuntii.py vet /tmp/nuntii /tmp/nuntii/draft.json /tmp/nuntii/new.json`. It says OK or NOT ALLOWED (with the reason) for each one, and writes the allowed ones to /tmp/nuntii/new.json as finished inbox documents (each with its "id" and the moment it arrives, "at"). Rewrite a message whose words are not allowed, or send it without its photo when they have sent enough photos lately (each has their habit), and run vet again; a message refused for anything else (someone waiting for an answer, a repeat, asleep, blocked) is dropped, never forced. Then save every item of /tmp/nuntii/new.json as its own document in collection "data/users/me/messenger/inbox" with one ArtifactData batch (op "set", doc_id: the item's "id", data: the item). The page moves them into the chats.
 
 6. Run `python3 /tmp/nuntii.py notify /tmp/nuntii /tmp/nuntii/new.json` (without the last argument if you wrote nothing). Your final message is exactly the one line it prints, nothing else: it becomes the phone notification.
 
@@ -196,6 +196,7 @@ def check(d, msgs):
 # The group keeps a rhythm of its own. Nobody repeats themselves.
 BURST_GAP = 30 * 60_000
 BURST_MAX = 4
+GROUP_RUN = 14  # the most messages in a row in a group's talk among themselves
 REPEAT_DAYS = 14
 PHOTO_DAYS = 21
 HOUR = 3600_000
@@ -270,11 +271,11 @@ def group_may_write(t, now):
     away = now - learner_at
     allowed = 4 if away < 24 * HOUR else 2 if away < 72 * HOUR else 1
     if today >= allowed:
-        return False, f"the group has talked enough today ({today} of {allowed})"
+        return False, f"the group has talked enough today ({today} of {allowed} stretches of talk; a stretch: messages less than half an hour apart)"
     last = started[-1][-1]["at"] if started else 0
     if now - last < 3 * HOUR:
         return False, "they talked in the group less than three hours ago"
-    return True, f"the group may talk ({today} of {allowed} today)"
+    return True, f"the group may talk now ({today} of {allowed} stretches of talk today; a stretch: messages less than half an hour apart)"
 
 
 def plain_words(text):
@@ -297,6 +298,42 @@ def photo_sent_lately(t, photo, now):
     return any(m.get("photo") == photo and now - m.get("at", 0) < PHOTO_DAYS * 24 * HOUR for m in t.get("messages", []))
 
 
+# each sends photos by their habit (src/chat/pictures.ts): (how many, in how many hours)
+PHOTO_LIMIT = {"often": (3, 24), "sometimes": (1, 24), "rarely": (1, 72)}
+
+
+def photo_room(brief, threads, who, now):
+    """how many more photos someone may send now, by their habit (what they sent in every chat counts)"""
+    rate = next((p.get("photoRate") for p in (brief or {}).get("people", []) if p.get("id") == who), None) or "sometimes"
+    n, hours = PHOTO_LIMIT.get(rate, PHOTO_LIMIT["sometimes"])
+    sent = {m.get("id") for t in threads.values() for m in t.get("messages", []) if m.get("from") == who and (m.get("photo") or m.get("pic")) and m.get("at", 0) <= now and now - m.get("at", 0) < hours * HOUR}
+    return max(0, n - len(sent))
+
+
+VOWELS = {"a": "[aā]", "e": "[eē]", "i": "[iī]", "o": "[oō]", "u": "[uū]"}
+
+
+def name_re(name):
+    return re.compile(r"(?<![^\W\d_])" + "".join(VOWELS.get(c.lower(), re.escape(c)) for c in plain(name)) + r"(?![^\W\d_])", re.I)
+
+
+def with_looks(text, by, brief):
+    """a fresh picture's prompt with the people in it as they look (src/chat/pictures.ts): the named ones, a selfie's sender"""
+    people = [p for p in (brief or {}).get("people", []) if p.get("look")]
+    shown, out = [], text
+    for p in people:
+        if not name_re(p["name"]).search(out):
+            continue
+        shown.append(p)
+        out = name_re(p["name"] + "'s").sub("his" if p.get("g") == "m" else "her", out)
+        out = name_re(p["name"]).sub("the man" if p.get("g") == "m" else "the woman", out)
+    sender = next((p for p in people if p["id"] == by), None)
+    if re.search(r"selfie", text, re.I) and sender and sender not in shown:
+        shown.insert(0, sender)
+    looks = [p["look"] for p in shown[:2]]
+    return f"{'; and '.join(looks)}. {out}" if looks else out
+
+
 def burst_of(brief, pid):
     """the most messages someone sends in a row (their nature; the brief carries it)"""
     return next((p.get("burst") or BURST_MAX for p in (brief or {}).get("people", []) if p.get("id") == pid), BURST_MAX)
@@ -312,7 +349,7 @@ def allow_own(t, who, la, photo, at, pace, group, burst=BURST_MAX):
         run.insert(0, m)
     going = last is not None and bool(run) and run[-1] is last
     # a burst is as long as the person's own (Gāius two at most); a group's talk, a few people's
-    if going and (len([m for m in run if m.get("from") == who]) >= burst or len(run) >= BURST_MAX * 2):
+    if going and (len([m for m in run if m.get("from") == who]) >= burst or len(run) >= (GROUP_RUN if group else BURST_MAX * 2)):
         return False, "enough messages in a row"
     if not going:
         if group:
@@ -404,6 +441,8 @@ def vet(d, draft_path, out_path):
             bad.append("empty")
         if photo and photo not in photos:
             bad.append(f"no such photo: {photo}")
+        if (photo or x.get("pic")) and who in people and photo_room(brief, threads, who, when) <= 0:
+            bad.append(f"{who} has sent enough photos lately (their habit): send it without the photo")
         gloss = {plain(k) for k in (x.get("gloss") or {})}
         unknown = [w for w in re.findall(r"[^\W\d_]+", CODE.sub(" ", la)) if plain(w) not in forms and not re.fullmatch(r"(ha)+e?", plain(w))]
         if unknown and not (len(unknown) <= 2 and all(plain(w) in gloss for w in unknown)):
@@ -493,9 +532,9 @@ def make_picture(prompt, tries=2):
     return None
 
 
-def picture(pid, by, prompt, out):
-    """A fresh picture someone sends now: the whole messenger/pics document, written to OUT."""
-    res = make_picture(prompt)
+def picture(pid, by, prompt, out, d=None):
+    """A fresh picture someone sends now: the whole messenger/pics document, written to OUT (with DIR, the people in it as they look)."""
+    res = make_picture(with_looks(prompt, by, docs(d)[1]) if d else prompt)
     doc = {"id": pid, "by": by, "en": prompt, "prompt": prompt, "at": int(time.time() * 1000), "status": "done" if res else "failed"}
     if res:
         doc["type"], doc["b64"] = res
@@ -524,7 +563,10 @@ def pictures(wanted_path, outdir):
 if __name__ == "__main__":
     cmd, d = sys.argv[1], sys.argv[2]
     if cmd == "picture":
-        picture(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+        picture(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6] if len(sys.argv) > 6 else None)
+        sys.exit()
+    if cmd == "looks":
+        print(with_looks(sys.argv[4], sys.argv[3], docs(d)[1]))
         sys.exit()
     if cmd == "pictures":
         pictures(sys.argv[2], sys.argv[3])

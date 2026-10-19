@@ -29,6 +29,8 @@ export interface Pace {
 export const BURST_GAP = 30 * 60_000;
 /** The most messages in one burst written on their own. */
 export const BURST_MAX = 4;
+/** The most messages in a row in a group's talk among themselves (a lively stretch among five). */
+export const GROUP_RUN = 14;
 /** Old messages that no longer count as repeating oneself, or a photo as sent lately. */
 export const REPEAT_DAYS = 14;
 export const PHOTO_DAYS = 21;
@@ -115,10 +117,10 @@ export function groupMayWrite(thread: Thread, now: number): { ok: boolean; why: 
   const today = started.filter((b) => day(b[0].at) === day(now)).length;
   const away = now - learnerAt;
   const allowed = away < 24 * HOUR ? 4 : away < 72 * HOUR ? 2 : 1;
-  if (today >= allowed) return { ok: false, why: `the group has talked enough today (${today} of ${allowed})` };
+  if (today >= allowed) return { ok: false, why: `the group has talked enough today (${today} of ${allowed} stretches of talk; a stretch: messages less than half an hour apart)` };
   const last = started.at(-1)?.at(-1)?.at ?? 0;
   if (now - last < 3 * HOUR) return { ok: false, why: "they talked in the group less than three hours ago" };
-  return { ok: true, why: `the group may talk (${today} of ${allowed} today)` };
+  return { ok: true, why: `the group may talk now (${today} of ${allowed} stretches of talk today; a stretch: messages less than half an hour apart)` };
 }
 
 /** The words of a message, plain: no long marks, no emoji, no punctuation. */
@@ -163,7 +165,7 @@ export function paceLine(name: string, pace: Pace, p: PaceNow, now: number, tz: 
   const seen = p.seen && p.unanswered ? ` ${learner} has seen it and said nothing.` : "";
   if (!p.unanswered) return `${name} may write to ${learner} if they have a reason.`;
   const tried = `${name} has written ${p.unanswered === 1 ? "once" : `${p.unanswered} times`} ${since}.${seen}`;
-  if (v.ok) return `${tried} ${v.last ? "One last try now, if they want; after that they wait for an answer." : "They may write again if they have a reason."}`;
+  if (v.ok) return `${tried} ${v.last ? "One last try now, if they want (one burst: a few messages in a row at most); after that they wait for an answer." : "They may write again if they have a reason."}`;
   if (v.until === Infinity) return `${tried} Now they wait for ${learner} to write: nothing more from them here.`;
   return `${tried} They wait: nothing before ${when(v.until, tz)}${v.last ? ", and that would be the last try" : ""}.`;
 }
@@ -186,7 +188,7 @@ export function allowOwn(thread: Thread, who: string, msg: { la: string; photo?:
   }
   const going = !!last && run.length > 0 && run.at(-1) === last;
   // a burst is as long as the person's own (Gāius two at most); a group's talk, a few people's
-  if (going && (run.filter((m) => m.from === who).length >= burst || run.length >= BURST_MAX * 2)) return { ok: false, why: "enough messages in a row" };
+  if (going && (run.filter((m) => m.from === who).length >= burst || run.length >= (group ? GROUP_RUN : BURST_MAX * 2))) return { ok: false, why: "enough messages in a row" };
   if (!going) {
     if (group) {
       const g = groupMayWrite(thread, at);

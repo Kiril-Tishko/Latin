@@ -13,6 +13,7 @@ import { discretionText, natureOf, openText, photoText, talkText } from "./natur
 import { memoryLines, Mind, recall } from "./mind";
 import { standingLine, tiesLine } from "./bond";
 import { goalsLine, publicNow, quietDays, timelineBlock } from "./lives";
+import { photoRoom } from "./pictures";
 import { awayNow, Bond, CoachTurn, deletedNow, Drama, groupIds, groupMembers, groupName, groupsOf, iBlocked, isBlocked, isGroupId, Meta, Msg, REACTIONS, SYS, Thread, Who, membersOf, silentNow, whoOf } from "./model";
 import type { Stranger } from "./strangers";
 import type { AllowedWord } from "./words";
@@ -260,7 +261,7 @@ They never correct the learner's Latin. They live in the Roman world around 100 
 
 /** What they can do besides writing (the learner discovers it as it happens). */
 const CAN_DO = `WHAT THEY CAN DO (only what they would really do now; usually none of it):
-- not answer at all; react; quote a message; send a voice message, a photo from the list, or a picture of anything they would really send
+- when answering: not answer at all, react, quote a message; any time: send a voice message, a photo from the list, or a picture of anything they would really send
 - send a message and take it back a moment later ("unsend": seconds), or delete an earlier message of theirs (act "delete", "msg": its number)
 - block the learner (act "block") and unblock them later ("unblock"); blocked, the learner's messages do not reach them
 - leave a group ("leave"), come back ("join"), add someone ("add", "whom": a person id or a new person's name), throw someone out ("remove"), rename it ("rename", "text"); "group": its chat id (the chat they are in, or the friends' group, when left out)
@@ -306,7 +307,7 @@ const PICTURE = `- "picture": "<what the photo shows, in English, as their camer
 
 /** How Claude reports what moved between them and the learner, and among themselves (chat/bond.ts). */
 const BONDS = `- "bond" (for anyone this moved): how it changed where they stand with the learner, only the levels that moved, by small steps: ±1 for most things, ±2 for something that matters, ±3 for a shock. Real feelings move slowly: a crush grows over many conversations, trust is built slowly and lost at once, a joke at the wrong moment stings; each person moves in their own way (their nature and heart). Hurt heals with time by itself. Usually {}.
-- "levels" (only for someone whose standing says NOT SET YET): where they stood with the learner before this moment, 0-10 each, read from how they feel and what has happened between them; what this moment does to them goes in "bond", as for anyone.
+- "levels" (only for someone whose standing says NOT SET YET): where they stood with the learner just before this moment (the days that have passed counted in), 0-10 each, read from how they feel and what has happened between them; what this moment does to them goes in "bond", as for anyone.
 - "ties" (when something between two of them changed: a fight, a kindness, a betrayal, jealousy, a spark, gossip that stung): who feels it ("from"), about whom ("to"), how they see them now in their own words ("note"), and the levels that moved, by small steps. Feelings among them are as real as toward the learner, and as private. Usually [].`;
 
 const OUTPUT = `Reply with only JSON:
@@ -315,7 +316,7 @@ const OUTPUT = `Reply with only JSON:
 - "re" (optional): the number (#) of the message this one answers, shown quoted above it as in any messenger. Only when it answers something that is not simply the last message: one of several things the learner said, an earlier question, a message from someone else in the group. Usually leave it out.
 ${EXTRAS}
 - "react" (optional): a reaction to the learner's last message, as people do in messengers: one emoji per person, from ${REACTIONS.join(" ")}. When it fits (a joke 😂, sweet words ❤️, news 😮, sad news 😢, thanks 🙏); often none. Rarely a reaction is the whole answer, when the message needs no words: then "messages" may be [].
-- "remember": 0-3 things worth remembering later, each for the one who remembers it, in their own words (in a group each may remember the same thing differently, or only some of them notice): something new about the learner, a promise, a plan, a confession, a fight, a shared joke, a secret ("secret": true when they were asked to keep it, or it is theirs to hide). "weight": 1 a small thing, 3 worth remembering, 5 never forgotten. Small talk is not worth remembering: often [].
+- "remember": 0-3 things worth remembering later, each for the one who remembers it, in their own words ("about": whom it is about besides themselves: "me" for the learner, others by id) (in a group each may remember the same thing differently, or only some of them notice): something new about the learner, a promise, a plan, a confession, a fight, a shared joke, a secret ("secret": true when they were asked to keep it, or it is theirs to hide). "weight": 1 a small thing, 3 worth remembering, 5 never forgotten. Small talk is not worth remembering: often [].
 - "settled": ids of their memories that are done now (a promise kept, a plan done or dropped, a fight made up); "outdated": ids no longer true (a newer fact replaces them). Usually [].
 - "saw" (only when the learner's newest photo is attached): what it shows, a few plain English words, so they remember it.
 - "feel" (for anyone whose feelings about the learner moved now): how they feel about the learner after this, in their own words, first person, one or two sentences (English): what they would never say aloud. Feelings move slowly or suddenly, as with real people.
@@ -326,6 +327,7 @@ ${DEEDS}`;
 
 /** The photos the people of a chat could send now (none sent lately in this chat), and a fresh picture when it may be made. */
 export function photosBlock(people: Who[], recent: string[], canMake = false): string {
+  if (!people.length) return "";
   const own = people
     .map((w) => ({ w, ps: photosFor(w.id, w.stranger, recent).filter((p) => p.who !== "any") }))
     .filter((x) => x.ps.length)
@@ -410,7 +412,8 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
     HOW_TO_BE_REAL,
     CAN_DO,
     languageBlock(ctx),
-    photosBlock(members, recentPhotos(thread), ctx.canMake),
+    // photos only from those whose habit allows one now (chat/pictures.ts)
+    photosBlock(members.filter((w) => photoRoom(w.id, meta, [thread, ctx.group], ctx.now) > 0), recentPhotos(thread), ctx.canMake),
     `${OUTPUT}\nPerson ids: ${ids}${Object.keys(meta.strangers).length ? `; others by id: ${Object.values(meta.strangers).map((x) => `"${x.id}" (${x.name})`).join(", ")}` : ""}.`,
   ]
     .filter(Boolean)
@@ -456,7 +459,7 @@ Away from the learner they live and talk to each other too: news and gossip pass
     HOW_TO_BE_REAL,
     CAN_DO,
     languageBlock(ctx),
-    photosBlock(everyone, sent, ctx.canMake),
+    photosBlock(everyone.filter((w) => photoRoom(w.id, meta, threads, ctx.now) > 0), sent, ctx.canMake),
     `Reply with only JSON:
 {"messages": [{"chat": "<chat id>", "from": "<person id>", "la": "<Latin>", "en": "<English>", "in": <minutes from now, 0-${hours * 60}>, "voice": true, "photo": "<photo id>", "picture": "<what a new photo shows>"}]}
 Messages of one chat in time order; a burst of messages is a minute or less apart. {"messages": []} when nobody writes.

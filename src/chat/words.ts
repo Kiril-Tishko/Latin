@@ -143,7 +143,8 @@ export function formsFor(e: Entry, seen: Set<string>): string[] {
       for (const pn of ["1sg", "2sg", "3sg", "3pl"] as const) {
         const f = forms[`pres.${pn}`];
         if (!f) continue;
-        const ok = irregular ? seen.has(irregular) && (pn !== "3pl" || seen.has("v.3pl")) : seen.has(`v.${pn}`);
+        // sunt comes with its own rule (Lesson V), possunt with the plural
+        const ok = irregular ? seen.has(irregular) && (pn !== "3pl" || seen.has(irregular === "v.sum" ? "v.sunt" : "v.3pl")) : seen.has(`v.${pn}`);
         if (ok) out.add(full(f));
       }
       if (forms.inf && seen.has("v.inf") && (!irregular || seen.has(irregular))) out.add(full(forms.inf));

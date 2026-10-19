@@ -1,7 +1,8 @@
 [
  {
   "id": "iulia-selfie",
-  "prompt": "selfie of a pretty young Roman woman of 21 with dark curly hair pinned up and small gold earrings, smiling, on the bank of the Tiber at sunset, old Rome and a stone bridge behind her"
+  "prompt": "selfie of a young Roman woman of 21 with olive skin, dark curly hair pinned up with small ringlets over the forehead, large dark eyes, strong dark brows, small gold hoop earrings, wearing a deep red stola draped over both shoulders, smiling, on the bank of the Tiber at sunset, an ancient stone bridge behind her",
+  "seed": 3
  },
  {
   "id": "iulia-figs",
@@ -41,7 +42,7 @@
  },
  {
   "id": "iulia-mirror",
-  "prompt": "a young Roman woman with dark curly hair making a funny face into a polished bronze hand mirror, her reflection visible"
+  "prompt": "a young Roman woman of 21 with olive skin, dark curly hair pinned up with small ringlets, strong dark brows, gold hoop earrings, deep red stola, making a funny face into a polished bronze hand mirror, her reflection visible"
  },
  {
   "id": "iulia-tutor",
@@ -57,7 +58,7 @@
  },
  {
   "id": "marcus-selfie",
-  "prompt": "selfie of a young Roman man of 23 with short dark curly hair and stubble, pulling a bored face, in a dim office full of scroll shelves and wax tablets"
+  "prompt": "selfie of a slim young Roman man of 23 with a pale face and rosy cheeks, short black hair combed forward in a fringe, a thin dark moustache and a wisp of beard on his chin, ink-smudged off-white tunic, pulling a bored face in a dim office full of scroll shelves"
  },
  {
   "id": "marcus-desk",
@@ -109,11 +110,12 @@
  },
  {
   "id": "marcus-crowd",
-  "prompt": "selfie of a young Roman man with short dark curly hair and a green scarf, screaming with joy in a crowd of men at the Circus Maximus"
+  "prompt": "selfie of a slim young Roman man of 23 in an off-white tunic and a green scarf, pale face, short black hair combed forward in a fringe, thin dark moustache, screaming with joy in a crowd of men in tunics at the chariot races in the Circus Maximus, the sandy racetrack and an obelisk behind",
+  "seed": 5
  },
  {
   "id": "gaius-goat",
-  "prompt": "selfie of a weathered grey-haired Roman farmer in his fifties with a short grey beard and a rough brown wool tunic, cheek to cheek with a white goat, the goat's head big in the foreground, olive grove behind",
+  "prompt": "selfie of a grizzled Roman farmer of 52 with a thin, sunburnt, wrinkled face, dark curly hair and a full beard both heavily streaked with grey, deep-set tired eyes, rough brown wool tunic, cheek to cheek with a white goat, the goat's head big in the foreground, olive grove behind",
   "seed": 7
  },
  {
@@ -183,7 +185,7 @@
  },
  {
   "id": "claudia-selfie",
-  "prompt": "selfie of a Roman woman in her late thirties with dark hair in a neat bun and a calm smile, at the harbour of Ostia with ships and warehouses behind"
+  "prompt": "selfie of a Roman woman of 38 with golden-olive skin, a full cloud of dark curly hair, large dark eyes under strong brows, a long straight nose, small pearl earrings, dark blue stola with a cream shawl, calm smile, at the harbour of Ostia with ships behind"
  },
  {
   "id": "claudia-classroom",
@@ -248,7 +250,7 @@
  },
  {
   "id": "lucius-selfie",
-  "prompt": "moody selfie of a pale young Roman man of 29 with long dark messy hair and dark circles under his eyes, sighing, by the light of an oil lamp"
+  "prompt": "moody selfie of a thin Roman man of 29 with wild bushy curly black hair, a short full black beard, intense dark eyes with shadows under them, faded dark grey tunic, sighing by the light of an oil lamp at night"
  },
  {
   "id": "lucius-desk",

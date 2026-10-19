@@ -599,6 +599,16 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   respelled voice it is; without one the words show at once.
 - Photos: what a Roman of AD 100 with a camera in their pocket would send
   (selfies, lunch, the mess after a party, a goat on the roof, a chariot crash).
+  Each looks like themselves (the learner chose the painted portraits):
+  `withLooks` (src/chat/pictures.ts, and `with_looks` in the routine's helper,
+  tested to agree) makes a fresh picture's prompt with the fixed look of
+  whoever is in it (`Nature.look`: anyone named, their name left out, and a
+  selfie's sender), while the chat shows what Claude said it shows; the
+  library's seven photos of the friends were made again from their looks.
+  Each sends photos by their habit (`photoRoom`, `photoHabits`: often three a
+  day, sometimes one, rarely one in three days; a photo beyond it is taken off
+  its message, and the prompt offers photos only to those with room; the
+  routine's vet refuses it).
   A message carries `"photo": "<id>"` from the library (src/content/photos.ts:
   130 phone photos, each with what it shows and who would send it; made by AI
   Horde, aihorde.net, free volunteers' generators that need no key, from the
@@ -668,7 +678,9 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   not count (`paceNow`, `mayWrite`). Strangers wait by their temper
   (`strangerPace`). The group has a rhythm of its own (`groupMayWrite`: up to
   four talks a day while the learner takes part, one a day when they have been
-  away for days, three hours apart). Nobody says again what they said in that
+  away for days, three hours apart; a stretch of talk among them may run to 14
+  messages, `GROUP_RUN`, a private burst to the person's own `burst`). Their
+  feelings change it too (`bondPace`, Bonds below). Nobody says again what they said in that
   chat lately (`similar`, `repeats`), nor sends a photo sent there lately
   (`photoSentLately`). `allowOwn` applies all of it to every message written on
   their own: in `writeOwn`, to the routine's messages when they come in from

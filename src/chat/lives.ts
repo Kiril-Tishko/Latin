@@ -198,7 +198,7 @@ export function happensOf(raw: unknown, everyone: Set<string>): Happen[] {
     .map((o) => ({
       who: str(o?.who),
       en: str(o?.what ?? o?.en).slice(0, 200),
-      ...(str(o?.mood) ? { mood: str(o.mood).slice(0, 30) } : {}),
+      ...(str(o?.mood) ? { mood: str(o.mood).split(/[,;]/)[0].split(/\s+/).slice(0, 3).join(" ").slice(0, 30) } : {}),
       hours: Math.max(1, Math.min(336, Math.round(Number(o?.hours) || 12))),
       ...(o?.public === true ? { public: true } : {}),
     }))

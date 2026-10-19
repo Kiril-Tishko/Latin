@@ -5,7 +5,7 @@
 import { PEOPLE } from "../content/people";
 import { Life, LifeSpec, lifeNow, Rand } from "./life";
 import { Meta, Who, whoOf } from "./model";
-import { bondBlock, dramaBlock, knownPeople, languageBlock, learnerBlock, PromptCtx, worldLine } from "./prompts";
+import { bondBlock, dramaBlock, knownPeople, languageBlock, learnerBlock, natureLines, PromptCtx, worldLine } from "./prompts";
 import { groupIds, groupMembers, groupName } from "./model";
 import { allowedSpellings, calendarEntry, formsFor } from "./words";
 import { calendarBlock, calendarWords, romeDay } from "./calendar";
@@ -13,6 +13,7 @@ import { PHOTOS } from "../content/photos";
 import { stripMarks } from "../latin/text";
 import { specOf } from "./engine";
 import { Pace, paceOf } from "./pace";
+import { natureOf } from "./nature";
 
 export interface Brief {
   v: 1;
@@ -25,7 +26,7 @@ export interface Brief {
   /** Every allowed spelling, without long marks, lower case: a quick check of any message. */
   forms: string[];
   /** Who everyone is (without the time of day and mood, which change). */
-  people: { id: string; name: string; tz: string; wake: number; sleep: number; busy: [number, number, string][]; sheet: string; pace: Pace }[];
+  people: { id: string; name: string; tz: string; wake: number; sleep: number; busy: [number, number, string][]; sheet: string; pace: Pace; burst: number }[];
   /** Moods and happenings rolled ahead: each from its time on. */
   lives: Record<string, (Life & { from: number })[]>;
   /** The day in Rome for today and the next two days (date in Rome, YYYY-MM-DD): festivals, birthdays, news. */
@@ -64,6 +65,7 @@ function sheet(w: Who, meta: Meta, now: number): string {
     w.quirk ? `Quirk: ${w.quirk}.` : "",
     w.secret ? `Keeps to themselves at first: ${w.secret}.` : "",
     `How they text: ${w.style}`,
+    ...natureLines(w, meta),
     w.heart ? `With people they care about: ${w.heart}` : "",
     w.ties ? `With the others: ${Object.entries(w.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
     knownPeople(w, meta),
@@ -80,7 +82,7 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
   const people = ids
     .map((id) => whoOf(id, meta))
     .filter((w): w is Who => !!w)
-    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now), pace: paceOf(w.id, meta) }));
+    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now), pace: paceOf(w.id, meta), burst: natureOf(w.id, meta)?.burst ?? 4 }));
   const lives: Brief["lives"] = {};
   for (const id of ids) {
     const spec = specOf(id, meta);

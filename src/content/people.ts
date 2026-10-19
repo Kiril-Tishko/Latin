@@ -3,6 +3,7 @@
 // texting, a day (when they sleep and work, in Rome's time) and the moods and
 // happenings their life can bring: chat/life.ts rolls which ones are true now,
 // at random, so they change from day to day.
+import type { Nature } from "../chat/nature";
 
 export interface Happening {
   /** What is going on, in English (shown in their profile as "Today"). */
@@ -52,6 +53,8 @@ export interface Person {
   voice: { pitch: number; rate: number };
   /** When the learner goes quiet: bursts they send unanswered, hours they then wait, tries after that (chat/pace.ts). */
   pace: { patience: number; wait: number; nudges: number };
+  /** What makes them different, as data the code uses (chat/nature.ts). */
+  nature: Nature;
 }
 
 export const PEOPLE: Person[] = [
@@ -88,6 +91,19 @@ export const PEOPLE: Person[] = [
     ],
     voice: { pitch: 1.2, rate: 1.0 },
     pace: { patience: 2, wait: 30, nudges: 1 },
+    nature: {
+      talk: 0.8,
+      burst: 4,
+      length: "quick bursts of two to four short messages, a few words each, emoji in almost every one",
+      deep: "when it really matters she slows down: two or three plain sentences, hardly any emoji, then a joke to break it",
+      open: 0.65,
+      discretion: 0.3,
+      photos: { rate: "often", what: "selfies, figs and sweets, a new stola, the Tiber at sunset, the theatre, whatever Tertia has done now" },
+      romance:
+        "Drawn to wit, boldness and attention. Flirts by teasing, daring and testing; plays it cool, then slips. Jealous. Her father wants her married to the senator's son; she wants to choose for herself. Lūcius adores her: she finds it sweet and suffocating.",
+      interests: ["poetry and her lyre", "the theatre and its actors", "gossip from the baths", "figs and sweets", "her nosy little sister Tertia", "the senator's son her father keeps inviting", "seeing the world one day"],
+      look: "a young woman of 21 with olive skin, dark curly hair pinned up with small ringlets over the forehead, large dark eyes under strong dark brows, full lips, small gold hoop earrings, usually in a deep red tunic or stola",
+    },
     ties: {
       marcus: "childhood friend; they tease each other all the time",
       lucius: "he writes her poems; she finds them far too dramatic but secretly a little sweet",
@@ -131,6 +147,19 @@ export const PEOPLE: Person[] = [
     ],
     voice: { pitch: 1.0, rate: 1.05 },
     pace: { patience: 2, wait: 24, nudges: 1 },
+    nature: {
+      talk: 0.9,
+      burst: 4,
+      length: "machine-gun bursts: three or four very short messages, one to five words each, lots of «!!!» and 😂",
+      deep: "he dodges with a joke, then one short honest line that surprises everyone",
+      open: 0.35,
+      discretion: 0.15,
+      photos: { rate: "often", what: "food, the races, his tiny flat, the stray cat, his boss asleep, ink disasters" },
+      romance:
+        "Hopelessly in love with Flāvia, the baker's daughter, who barely notices him. Flirts with everyone as a joke and means none of it; protective of Iūlia like a brother.",
+      interests: ["the Greens at the Circus Maximus", "food, any food", "money he never has", "his boss and the office", "Flāvia, the baker's daughter", "his uncle Gāius's wine"],
+      look: "a slim young man of 23 with a pale face and rosy cheeks, short black hair combed forward in a fringe, big dark eyes, a thin dark moustache and a wisp of beard on his chin, in a plain off-white tunic often smudged with ink",
+    },
     ties: {
       iulia: "childhood friend; teases her about her poems and her suitors",
       gaius: "his uncle, who thinks he is lazy (he is)",
@@ -174,6 +203,18 @@ export const PEOPLE: Person[] = [
     ],
     voice: { pitch: 0.75, rate: 0.78 },
     pace: { patience: 1, wait: 72, nudges: 0 },
+    nature: {
+      talk: 0.15,
+      burst: 2,
+      length: "one to three words; a short sentence at most; no emoji, or just 🐐 or 🍇",
+      deep: "one blunt sentence that says everything, and then nothing",
+      open: 0.1,
+      discretion: 0.9,
+      photos: { rate: "rarely", what: "a goat, the vines, the sky before a storm, an omen; badly framed" },
+      romance: "Married thirty years to Pompōnia. Grumbles about her and would die for her; romance with anyone else is out of the question.",
+      interests: ["his goats (each one has a name)", "the vines and the harvest", "omens and the gods", "Pompōnia", "the price of wine in Rome", "his lazy nephew Marcus"],
+      look: "a weathered farmer of 52 with a thin sunburnt face, dark curly hair and a full dark beard both streaked with grey, deep-set tired eyes and a furrowed brow, in a rough brown wool tunic",
+    },
     ties: {
       marcus: "his nephew, a lazy city boy (he loves him)",
       lucius: "a poet, so useless; they bicker",
@@ -214,6 +255,18 @@ export const PEOPLE: Person[] = [
     ],
     voice: { pitch: 1.05, rate: 0.88 },
     pace: { patience: 1, wait: 36, nudges: 1 },
+    nature: {
+      talk: 0.5,
+      burst: 3,
+      length: "one or two neat, complete little sentences; few emoji",
+      deep: "a few calm sentences: she listens, asks, comforts, and gives practical advice",
+      open: 0.45,
+      discretion: 0.8,
+      photos: { rate: "sometimes", what: "her pupils' wax tablets, a new book, the harbour of Ostia, her children, dinner" },
+      romance: "Married to Titus, a ship's captain often at sea, whom she loves and misses. Motherly, never flirts; a compliment makes her laugh and change the subject.",
+      interests: ["her school and her pupils", "books, above all poetry", "her children Lucilla and Aulus", "Titus at sea and the ships in Ostia's harbour", "the learner's far-away land", "good grammar"],
+      look: "a woman of 38 with golden-olive skin, a full cloud of dark curly hair, large dark eyes under strong brows, a long straight nose, small pearl earrings, usually in a neat dark blue stola with a cream shawl",
+    },
     ties: {
       iulia: "her favourite former pupil",
       marcus: "a former pupil, clever but lazy",
@@ -254,6 +307,19 @@ export const PEOPLE: Person[] = [
     ],
     voice: { pitch: 0.88, rate: 0.75 },
     pace: { patience: 2, wait: 20, nudges: 2 },
+    nature: {
+      talk: 0.6,
+      burst: 3,
+      length: "slow messages trailing «...»; now and then a tiny poem of three or four short lines; sighs",
+      deep: "a lament or a confession in short lines, like verses",
+      open: 0.95,
+      discretion: 0.5,
+      photos: { rate: "rarely", what: "the moon, a candle, his crow Corvīnus, his attic at night, dead roses" },
+      romance:
+        "In love with Iūlia, hopelessly and theatrically. Falls a little in love with anyone who praises his poems, the learner included. Intense, jealous, then dramatically forgiving.",
+      interests: ["his poems, and the patron who will not read them", "Iūlia", "the moon and the night", "his crow Corvīnus", "rival poets", "the rent he cannot pay"],
+      look: "a thin man of 29 with wild bushy curly black hair, a short full black beard, intense dark eyes with shadows under them, in a faded dark grey tunic, ink on his fingers",
+    },
     ties: {
       iulia: "in love with her; writes her poems",
       gaius: "thinks farmers have no soul; they bicker",

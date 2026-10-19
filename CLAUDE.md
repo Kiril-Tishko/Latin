@@ -596,6 +596,20 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   Remote connector (`callConnector` in platform.ts, `firePictures`, at most once
   in 90 s); without the connector the hourly routine makes them. The routine
   also makes fresh pictures for its own messages (`nuntii.py picture`).
+- Natures (src/chat/nature.ts; the friends' in `Person.nature`): what makes
+  each person different, as data the code uses, so they are not variations of
+  one assistant: how much they talk in a group (`talk`), how many messages in a
+  row (`burst`: Gāius two, Marcus four; enforced in replies, in writing on
+  their own and by the routine's vet), how long they write (`length`) and how
+  when something matters (`deep`), showing feelings (`open`), keeping secrets
+  (`discretion`), photos (`photos.rate`, `what`), love (`romance`), what fills
+  their days (`interests`) and their fixed look for pictures (`look`, from
+  their portrait). A stranger's comes from their rolled style and temper
+  (`strangerNature`, steady by id), with the look, love and interests Claude
+  gives when making them (`naturePartsOf`). `natureLines` puts it into every
+  person block and the routine's sheets; the language block lets length follow
+  the person and the moment (short small talk, more when it matters, never a
+  paragraph).
 - Pacing, as the learner chose ("like real people"; src/chat/pace.ts): plenty
   while the learner is chatting; when they go quiet, each person sends a burst
   or two (`Person.pace.patience`), waits (`wait` hours, longer each time), tries

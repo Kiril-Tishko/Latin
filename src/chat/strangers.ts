@@ -41,6 +41,10 @@ export interface Stranger {
   secret?: string;
   /** How they felt about the learner from the start (Claude, when they were made real). */
   first?: string;
+  /** From Claude: how they look (for every picture of them), love and attraction, what fills their days. */
+  look?: string;
+  romance?: string;
+  interests?: string[];
   /** Brought into the story by the people themselves (hidden from the chat list until they write). */
   invented?: boolean;
   /** Someone from the story the learner sought out and wrote to (shown in the list at once). */

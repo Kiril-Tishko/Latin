@@ -14,6 +14,7 @@ import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, 
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
 import { allowOwn, overPace, paceOf } from "../chat/pace";
+import { natureOf } from "../chat/nature";
 import { deviceZone, hashRand } from "../chat/life";
 import { CoachTurn, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, MOMENTS, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
@@ -292,7 +293,7 @@ function follow(s: NonNullable<typeof store>) {
       for (const t of Object.values(threads)) {
         if (tidied.has(t.id) || t.kind === "channel") continue;
         tidied.add(t.id);
-        const drop = overPace(t, meta, isGroupId(t.id, meta));
+        const drop = overPace(t, meta, isGroupId(t.id, meta), (id) => natureOf(id, meta)?.burst ?? 4);
         if (drop.length) saveThread({ ...t, messages: t.messages.filter((m) => !drop.includes(m.id)), dropped: [...(t.dropped ?? []), ...drop].slice(-400) });
       }
       saveLocal();
@@ -329,7 +330,7 @@ function takeFromInbox(d: DocSnap) {
   const from = String(x.from ?? chat);
   // like real people: what the routine wrote beyond someone's pace, a repeat, or a photo sent there lately never arrives
   const member = membersOf(chat, meta).find((w) => w.id === from);
-  if (!t.messages.some((m) => m.id === d.id) && (!member || !allowOwn(t, from, { la: String(x.la ?? ""), photo }, at, paceOf(from, meta), isGroupId(chat, meta)).ok)) {
+  if (!t.messages.some((m) => m.id === d.id) && (!member || !allowOwn(t, from, { la: String(x.la ?? ""), photo }, at, paceOf(from, meta), isGroupId(chat, meta), natureOf(from, meta)?.burst).ok)) {
     void store?.inbox.doc(d.id).delete().catch(() => undefined);
     return;
   }

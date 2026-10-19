@@ -96,9 +96,17 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
 - [x] Routine prompt updated (19 Oct, 05:44 UTC); page published as v38.
 
 ### 2. Natures
-- [ ] Per person: talkativeness, message length, initiative, photo habit,
-      discretion, romance, look.
-- [ ] Prompts shape length by person and moment (no fixed limit for all).
+- [x] Per person (`src/chat/nature.ts`, `Person.nature`): talkativeness,
+      burst length, message length, how they write when it matters, showing
+      feelings, discretion, photo habit, romance, interests, look (from the
+      portraits). Strangers: from their dice, plus look / love / interests
+      from Claude when they are made.
+- [x] Used by code: the number of messages in a row per person (replies,
+      their own writing, the routine's vet). Used later: talk (stage 6),
+      discretion (stage 3), photos and look (stage 7).
+- [x] Prompts shape length by person and moment (no fixed 1-8 words for
+      all); "their own lives, the learner is not the centre; no asking the
+      same questions again".
 
 ### 3. Minds
 - [ ] Per-person memory store (`messenger/minds/<id>`), weighted, merged by id

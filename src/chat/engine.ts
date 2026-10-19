@@ -12,6 +12,7 @@ import { PHOTO_BY_ID, photoSrc } from "../content/photos";
 import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from "./life";
 import { awayNow, groupIds, iBlocked, isBlocked, isGroupId, Meta, MOMENTS, Msg, msgId, Pic, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
 import { allowOwn, paceOf } from "./pace";
+import { natureOf } from "./nature";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, storyPersonPrompt, strangerPrompt } from "./prompts";
 import { inventStranger, NewPerson, rollStranger, Stranger } from "./strangers";
@@ -237,10 +238,17 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     const i = Number(n);
     return Number.isInteger(i) && i >= 1 && i < shown.length ? shown[i - 1].id : undefined;
   };
+  // each says as much as is theirs to say (Gāius two messages at most, Marcus four); a group's answer, a few people's
+  const said = new Map<string, number>();
   const drafts = (raw?.messages ?? [])
     .map((m) => ({ from: fromOf(m.from), la: clean(m.la), en: clean(m.en), gap: Number(m.gap) || 2, re: reOf(m.re), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), ...extras(m, ctx.canMake) }))
-    .filter((m) => m.from && (m.la || m.photo || m.picture))
-    .slice(0, 5);
+    .filter((m) => {
+      if (!m.from || !(m.la || m.photo || m.picture)) return false;
+      const n = (said.get(m.from) ?? 0) + 1;
+      said.set(m.from, n);
+      return n <= (natureOf(m.from, meta)?.burst ?? 4);
+    })
+    .slice(0, members.length > 1 ? 8 : 5);
   const vetted = await vetAll(drafts, ctx, deps);
   // each message arrives after the one before it: a pause, then the typing; a sleeper answers when awake
   let t = first.t.startAt;
@@ -368,7 +376,7 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
       if (!group && iBlocked(meta, member.id)) return false;
       if (statusAt(member.day, member.tz, at).state === "asleep") return false;
       // like real people: when the learner does not answer, they wait; nobody repeats themselves
-      if (!allowOwn(t, member.id, m, at, paceOf(member.id, meta), group).ok) return false;
+      if (!allowOwn(t, member.id, m, at, paceOf(member.id, meta), group, natureOf(member.id, meta)?.burst).ok) return false;
       sim.set(t.id, { ...t, messages: [...t.messages, { id: "planned", from: member.id, la: m.la, at, src: "own", ...(m.photo ? { photo: m.photo } : {}) }] });
       return true;
     })
@@ -391,6 +399,14 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
 
 // ------------------------------------------------------------ strangers
 
+/** What Claude said of someone's look, love and interests (chat/nature.ts), checked. */
+export function naturePartsOf(raw: { look?: unknown; romance?: unknown; interests?: unknown } | undefined): Pick<Stranger, "look" | "romance" | "interests"> {
+  const look = clean(raw?.look).slice(0, 300);
+  const romance = clean(raw?.romance).slice(0, 300);
+  const interests = (Array.isArray(raw?.interests) ? raw!.interests : []).map(clean).filter(Boolean).map((x) => x.slice(0, 80)).slice(0, 6);
+  return { ...(look ? { look } : {}), ...(romance ? { romance } : {}), ...(interests.length ? { interests } : {}) };
+}
+
 /** Someone random: the dice roll who they are, Claude makes them real (and maybe they write first). */
 export async function meetStranger(meta: Meta, ctx: PromptCtx, deps: Deps): Promise<{ stranger: Stranger; first: Msg[]; life: Life }> {
   const r = deps.r ?? Math.random;
@@ -398,13 +414,14 @@ export async function meetStranger(meta: Meta, ctx: PromptCtx, deps: Deps): Prom
   const s = rollStranger(r, { names: used.map((x) => x.name), portraits: used.map((x) => x.portrait) }, ctx.now);
   // their mood and what is going on, before Claude meets them (common happenings until they have their own)
   const { life } = lifeNow({ moods: s.moods, swing: s.swing, happenings: [] }, undefined, ctx.now, r);
-  const raw = await deps.ask<{ about?: string; secret?: string; feel?: string; happenings?: { en?: string; mood?: string; hours?: number[] }[]; first?: { la?: string; en?: string; gap?: number }[] }>(
+  const raw = await deps.ask<{ about?: string; secret?: string; feel?: string; look?: unknown; romance?: unknown; interests?: unknown; happenings?: { en?: string; mood?: string; hours?: number[] }[]; first?: { la?: string; en?: string; gap?: number }[] }>(
     strangerPrompt(s, life, ctx),
     { ...deps.opts, cache: false },
   );
   s.about = clean(raw?.about) || undefined;
   s.secret = clean(raw?.secret) || undefined;
   s.first = clean(raw?.feel) || undefined;
+  Object.assign(s, naturePartsOf(raw));
   s.happenings = (raw?.happenings ?? [])
     .map((h) => ({ en: clean(h.en), mood: clean(h.mood) || undefined, hours: [Number(h.hours?.[0]) || 4, Number(h.hours?.[1]) || 24] as [number, number] }))
     .filter((h) => h.en)
@@ -450,6 +467,7 @@ export async function meetFromStory(text: string, meta: Meta, ctx: PromptCtx, de
   const taken = [...used.map((s) => s.name), ...[...PERSON_BY_ID.values()].map((p) => p.name)];
   const s = inventStranger(spec, r, { names: taken, portraits: used.map((x) => x.portrait) }, ctx.now);
   s.secret = clean(raw?.secret) || undefined;
+  Object.assign(s, naturePartsOf(raw));
   s.happenings = (Array.isArray(raw?.happenings) ? (raw.happenings as { en?: unknown; mood?: unknown; hours?: unknown[] }[]) : [])
     .map((h) => ({ en: clean(h?.en), mood: clean(h?.mood) || undefined, hours: [Number(h?.hours?.[0]) || 4, Number(h?.hours?.[1]) || 24] as [number, number] }))
     .filter((h) => h.en)

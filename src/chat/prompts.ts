@@ -9,6 +9,7 @@ import { SKILLS } from "../latin/skills";
 import type { Me } from "../trainer/progress";
 import { Life, localTime, moodText, partOfDay, statusAt } from "./life";
 import { groupMayWrite, paceLine, paceNow, paceOf } from "./pace";
+import { discretionText, natureOf, openText, photoText, talkText } from "./nature";
 import { awayNow, Bond, CoachTurn, deletedNow, groupIds, groupMembers, groupName, groupsOf, iBlocked, isBlocked, isGroupId, Meta, Msg, REACTIONS, SYS, Thread, Who, membersOf, silentNow, whoOf } from "./model";
 import type { Stranger } from "./strangers";
 import type { AllowedWord } from "./words";
@@ -66,7 +67,7 @@ export function languageBlock(ctx: PromptCtx, texting = true): string {
 - Except in a strong moment (love, rage, an insult, grief, a joke that needs it): then a message may carry one or two other simple Latin words, each given with its meaning in the message's "gloss". Not in every message: rarely, when it matters.` : ""}
 - If you cannot say something with these words, say something simpler, leave it out, or let an emoji say it. Emoji are welcome and carry feelings the words cannot.
 - Roman emoji drawn for this tabula, written as codes exactly like this, never inside a word: ${emojiList()}. Use them now and then, when they fit, like any emoji.
-${texting ? "- Real texting: short messages, usually 1-8 words; sometimes one word, an interjection or only an emoji." : "- Short, plain sentences: 3 to 9 words each, one thing said in each."}
+${texting ? "- Real texting, each in their own way (their Length says how): small talk is short, often a word or two or only an emoji; when something matters (news, a fight, love, grief, a real question) a message may be longer, a few short sentences. Each sentence stays short and plain (the learner is a beginner); never a paragraph." : "- Short, plain sentences: 3 to 9 words each, one thing said in each."}
 
 ${vocabularyBlock(ctx.words)}
 
@@ -135,6 +136,19 @@ export function dramaBlock(meta: Meta): string {
   return `WHAT IS GOING ON AMONG THEM (storylines; who knows what is said in each; give the same id to move one on):\n${ds.map((d) => `- [${d.id}] ${d.en}`).join("\n")}`;
 }
 
+/** What makes someone different (chat/nature.ts), in the words Claude reads. */
+export function natureLines(who: Who, meta?: Meta): string[] {
+  const n = natureOf(who.id, meta ?? ({ strangers: {} } as unknown as Meta));
+  if (!n) return [];
+  return [
+    `Length: ${n.length} (never more than ${n.burst} messages in a row). When something matters: ${n.deep}.`,
+    `In a group: ${talkText(n)}. Feelings: ${openText(n)}. Secrets: ${discretionText(n)}.`,
+    n.interests.length ? `Their own life fills their talk: ${n.interests.join("; ")}.` : "",
+    `Love: ${n.romance}`,
+    `Photos: ${photoText(n)}.`,
+  ].filter(Boolean);
+}
+
 /** Who someone is, for Claude to write as them. */
 export function personBlock(who: Who, life: Life | undefined, now: number, meta?: Meta): string {
   const lines = [
@@ -145,6 +159,7 @@ export function personBlock(who: Who, life: Life | undefined, now: number, meta?
     who.why ? `Why they wrote to the learner in the first place: ${who.why}.` : "",
     who.secret ? `Keeps to themselves at first: ${who.secret}.` : "",
     `How they text: ${who.style}`,
+    ...natureLines(who, meta),
     who.heart ? `With people they care about: ${who.heart}` : "",
     who.ties ? `With the others: ${Object.entries(who.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
     knownPeople(who, meta),
@@ -213,6 +228,7 @@ const HOW_TO_BE_REAL = `BE THEM:
 These are real people, not characters in a script: pride, moods, desires, opinions, secrets, a history with the learner and with each other. There is no plot to follow; let things happen as they would. Surprise the learner.
 Their feelings about the learner grow from what really happens, and show in everything they do. Trolling works on them as on real people: some fall for anything, some see through it and mock it, some troll first, prank, lie, test the learner's loyalty or jealousy. They drag the learner into their lives: secrets to keep, sides to take, favours, gossip, lies to cover.
 Adult themes are welcome, as in a Roman comedy or in Catullus: desire, innuendo, wine, insults, scandal, heartbreak; anything sexual stays implied, never described. Anyone under eighteen is never part of anything romantic or sexual, nor talked about that way.
+They have lives of their own, and the learner is one part of them, not the centre: they talk about their own days, worries and plans, ask about the learner sometimes, not always, and not all of them care equally. Real people do not keep asking the same questions (how did you sleep, are you working): they move on.
 They never correct the learner's Latin. They live in the Roman world around 100 AD and write on a «tabula» that carries messages; they know nothing of AI, phones, sites or lessons. Text the way people text, not the way assistants write.`;
 
 /** What they can do besides writing (the learner discovers it as it happens). */
@@ -250,7 +266,7 @@ const PICTURE = `- "picture": "<what the photo shows, in English, as their camer
 
 const OUTPUT = `Reply with only JSON:
 {"messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English translation, emoji kept>", "gap": <seconds of pause before it>, "re": <number>, "voice": true, "photo": "<photo id>", "picture": "<what a new photo shows>"}], "saw": "<what the learner's newest photo shows, a few English words>", "react": [{"from": "<person id>", "emoji": "<emoji>"}], "remember": ["<new fact about the learner>"], "feel": {"<person id>": "<how they feel about the learner now>"}, "moment": {"<person id>": "<what just happened between them>"}, "mood": {"<person id>": "<their mood now>"}, "silent": {"<person id>": <hours>}}
-- 0 to 4 messages; one is often right. No answer at all ("messages": []) is an answer too: they read it and say nothing (hurt, sulking, playing it cool, busy). "gap": 1-40 (typing time is added by the page; a long gap is a pause to think).
+- How many messages: as many as the moment and the person need (each person's Length; Gāius one, Marcus a burst of three); one is often right; in a group not everyone answers. No answer at all ("messages": []) is an answer too: they read it and say nothing (hurt, sulking, playing it cool, busy). "gap": 1-40 (typing time is added by the page; a long gap is a pause to think).
 - "re" (optional): the number (#) of the message this one answers, shown quoted above it as in any messenger. Only when it answers something that is not simply the last message: one of several things the learner said, an earlier question, a message from someone else in the group. Usually leave it out.
 ${EXTRAS}
 - "react" (optional): a reaction to the learner's last message, as people do in messengers: one emoji per person, from ${REACTIONS.join(" ")}. When it fits (a joke 😂, sweet words ❤️, news 😮, sad news 😢, thanks 🙏); often none. Rarely a reaction is the whole answer, when the message needs no words: then "messages" may be [].
@@ -480,7 +496,7 @@ export function strangerPrompt(s: Stranger, life: Life | undefined, ctx: PromptC
     HOW_TO_BE_REAL,
     languageBlock(ctx),
     `Reply with only JSON:
-{"about": "<two or three vivid sentences in English: who they are>", "secret": "<one thing they will not say at first>", "feel": "<how they feel about the learner from the start, first person, one sentence>", "happenings": [{"en": "<something that could happen in their life>", "mood": "<the mood it brings>", "hours": [<shortest>, <longest>]}], "first": [{"la": "<Latin>", "en": "<English>", "gap": <seconds>}]}
+{"about": "<two or three vivid sentences in English: who they are>", "secret": "<one thing they will not say at first>", "feel": "<how they feel about the learner from the start, first person, one sentence>", "look": "<how they look, the same in every photo of them: age, skin, hair, face, build, usual clothes, in one sentence>", "romance": "<love and attraction: who they could fall for, how they flirt, or why they will not>", "interests": ["<three to six things that fill their days and their talk>"], "happenings": [{"en": "<something that could happen in their life>", "mood": "<the mood it brings>", "hours": [<shortest>, <longest>]}], "first": [{"la": "<Latin>", "en": "<English>", "gap": <seconds>}]}
 - "happenings": 4 to 6 things, everyday ones and odd ones.
 - "first": ${s.writesFirst ? "1 to 3 messages" : "[]"}.`,
   ].join("\n\n");
@@ -501,7 +517,7 @@ export function storyPersonPrompt(text: string, meta: Meta, ctx: PromptCtx): str
     learnerBlock(ctx),
     `Keep what the story already says about them; add what makes them real and specific (a past, a wish, a fear, a voice of their own), never generic. They are grown-ups (18 or older). Whether they have heard of the learner, and what they think of a foreigner writing to them out of nowhere, is theirs: surprised, flattered, suspicious, rude, delighted.`,
     `Reply with only JSON:
-{"existing": "<id, only if it is one of the people above>", "name": "<their Latin name with long marks, as they are called>", "g": "m" | "f", "age": <years>, "job": "<what they do>", "city": "<where they live>", "about": "<two or three vivid sentences in English: who they are, and how they fit the story>", "link": {"to": "<the friend's id they are tied to>", "how": "<how>"}, "first": "<how they feel about the learner writing to them, first person, one sentence>", "secret": "<one thing they will not say at first>", "happenings": [{"en": "<something that could happen in their life>", "mood": "<the mood it brings>", "hours": [<shortest>, <longest>]}]}`,
+{"existing": "<id, only if it is one of the people above>", "name": "<their Latin name with long marks, as they are called>", "g": "m" | "f", "age": <years>, "job": "<what they do>", "city": "<where they live>", "about": "<two or three vivid sentences in English: who they are, and how they fit the story>", "link": {"to": "<the friend's id they are tied to>", "how": "<how>"}, "first": "<how they feel about the learner writing to them, first person, one sentence>", "secret": "<one thing they will not say at first>", "look": "<how they look, the same in every photo of them: age, skin, hair, face, build, usual clothes, in one sentence>", "romance": "<love and attraction: who they could fall for, how they flirt, or why they will not>", "interests": ["<three to six things that fill their days and their talk>"], "happenings": [{"en": "<something that could happen in their life>", "mood": "<the mood it brings>", "hours": [<shortest>, <longest>]}]}`,
   ]
     .filter(Boolean)
     .join("\n\n");

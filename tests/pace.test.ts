@@ -177,7 +177,7 @@ describe("the phone routine's helper paces exactly like the page", () => {
       v: 1,
       me: { name: "Cyrillus", g: "m", tz: "Europe/Kyiv" },
       forms: words,
-      people: PEOPLE.map((p) => ({ id: p.id, name: p.name, tz: p.tz, wake: p.day.wake, sleep: p.day.sleep, busy: p.day.busy, sheet: "", pace: p.pace })),
+      people: PEOPLE.map((p) => ({ id: p.id, name: p.name, tz: p.tz, wake: p.day.wake, sleep: p.day.sleep, busy: p.day.busy, sheet: "", pace: p.pace, burst: p.nature.burst })),
       photos: [{ id: "claudia-books", en: "books", who: ["claudia"] }],
       groups: { [GROUP.id]: { name: "Amīcī", members: PEOPLE.map((p) => p.id) } },
     };
@@ -186,6 +186,7 @@ describe("the phone routine's helper paces exactly like the page", () => {
       { chat: "iulia", from: "iulia", la: "Cyrille, nunc scrībō", en: "x" },
       { chat: "gaius", from: "gaius", la: "Aquam bibō", en: "x" },
       { chat: "gaius", from: "gaius", la: "Et nunc", en: "x" },
+      { chat: "gaius", from: "gaius", la: "Puella bene", en: "x" },
       { chat: "claudia", from: "claudia", la: "Ecce!", en: "x", photo: "claudia-books" },
       { chat: "claudia", from: "claudia", la: "Valē, Cyrille!", en: "x" },
       { chat: GROUP.id, from: "lucius", la: "Nunc nōn dormiō", en: "x" },
@@ -210,14 +211,14 @@ describe("the phone routine's helper paces exactly like the page", () => {
     for (const d of drafts) {
       const when = Math.max(T0 + 3000, (last[d.chat] ?? 0) + 2000 + Math.min(14000, 1200 + d.la.length * 95));
       const t = sim[d.chat];
-      if (allowOwn(t, d.from, d, when, paceOf(d.from, meta), d.chat === GROUP.id).ok) {
+      if (allowOwn(t, d.from, d, when, paceOf(d.from, meta), d.chat === GROUP.id, PERSON_BY_ID.get(d.from)!.nature.burst).ok) {
         expected.push(`${d.chat}:${d.la}`);
         t.messages.push({ id: `x${expected.length}`, from: d.from, la: d.la, at: when, src: "routine", ...(d.photo ? { photo: d.photo } : {}) });
         last[d.chat] = when;
       }
     }
     expect(saved.map((s) => `${s.chat}:${s.la}`)).toEqual(expected);
-    // what it is: Iūlia waits (her inbox message was her second try); Gāius writes once; Claudia may, but not say goodbye again;
+    // what it is: Iūlia waits (her inbox message was her second try); Gāius writes once, two messages at most; Claudia may, but not say goodbye again;
     // the group talks once today, and Marcus does not say again what he said yesterday
     expect(expected).toEqual(["gaius:Aquam bibō", "gaius:Et nunc", "claudia:Ecce!", `${GROUP.id}:Nunc nōn dormiō`]);
     expect(out).toContain("NOT ALLOWED [iulia] iulia");

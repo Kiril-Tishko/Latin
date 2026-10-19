@@ -284,7 +284,12 @@ def photo_sent_lately(t, photo, now):
     return any(m.get("photo") == photo and now - m.get("at", 0) < PHOTO_DAYS * 24 * HOUR for m in t.get("messages", []))
 
 
-def allow_own(t, who, la, photo, at, pace, group):
+def burst_of(brief, pid):
+    """the most messages someone sends in a row (their nature; the brief carries it)"""
+    return next((p.get("burst") or BURST_MAX for p in (brief or {}).get("people", []) if p.get("id") == pid), BURST_MAX)
+
+
+def allow_own(t, who, la, photo, at, pace, group, burst=BURST_MAX):
     msgs = before(t, at)
     last = msgs[-1] if msgs else None
     run = []
@@ -293,7 +298,8 @@ def allow_own(t, who, la, photo, at, pace, group):
             break
         run.insert(0, m)
     going = last is not None and bool(run) and run[-1] is last
-    if going and len(run) >= (BURST_MAX * 2 if group else BURST_MAX):
+    # a burst is as long as the person's own (Gāius two at most); a group's talk, a few people's
+    if going and (len([m for m in run if m.get("from") == who]) >= burst or len(run) >= BURST_MAX * 2):
         return False, "enough messages in a row"
     if not going:
         if group:
@@ -391,7 +397,7 @@ def vet(d, draft_path, out_path):
             bad.append("words not allowed: " + ", ".join(unknown))
         bad += [f":{c}: is no emoji" for c in CODE.findall(la) if c not in ROMAN_EMOJI]
         if not bad:
-            ok, why = allow_own(t, who, la, photo, when, pace_of(brief, meta, who), group)
+            ok, why = allow_own(t, who, la, photo, when, pace_of(brief, meta, who), group, burst_of(brief, who))
             if not ok:
                 bad.append(why)
         if bad:

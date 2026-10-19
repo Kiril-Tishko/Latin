@@ -171,7 +171,7 @@ export function paceLine(name: string, pace: Pace, p: PaceNow, now: number, tz: 
  * pace (private chat) or by the group's rhythm; and it must not repeat what
  * they said lately, nor send a photo sent there lately.
  */
-export function allowOwn(thread: Thread, who: string, msg: { la: string; photo?: string }, at: number, pace: Pace, group: boolean): { ok: boolean; why: string } {
+export function allowOwn(thread: Thread, who: string, msg: { la: string; photo?: string }, at: number, pace: Pace, group: boolean, burst = BURST_MAX): { ok: boolean; why: string } {
   const before = thread.messages.filter((m) => m.at <= at).sort((a, b) => a.at - b.at);
   const last = before.at(-1);
   // going on with a burst: the message before is theirs (or, in a group, anyone's), close enough, and the burst is not too long
@@ -182,7 +182,8 @@ export function allowOwn(thread: Thread, who: string, msg: { la: string; photo?:
     run.unshift(m);
   }
   const going = !!last && run.length > 0 && run.at(-1) === last;
-  if (going && run.length >= (group ? BURST_MAX * 2 : BURST_MAX)) return { ok: false, why: "enough messages in a row" };
+  // a burst is as long as the person's own (Gāius two at most); a group's talk, a few people's
+  if (going && (run.filter((m) => m.from === who).length >= burst || run.length >= BURST_MAX * 2)) return { ok: false, why: "enough messages in a row" };
   if (!going) {
     if (group) {
       const g = groupMayWrite(thread, at);
@@ -200,13 +201,13 @@ export function allowOwn(thread: Thread, who: string, msg: { la: string; photo?:
  * never sent. What the learner has seen, answers to the learner, and the
  * learner's own messages always stay. Returns the ids to drop.
  */
-export function overPace(thread: Thread, meta: Meta, group: boolean): string[] {
+export function overPace(thread: Thread, meta: Meta, group: boolean, burstOf: (id: string) => number = () => BURST_MAX): string[] {
   const sorted = [...thread.messages].sort((a, b) => a.at - b.at);
   const kept: Msg[] = [];
   const drop: string[] = [];
   for (const m of sorted) {
     const unseen = m.at > thread.readAt && spoken(m) && (m.src === "own" || m.src === "routine");
-    if (unseen && !allowOwn({ ...thread, messages: kept }, m.from, m, m.at, paceOf(m.from, meta), group).ok) drop.push(m.id);
+    if (unseen && !allowOwn({ ...thread, messages: kept }, m.from, m, m.at, paceOf(m.from, meta), group, burstOf(m.from)).ok) drop.push(m.id);
     else kept.push(m);
   }
   return drop;

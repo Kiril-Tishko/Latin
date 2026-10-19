@@ -14,7 +14,7 @@ import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, 
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
 import { allowOwn, overPace, paceOf } from "../chat/pace";
-import { applyMinds, MemoryDraft, mergeMinds, migrateMinds, Mind } from "../chat/mind";
+import { applyMinds, forgetWith, MemoryDraft, mergeMinds, migrateMinds, Mind } from "../chat/mind";
 import { natureOf } from "../chat/nature";
 import { mergeTies } from "../chat/bond";
 import { mergeGoals } from "../chat/lives";
@@ -231,6 +231,11 @@ function saveMind(m: Mind) {
   }
 }
 
+/** Messages that never reached the learner: what came with them is forgotten. */
+function unsaid(ids: string[], now = Date.now()) {
+  if (ids.length) for (const m of forgetWith(minds, ids, now)) saveMind(m);
+}
+
 /** Keeps what a conversation or a stretch of their lives did to the people's minds. */
 function remember(change: Parameters<typeof applyMinds>[1], now: number) {
   for (const m of applyMinds(minds, change, now, (id) => whoOf(id, meta)?.name ?? (id === "me" ? getProgress().settings.me?.name ?? "the learner" : id))) saveMind(m);
@@ -331,6 +336,7 @@ function follow(s: NonNullable<typeof store>) {
         tidied.add(t.id);
         const drop = overPace(t, meta, isGroupId(t.id, meta), (id) => natureOf(id, meta)?.burst ?? 4);
         if (drop.length) saveThread({ ...t, messages: t.messages.filter((m) => !drop.includes(m.id)), dropped: [...(t.dropped ?? []), ...drop].slice(-400) });
+        unsaid(drop);
       }
       saveLocal();
       emit();
@@ -405,7 +411,7 @@ function takeFromInbox(d: DocSnap) {
     saveThread(merge(t, { ...t, messages: [...t.messages, msg] }));
     // what they will remember of it, and what was told behind the scenes (the routine says so with the message)
     const { memories, tells } = routineMinds(x, chat, meta);
-    if (memories.length || tells.length) remember({ memories, chat, tells }, at);
+    if (memories.length || tells.length) remember({ memories: memories.map((m) => ({ ...m, msg: d.id })), chat, tells }, at);
     // writing to the learner in private again: whoever blocked them has unblocked them
     if (t.kind !== "group" && isBlocked(meta, msg.from)) {
       const { [msg.from]: _, ...rest } = meta.world?.blocked ?? {};
@@ -483,6 +489,7 @@ export function send(id: string, text: string, re?: string, extra: Partial<Pick<
     dropped: [...(t.dropped ?? []), ...waiting].slice(-200),
     readAt: now,
   });
+  unsaid(waiting, now);
   clearTimeout(pending.get(id));
   pending.set(id, setTimeout(() => void answer(id), 2500));
   // the phone routine leaves the learner alone while they are chatting

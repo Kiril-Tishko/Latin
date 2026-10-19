@@ -675,7 +675,13 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   remember it differently), `settled`, `outdated`, and `tell` (someone passes
   something on out of the learner's sight; it may be garbled or a lie;
   `applyMinds` gives the one told the memory, and the teller the memory of
-  telling). Knowledge has boundaries: a prompt carries only its people's own
+  telling). What someone remembers of a message of their own goes with it
+  (the own-writing prompt's per-message "remember", the routine's; `Memory.msg`):
+  a message not sent is not remembered, and one that never reaches the learner
+  (taken back by the learner's Send while on its way, or cut by `overPace`)
+  takes its memories along (`forgetWith`: marked outdated, so another device's
+  copy does not bring them back). Where the learner lives (Kyiv) the five
+  friends know; anyone else only once told (`learnerBlock`). Knowledge has boundaries: a prompt carries only its people's own
   memories (`memoryBlock`); the old blocks that let every friend know what the
   learner said to the others, and how the others feel, are gone; storylines
   carry who knows of them (`Drama.knows`) and show only to them (`dramaBlock`
@@ -890,8 +896,11 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   a photo or a fresh picture now and then), and passes them through
   `nuntii.py vet`: words, pace, repeats, a photo sent lately, asleep, blocked
   or giving the silent treatment; only what passes is saved, as the inbox
-  documents vet makes (ids and times). It ends with one line about the unseen
-  messages (muted chats left out), which becomes the notification. Change its
+  documents vet makes (ids and times). It ends with one line about what arrived
+  since its last run (`last_run`, from the trigger's schedule: what the people
+  wrote on their own and this run's messages; each message is told of once, so
+  unread old ones do not come back every hour; muted chats left out), which
+  becomes the notification ("No new messages." when nothing came). Change its
   schedule or prompt with update_trigger (keep the prompt in sync with that
   file).
 

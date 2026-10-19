@@ -244,3 +244,12 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
   judged 4.3 of 5, and the tuning above. Stages 4-8 published together
   as v42; both routines (the hourly phone one and the pictures one) now
   hold the current instructions and helper, checked against the files.
+- 19 Oct, evening: what the live data showed. The learner has not opened the
+  page since 16 Oct; 73 messages wait in the inbox (the old spam; the page
+  will let 9 of them in, by pace) and the minds are still to be moved in (a
+  dry run of the first load on the real data: sane). Since the pacing fix the
+  routine wrote only one stretch of group talk, but its notification repeated
+  every hour the same old line ("· and 203 more"): it now tells only of what
+  arrived since its last run. Fixed too: a memory of a message that never
+  reached the learner (not sent, taken back, cut by pacing) is forgotten with
+  it, and only the friends know where the learner lives.

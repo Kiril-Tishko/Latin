@@ -208,7 +208,7 @@ export function memoryBlock(who: Who, meta: Meta, ctx: PromptCtx, thread: Thread
 export function learnerBlock(ctx: PromptCtx): string {
   const t = localTime(ctx.now, ctx.tz);
   const endings = ctx.me.g === "m" ? "amīcus, discipulus" : "amīca, discipula";
-  return `THE LEARNER: ${ctx.me.name} (called «${ctx.me.name}»), a ${gender(ctx.me.g)} (words about them take the endings of ${endings}). Lives far away, in Kyiv, beyond the Black Sea, and is learning Latin, which is why everyone writes to them simply. For ${ctx.me.name} it is ${t.weekday} ${t.hm} (${partOfDay(t.h)}).`;
+  return `THE LEARNER: ${ctx.me.name} (called «${ctx.me.name}»), a ${gender(ctx.me.g)} (words about them take the endings of ${endings}). Lives far away, in Kyiv, beyond the Black Sea (the five friends know it; anyone else knows where the learner lives only once the learner or someone who knows has told them), and is learning Latin, which is why everyone writes to them simply. For ${ctx.me.name} it is ${t.weekday} ${t.hm} (${partOfDay(t.h)}).`;
 }
 
 // -------------------------------------------------------- conversation
@@ -478,9 +478,9 @@ Away from the learner they live and talk to each other too: news and gossip pass
     languageBlock(ctx),
     photosBlock(everyone.filter((w) => photoRoom(w.id, meta, threads, ctx.now) > 0), sent, ctx.canMake),
     `Reply with only JSON:
-{"messages": [{"chat": "<chat id>", "from": "<person id>", "la": "<Latin>", "en": "<English>", "in": <minutes from now, 0-${hours * 60}>, "voice": true, "photo": "<photo id>", "picture": "<what a new photo shows>"}]}
-Messages of one chat in time order; a burst of messages is a minute or less apart; ${OWN_MAX} at most in all. {"messages": []} when nobody writes.
-Optionally also "feel": {"<person id>": "<how they feel about the learner now, first person, one or two sentences>"} for anyone whose feelings moved while the learner was away (missing them, worrying, cooling off after days of silence, still angry); "remember": [{"who": "<person id>", "text": "<what they will remember, in their own words>", "kind": "moment" | "fact" | "promise" | "plan" | "secret" | "joke" | "conflict" | "news", "weight": <1-5>, "about": ["me", "<person id>"], "secret": true}] for what happened in their lives meanwhile that they will remember; "settled" and "outdated": [<memory ids>] for memories done or no longer true; "bond": {"<person id>": {"<level>": <change>}}, "levels": {"<person id>": {"<level>": <0-10>}} and "ties": [{"from", "to", "note", "<level>": <change>}] as below.
+{"messages": [{"chat": "<chat id>", "from": "<person id>", "la": "<Latin>", "en": "<English>", "in": <minutes from now, 0-${hours * 60}>, "voice": true, "photo": "<photo id>", "picture": "<what a new photo shows>", "remember": [<as below>]}]}
+Messages of one chat in time order; a burst of messages is a minute or less apart; ${OWN_MAX} at most in all. {"messages": []} when nobody writes. A message's own "remember" is what the people of that chat will remember of it (news they told, a promise, a plan, a confession): it is remembered only if the message is sent.
+Optionally also "feel": {"<person id>": "<how they feel about the learner now, first person, one or two sentences>"} for anyone whose feelings moved while the learner was away (missing them, worrying, cooling off after days of silence, still angry); "remember": [{"who": "<person id>", "text": "<what they will remember, in their own words>", "kind": "moment" | "fact" | "promise" | "plan" | "secret" | "joke" | "conflict" | "news", "weight": <1-5>, "about": ["me", "<person id>"], "secret": true}] for what happened in their lives meanwhile that they will remember (not what they write: that goes with its message); "settled" and "outdated": [<memory ids>] for memories done or no longer true; "bond": {"<person id>": {"<level>": <change>}}, "levels": {"<person id>": {"<level>": <0-10>}} and "ties": [{"from", "to", "note", "<level>": <change>}] as below.
 ${BONDS}
 ${EXTRAS}
 ${DEEDS}

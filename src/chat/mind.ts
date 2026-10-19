@@ -39,6 +39,8 @@ export interface Memory {
   outdated?: boolean;
   /** A promise's or a plan's day (ms). */
   until?: number;
+  /** The message it came with (what they told the learner): if it never reaches the learner, it is forgotten (`forgetWith`). */
+  msg?: string;
   updatedAt: number;
 }
 
@@ -178,6 +180,9 @@ export interface MemoryDraft {
   about: string[];
   secret?: boolean;
   until?: number;
+  /** The chat and the message it came with, when it is what someone told the learner in a message of their own. */
+  chat?: string;
+  msg?: string;
 }
 
 const str = (x: unknown) => String(x ?? "").replace(/\s+/g, " ").trim();
@@ -247,7 +252,20 @@ export function tellsOf(raw: unknown, tellers: Set<string>, everyone: Set<string
 
 /** A fresh memory of someone's. */
 export function memoryFrom(d: MemoryDraft, at: number, how: Pick<Memory, "from" | "chat" | "untrue"> = { from: "saw" }): Memory {
-  return { id: memoryId(d.who, d.text, at), at, text: d.text, about: d.about, kind: d.kind, weight: d.weight, ...how, ...(d.secret ? { secret: true } : {}), ...(d.until ? { until: d.until } : {}), updatedAt: at };
+  return {
+    id: memoryId(d.who, d.text, at),
+    at,
+    text: d.text,
+    about: d.about,
+    kind: d.kind,
+    weight: d.weight,
+    ...how,
+    ...(d.chat ? { chat: d.chat } : {}),
+    ...(d.secret ? { secret: true } : {}),
+    ...(d.until ? { until: d.until } : {}),
+    ...(d.msg ? { msg: d.msg } : {}),
+    updatedAt: at,
+  };
 }
 
 /**
@@ -288,6 +306,22 @@ export function applyMinds(
   mark(change.settled, { done: true });
   mark(change.outdated, { outdated: true });
   return [...touched.values()].map((x) => ({ ...x, memories: prune(x.memories, now), updatedAt: now }));
+}
+
+/**
+ * Messages that never reached the learner (taken back while on their way, or
+ * cut as beyond the person's pace): what came with them is forgotten, as if it
+ * had not been said (marked outdated, so a copy on another device does not
+ * bring it back). Returns the minds that changed.
+ */
+export function forgetWith(minds: Record<string, Mind>, msgIds: Iterable<string>, now: number): Mind[] {
+  const ids = new Set(msgIds);
+  const out: Mind[] = [];
+  for (const m of Object.values(minds)) {
+    if (!m.memories.some((x) => x.msg && ids.has(x.msg) && !x.outdated)) continue;
+    out.push({ ...m, memories: m.memories.map((x) => (x.msg && ids.has(x.msg) && !x.outdated ? { ...x, outdated: true, updatedAt: now } : x)), updatedAt: now });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- moving in

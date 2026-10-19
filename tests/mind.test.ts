@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { applyMinds, memoriesOf, Memory, memoryId, mergeMinds, migrateMinds, Mind, newMind, prune, recall, tellsOf } from "../src/chat/mind";
-import { writeReply } from "../src/chat/engine";
-import { dramaBlock, ownPrompt, replyPrompt } from "../src/chat/prompts";
+import { applyMinds, forgetWith, memoriesOf, Memory, memoryId, mergeMinds, migrateMinds, Mind, newMind, prune, recall, tellsOf } from "../src/chat/mind";
+import { writeOwn, writeReply } from "../src/chat/engine";
+import { dramaBlock, learnerBlock, ownPrompt, replyPrompt } from "../src/chat/prompts";
 import { makeBrief } from "../src/chat/brief";
 import { deedsOf } from "../src/chat/world";
 import { membersOf, Meta, newMeta, newThread, Thread } from "../src/chat/model";
@@ -172,5 +172,48 @@ describe("moving the old memories in", () => {
     expect(migrateMinds(meta, threads, moved, members, T0 + 1)).toEqual([]);
     expect(migrateMinds(meta, threads, {}, members, T0 + 5).find((m) => m.id === "iulia")!.memories.map((m) => m.id).sort()).toEqual(moved.iulia.memories.map((m) => m.id).sort());
     expect(newMind("x").memories).toEqual([]);
+  });
+});
+
+describe("what someone wrote is remembered only if it reaches the learner", () => {
+  it("keeps a message's memory with the message, and forgets it when the message never arrives", async () => {
+    const H = 3600_000;
+    const threads: Thread[] = [
+      { ...newThread("iulia", "dm"), messages: [{ id: "a1", from: "me", la: "Salvē!", at: T0 - H }, { id: "a2", from: "iulia", la: "Salvē!", at: T0 - H + 60_000, src: "reply" }] },
+      // Gāius wrote once and got no answer: he waits
+      { ...newThread("gaius", "dm"), messages: [{ id: "b1", from: "me", la: "Salvē!", at: T0 - 10 * H }, { id: "b2", from: "gaius", la: "Salvē.", at: T0 - 10 * H + 60_000, src: "reply" }, { id: "b3", from: "gaius", la: "Ubi es?", at: T0 - 5 * H, src: "own" }] },
+    ];
+    const ask = async <T,>(): Promise<T> =>
+      ({
+        messages: [
+          { chat: "iulia", from: "iulia", la: "Hodiē bene labōrō.", en: "Today I work well.", in: 5, remember: [{ who: "iulia", text: "I told Kiril my work goes well today", kind: "news", weight: 2 }] },
+          { chat: "gaius", from: "gaius", la: "Hodiē nōn dormiō.", en: "Today I do not sleep.", in: 10, remember: [{ who: "gaius", text: "I told Kiril I could not sleep", kind: "news", weight: 2 }] },
+        ],
+        remember: [{ who: "gaius", text: "The new goat kicked the fence down", kind: "moment", weight: 3, about: ["gaius"] }],
+      }) as T;
+    const own = await writeOwn(threads, newMeta(), ctxAt(T0), { ask, opts: {}, lex, r: seeded(2) }, 1);
+    expect(own.messages.map((m) => m.chat)).toEqual(["iulia"]);
+    const id = own.messages[0].msg.id;
+    // Gāius's message was not sent: he does not remember sending it; what he lived meanwhile stays
+    expect(own.memories.map((m) => m.text)).toEqual(["The new goat kicked the fence down", "I told Kiril my work goes well today"]);
+    expect(own.memories[1]).toMatchObject({ who: "iulia", chat: "iulia", msg: id });
+    const minds = Object.fromEntries(applyMinds({}, { memories: own.memories }, T0, nameOf).map((m) => [m.id, m]));
+    expect(minds.iulia.memories[0]).toMatchObject({ chat: "iulia", msg: id });
+    // the learner wrote before it arrived and it was taken back (or it was cut as beyond her pace): forgotten
+    const later = forgetWith(minds, [id, "other"], T0 + 60_000);
+    expect(later.map((m) => m.id)).toEqual(["iulia"]);
+    expect(later[0].memories[0].outdated).toBe(true);
+    expect(recall(later[0], { now: T0 + 60_000, with: ["me", "iulia"], chat: "iulia", text: "work", k: 5 })).toEqual([]);
+    // another device's older copy does not bring it back
+    expect(mergeMinds(minds.iulia, later[0])!.memories[0].outdated).toBe(true);
+    expect(forgetWith(minds, ["other"], T0)).toEqual([]);
+  });
+});
+
+describe("where the learner lives", () => {
+  it("is known to the friends, and to anyone else only once they are told", () => {
+    const line = learnerBlock(ctxAt(T0));
+    expect(line).toContain("Lives far away, in Kyiv");
+    expect(line).toContain("the five friends know it; anyone else knows where the learner lives only once the learner or someone who knows has told them");
   });
 });

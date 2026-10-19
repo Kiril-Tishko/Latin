@@ -414,7 +414,7 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
   const lived: MemoryDraft[] = [];
   refreshLives(meta, [...new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)))], ctx.now, r, lived);
   const raw = await deps.ask<{
-    messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown; picture?: unknown; gloss?: unknown; unsend?: unknown }[];
+    messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown; picture?: unknown; gloss?: unknown; unsend?: unknown; remember?: unknown }[];
     feel?: Record<string, unknown>;
     moment?: Record<string, unknown>;
     remember?: unknown;
@@ -448,7 +448,7 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
   // each chat as it will be, message by message: a new burst must be allowed by the person's pace or the group's rhythm
   const sim = new Map<string, Thread>();
   const drafts = (raw?.messages ?? [])
-    .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), ...extras(m, ctx.canMake) }))
+    .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), remember: m.remember, ...extras(m, ctx.canMake) }))
     .sort((a, b) => a.in - b.in)
     .filter((m) => {
       const orig = byChat.get(m.chat);
@@ -485,9 +485,13 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
     // fresh pictures: two at most in a turn
     const pic = d.picture && made.length < 2 ? picId() : undefined;
     if (pic) made.push(wanted(d, ctx.now, pic, meta));
-    return { chat: d.chat, msg: { id: msgId(), from: d.from, at, src: "own" as const, ...fields(d, pic), ...deletedAtOf(d, at) } };
+    const msg = { id: msgId(), from: d.from, at, src: "own" as const, ...fields(d, pic), ...deletedAtOf(d, at) };
+    // what those in the chat will remember of it goes with it: a message that is not sent, or never arrives, is not remembered
+    for (const m of memoriesOf({ remember: d.remember }, membersOf(d.chat, meta).map((w) => w.id), allPeople(meta))) memories.push({ ...m, chat: d.chat, msg: msg.id });
+    return { chat: d.chat, msg };
   });
-  return { messages: messages.filter((x) => x.msg.la || x.msg.photo || x.msg.pic), deeds, made, memories, settled: idsOf(raw?.settled), outdated: idsOf(raw?.outdated) };
+  const sent = new Set(messages.filter((x) => x.msg.la || x.msg.photo || x.msg.pic).map((x) => x.msg.id));
+  return { messages: messages.filter((x) => sent.has(x.msg.id)), deeds, made, memories: memories.filter((m) => !m.msg || sent.has(m.msg)), settled: idsOf(raw?.settled), outdated: idsOf(raw?.outdated) };
 }
 
 // ------------------------------------------------------------ strangers

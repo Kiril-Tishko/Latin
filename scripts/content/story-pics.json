@@ -1,0 +1,17 @@
+[
+ {"id": "qui-docet", "prompt": "A small Roman schoolroom: a young girl student stands at a wax tablet and teaches, pointing at the letters, while her woman teacher sits on the bench as the pupil, listening and smiling."},
+ {"id": "et-tu", "prompt": "A Roman girl studies at a table covered with wax tablets and scrolls by an oil lamp, and looks over at her friend, who has fallen asleep with her head on the table."},
+ {"id": "poeta", "prompt": "A Roman poet with a laurel wreath sits on a stone bench in a garden writing on a scroll, and a young woman beside him reads what he writes."},
+ {"id": "aqua", "prompt": "A tired, sunburnt Roman farmer in a field of wheat drinks from a clay cup while a girl pours more water from a jug; bright summer sun."},
+ {"id": "discipula-dormit", "prompt": "A Roman woman teacher stands with her arms folded, watching a girl student who has fallen asleep over a letter on her desk."},
+ {"id": "epistula-poetae", "prompt": "A young Roman woman sits by a window reading a long papyrus letter for the tenth time, smiling, with more letters beside her."},
+ {"id": "amicus-meus", "prompt": "A big, strong Roman farmer sits under an olive tree with a wax tablet on his knees while a young friend teaches him to read, pointing at the letters."},
+ {"id": "liber-poetae", "prompt": "A young girl student in a Roman library finds a long, beautiful scroll and reads it, amazed, while the old poet who wrote it watches from the doorway."},
+ {"id": "possum", "prompt": "Four Roman friends showing off: one reads a scroll, one writes on a wax tablet, one carries a big basket of grapes, and one sleeps happily under a tree."},
+ {"id": "schola-silva", "prompt": "A Roman woman teacher leads her girl students out of the town into a big, beautiful forest, where they kneel by a stream to look at the water and the earth."},
+ {"id": "europa-creta", "prompt": "Europa, a young woman, walks arm in arm with her friend along the rocky shore of the island of Crete, the sea shining blue beside them."},
+ {"id": "taurus", "prompt": "A brave girl rides on the back of a big, gentle bull out of a dark forest towards a farmer, who opens his arms in joy."},
+ {"id": "romam", "prompt": "Two young travellers walk with a farmer and his bull along a long, straight paved Roman road, with the city of Rome in the distance."},
+ {"id": "tunica", "prompt": "A Roman man teacher holds up a tunic far too long and big for him while his girl students laugh, and a huge farmer stands nearby with a jug of wine."},
+ {"id": "vinum-deo", "prompt": "A Roman farmer on dry, cracked land pours wine from a jug onto a small stone altar before a statue of a god, while rain clouds gather above."}
+]

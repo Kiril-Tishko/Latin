@@ -54,16 +54,19 @@ function loadPack(pack: string, ac: AudioContext): Promise<AudioBuffer> {
     s.onload = () => (window.__tabulaAudio?.[pack] ? resolve(window.__tabulaAudio[pack]) : reject(new Error("empty pack")));
     s.onerror = () => reject(new Error(`no pack ${pack}`));
     document.head.appendChild(s);
-  }).then((b64) => {
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    // the callback form: older Safari has no promise from decodeAudioData
-    return new Promise<AudioBuffer>((res, rej) => void ac.decodeAudioData(bytes.buffer, res, rej));
-  });
+  }).then((b64) => decode(b64, ac));
   buffers.set(pack, p);
   p.catch(() => buffers.delete(pack));
   return p;
+}
+
+/** Audio in base64 (an MP3), decoded. */
+function decode(b64: string, ac: AudioContext): Promise<AudioBuffer> {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  // the callback form: older Safari has no promise from decodeAudioData
+  return new Promise<AudioBuffer>((res, rej) => void ac.decodeAudioData(bytes.buffer, res, rej));
 }
 
 let current: AudioBufferSourceNode | null = null;
@@ -83,38 +86,60 @@ export function playRecorded(latin: string, rate = 1): Promise<boolean | null> {
   const ok = running(ac);
   stopRecorded();
   const mine = generation;
-  return Promise.all([loadPack(clip[0], ac), ok]).then(
-    ([buf, on]) =>
-      new Promise<boolean | null>((resolve) => {
-        if (mine !== generation) return resolve(false);
-        if (!on) return resolve(null);
-        const src = ac.createBufferSource();
-        src.buffer = buf;
-        // the voice is already at a learner's pace; slower or faster only a little (it changes the pitch)
-        const speed = Math.max(0.8, Math.min(1.2, rate));
-        src.playbackRate.value = speed;
-        src.connect(ac.destination);
-        const length = clip[2] / 1000 + 0.08;
-        let settled = false;
-        const end = (v: boolean | null) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(guard);
-          if (current === src) current = null;
-          resolve(v);
-        };
-        src.onended = () => end(mine === generation);
-        // an end that never comes (a sleeping tab) does not hold up Listen & repeat
-        const guard = setTimeout(() => end(mine === generation), (length / speed) * 1000 + 1500);
-        current = src;
-        try {
-          src.start(0, Math.max(0, clip[1] / 1000 - 0.03), length);
-        } catch {
-          end(null);
-        }
-      }),
-    () => null,
-  );
+  // the voice is already at a learner's pace; slower or faster only a little (it changes the pitch)
+  const speed = Math.max(0.8, Math.min(1.2, rate));
+  return Promise.all([loadPack(clip[0], ac), ok]).then(([buf, on]) => play(ac, buf, on, mine, Math.max(0, clip[1] / 1000 - 0.03), clip[2] / 1000 + 0.08, speed), () => null);
+}
+
+const own = new Map<string, Promise<AudioBuffer>>();
+
+/**
+ * Plays a recording given as base64 (a person's voice message), as
+ * playRecorded does: true when it played to the end, false when stopped, null
+ * when it could not play. Call it from a tap.
+ */
+export function playData(key: string, b64: string): Promise<boolean | null> {
+  const ac = audioContext();
+  if (!ac) return Promise.resolve(null);
+  const ok = running(ac);
+  stopRecorded();
+  const mine = generation;
+  let buf = own.get(key);
+  if (!buf) {
+    buf = decode(b64, ac);
+    own.set(key, buf);
+    buf.catch(() => own.delete(key));
+  }
+  return Promise.all([buf, ok]).then(([b, on]) => play(ac, b, on, mine, 0, b.duration + 0.05, 1), () => null);
+}
+
+/** Plays a stretch of a decoded buffer from FROM for LENGTH seconds: its end, or a stop, settles it. */
+function play(ac: AudioContext, buf: AudioBuffer, on: boolean, mine: number, from: number, length: number, speed: number): Promise<boolean | null> {
+  return new Promise<boolean | null>((resolve) => {
+    if (mine !== generation) return resolve(false);
+    if (!on) return resolve(null);
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = speed;
+    src.connect(ac.destination);
+    let settled = false;
+    const end = (v: boolean | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      if (current === src) current = null;
+      resolve(v);
+    };
+    src.onended = () => end(mine === generation);
+    // an end that never comes (a sleeping tab) does not hold up Listen & repeat
+    const guard = setTimeout(() => end(mine === generation), (length / speed) * 1000 + 1500);
+    current = src;
+    try {
+      src.start(0, from, length);
+    } catch {
+      end(null);
+    }
+  });
 }
 
 /** Stops a recording that is playing. */

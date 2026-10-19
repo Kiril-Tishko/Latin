@@ -419,7 +419,11 @@ only lesson words and only the rules up to its lesson. A story opens for practic
 once all its rules are seen (`storyOpen`); the others wait, naming the parts they
 need (`partsBefore`). `en` is the reader's English,
 `prompt` the exercise English when it must say more ("the friend (f)"), `who`
-the speaker of a dialogue line; two questions each, the right answer first.
+the speaker of a dialogue line. Each story has a picture, a Roman wall painting
+of its plot (src/content/story-pics/<id>.webp, made once with MAI Image on the
+learner's Pollinations account by scripts/content/story_pics.py from
+scripts/content/story-pics.json; a test checks every story has one). Two
+questions each, the right answer first.
 A tap on a line shows its English, a tap on a word its meaning; answering the
 questions marks the story read (`Progress.stories`), and the story ends with
 Continue (`#story-continue`), which goes on with the day; Continue brings each
@@ -604,11 +608,18 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   sentence slips), and Claude reacts in character to what it literally says
   («Aqua tē bibit?! 😂») without explaining grammar.
 - Voice messages: Claude marks about one message in eight `"voice": true`; it
-  shows as a player (▶, a waveform, its length, Aa for its words) and plays with
-  the device's Latin voice in the sender's own pitch and pace (`Person.voice`,
-  `voiceOf`; a man's or a woman's voice by name when the device has one,
-  `voiceFor`). No free online voice reads classical Latin, so the device's
-  respelled voice it is; without one the words show at once.
+  shows as a player (▶, a waveform, its length, Aa for its words). Each one the
+  people send wants a recording in the sender's own voice (src/chat/voices.ts,
+  the learner chose it on 19 Oct after hearing three: Microsoft's voices on
+  Pollinations reading the classical respelling, `voiceText`; Spanish voices,
+  an Italian one for Gāius, `FRIEND_VOICES`; anyone else a steady one of their
+  sex): `withRecordings` puts `rec` on the message and wants a `Pic` of kind
+  "voice" (`prompt` = what it reads, `voice`), made by the pictures routine
+  like a picture (`make_voice`: mono 40 kbps MP3 through ffmpeg, about 40 KB,
+  with `secs`; about 0.001 Pollen). Until it comes, or without Pollen, it plays
+  with the device's Latin voice in the sender's pitch and pace as before
+  (`Person.voice`, `voiceOf`, `voiceFor`; `speakRecording` / `playData` play the
+  recording with Web Audio); with neither, the words show at once.
 - Photos: what a Roman of AD 100 with a camera in their pocket would send
   (selfies, lunch, the mess after a party, a goat on the roof, a chariot crash).
   Each looks like themselves (the learner chose the painted portraits):
@@ -884,7 +895,10 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   vetted with `vetAll`), earlier boards given so it does not repeat and may
   follow one up (`earlierBoards`). Each item is a post with the id of the day
   (`acta-20261012-0`: two devices writing at once merge into one board), its
-  lines one per line in `la` / `en`, `title` and `tag`. A tap on a line shows
+  lines one per line in `la` / `en`, `title` and `tag`. The scribe also says what
+  the picture of the day shows (`picture`, one item's scene); the first post
+  carries it (`pic`, `picEn`), and the page wants it made like the people's
+  pictures (`actaPicture`, `ActaPicture` at the top of the board). A tap on a line shows
   its English, on a word what it is (`WordCard`, shared with the chats); each
   item's speaker reads it with the device's voice; the eye shows all the
   English; Ask Claude sees the board; Continue goes on with the day.

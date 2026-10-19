@@ -123,6 +123,8 @@ export function StoryPage({ id }: { id: string }) {
         <span class="eyebrow">Fābula · Gradus {roman(story.step)}</span>
         <h1 class="story-title"><LatinText text={story.title} /></h1>
         <p class="muted story-en">{story.en}</p>
+        {/* the story as a Roman wall painting (scripts/content/story_pics.py) */}
+        <img class="story-pic" src={`story-pics/${story.id}.webp`} alt={`A Roman wall painting of the story: ${story.en}`} onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
         <p class="ansata story-notice small">
           <span class="eyebrow" style={{ marginRight: "8px" }}>Notice</span>
           <Inline text={story.notice} />

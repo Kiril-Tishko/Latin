@@ -27,8 +27,10 @@ export interface Msg {
   newWords?: string[];
   /** How it came: an answer, written on their own, by the phone routine, the first words of a stranger. */
   src?: "reply" | "own" | "routine" | "first";
-  /** A voice message: `la` is what they say (played with the device's voice). */
+  /** A voice message: `la` is what they say (played with the device's voice until its recording comes). */
   voice?: boolean;
+  /** A voice message's recording, in the sender's own voice: its id in messenger/pics (see Pic, chat/voices.ts). */
+  rec?: string;
   /** A photo sent with the message (content/photos.ts); `la` is its caption. */
   photo?: string;
   /** A picture made for this message, or one the learner sent: its id in messenger/pics (see Pic); `la` is its caption. */
@@ -262,6 +264,11 @@ export interface Pic {
   type?: string;
   b64?: string;
   at: number;
+  /** A voice message's recording (an MP3) instead of a picture: `prompt` is what the voice reads, `voice` whose voice. */
+  kind?: "voice";
+  voice?: string;
+  /** How long a recording lasts (seconds). */
+  secs?: number;
 }
 
 export const newMeta = (): Meta => ({ v: 1, seenAt: 0, plannedAt: 0, life: {}, strangers: {} });

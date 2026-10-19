@@ -9,14 +9,14 @@
 #   python3 nuntii.py notify DIR [new.json]  the line for the phone notification (only what arrived since the last run)
 #   python3 nuntii.py picture ID FROM "what it shows" OUT.json [DIR]   a fresh picture someone sends (DIR: drawn as they look)
 #   python3 nuntii.py looks  DIR FROM "what it shows"            the prompt a picture is made from
-#   python3 nuntii.py pictures WANTED.json OUTDIR                every picture waiting to be made
+#   python3 nuntii.py pictures WANTED.json OUTDIR                every picture (and voice message) waiting to be made
 # DIR holds data/users/me/messenger.json, data/users/me/messenger/brief/now.json,
 # data/users/me/messenger/threads/*.json and data/users/me/messenger/inbox/*.json
 # (as ArtifactData saves them). Messages still waiting in the inbox count as
 # sent: the page moves them into their chats when it opens.
 # The pacing rules (like real people: when the learner goes quiet, a message or
 # two, then they wait) are the same as in src/chat/pace.ts.
-import base64, glob, json, os, random, re, sys, time, unicodedata, urllib.request
+import base64, glob, json, os, random, re, subprocess, sys, tempfile, time, unicodedata, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -583,6 +583,49 @@ def pollinations(prompt):
     return None
 
 
+# voice messages in the people's own voices (src/chat/voices.ts): a Microsoft voice reads the Latin's classical
+# respelling (the page wants it so); the MP3 is made mono and small enough for its document
+VOICE = "https://gen.pollinations.ai/v1/audio/speech"
+VOICE_MODEL = "microsoft/mai-voice-2.1-flash"
+
+
+def small_audio(raw):
+    """(the MP3 at 40 kbps mono, its seconds), with ffmpeg; as it came without it"""
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            src, dst = os.path.join(tmp, "in.mp3"), os.path.join(tmp, "out.mp3")
+            with open(src, "wb") as f:
+                f.write(raw)
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-ac", "1", "-ar", "24000", "-b:a", "40k", dst], check=True, timeout=60)
+            secs = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", dst], capture_output=True, text=True, timeout=30).stdout.strip()
+            with open(dst, "rb") as f:
+                return f.read(), round(float(secs), 1) if secs else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return raw, None
+
+
+def make_voice(text, voice):
+    """A voice message read by its sender's voice: (content type, base64, seconds), or None (then the device reads it)."""
+    if not text or not voice or "all" in POLL_OFF or "voice" in POLL_OFF:
+        return None
+    body = {"model": VOICE_MODEL, "voice": voice, "input": text, "response_format": "mp3"}
+    try:
+        req = urllib.request.Request(VOICE, data=json.dumps(body).encode(), headers={"Content-Type": "application/json", "User-Agent": HORDE_HEAD["User-Agent"]}, method="POST")
+        with urllib.request.urlopen(req, timeout=120) as r:
+            raw = r.read()
+    except urllib.error.HTTPError as e:
+        POLL_OFF["all" if e.code in (401, 403) else "voice"] = f"HTTP {e.code}"
+        print(f"voice {voice}: HTTP {e.code}", file=sys.stderr)
+        return None
+    except Exception as e:  # noqa: BLE001
+        print(f"voice {voice} failed ({e})", file=sys.stderr)
+        return None
+    out, secs = small_audio(raw)
+    if len(out) > 180_000:  # too big for its document
+        return None
+    return "audio/mpeg", base64.b64encode(out).decode(), secs
+
+
 def make_picture(prompt, tries=2):
     """One picture of what someone sends: (content type, base64), or None."""
     res = pollinations(prompt)
@@ -620,13 +663,17 @@ def picture(pid, by, prompt, out, d=None):
 
 
 def pictures(wanted_path, outdir):
-    """Every picture waiting to be made ([{"id", "prompt"}]), at once: OUTDIR/<id>.json holds the fields to update."""
+    """Every picture (and voice message) waiting to be made ([{"id", "prompt", "kind", "voice"}]), at once: OUTDIR/<id>.json holds the fields to update."""
     wanted = load(wanted_path, []) or []
     os.makedirs(outdir, exist_ok=True)
 
     def one(w):
-        res = make_picture(w["prompt"])
-        doc = {"status": "done", "type": res[0], "b64": res[1]} if res else {"status": "failed"}
+        if w.get("kind") == "voice":
+            res = make_voice(w.get("prompt"), w.get("voice"))
+            doc = {"status": "done", "type": res[0], "b64": res[1], **({"secs": res[2]} if res[2] else {})} if res else {"status": "failed"}
+        else:
+            res = make_picture(w["prompt"])
+            doc = {"status": "done", "type": res[0], "b64": res[1]} if res else {"status": "failed"}
         with open(os.path.join(outdir, w["id"] + ".json"), "w") as f:
             json.dump(doc, f)
         return w["id"], doc["status"]

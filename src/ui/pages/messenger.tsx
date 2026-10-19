@@ -16,7 +16,7 @@ import { localTime, moodText, statusAt } from "../../chat/life";
 import { arrived, awayNow, Check, CoachTurn, deletedNow, groupMembers, groupName, iBlocked, isBlocked, isMuted, membersOf, Msg, preview, REACTIONS, reactionsOf, SYS, Thread, unreadCount, voiceOf, Who, whoOf } from "../../chat/model";
 import { romanDate, romeDay, todayLine } from "../../chat/calendar";
 import { PHOTO_BY_ID, PHOTO_CREDIT, photoSrc } from "../../content/photos";
-import { speak, stopSpeaking, useSpeaking, useVoices } from "../../audio/speech";
+import { speak, speakRecording, stopSpeaking, useSpeaking, useVoices } from "../../audio/speech";
 import { allowedWords, CHAT_WORD_LIST, headword, notLatin, strangeWords } from "../../chat/words";
 import { Analysis, annotate, Lexicon } from "../../latin/analyze";
 import { LESSONS } from "../../content/lessons";
@@ -985,6 +985,7 @@ function ActaView({ now }: { now: number }) {
                     {/* hear the item read out (the device's voice) */}
                     <Speak text={withoutEmoji([m.title?.la, ...linesOf(m).map((l) => l.la)].filter(Boolean).join(". ").replace(/([.!?])\./g, "$1"))} id={`acta-${m.id}`} label="Hear it read" />
                   </span>
+                  {m.pic && <ActaPicture m={m} />}
                   {m.title?.la && (
                     <h3 class="acta-title" onClick={(e) => onLine(titleKey, e as unknown as MouseEvent)}>
                       <LatinText text={showEmoji(m.title.la)} lex={lex} />
@@ -1094,19 +1095,22 @@ function waveform(id: string, n: number): number[] {
 const voiceSeconds = (la: string, rate: number) => Math.max(1, Math.round((la.split(/\s+/).length * 0.55 + 0.6) / rate));
 
 /**
- * A voice message: ▶ plays it with the device's Latin voice in the sender's own
- * pitch and pace; Aa shows its words (tap them as in any message). Without a
- * Latin voice on the device, the words show at once.
+ * A voice message: ▶ plays its recording in the sender's own voice
+ * (chat/voices.ts), or, until that comes, the device's Latin voice in their
+ * pitch and pace; Aa shows its words (tap them as in any message). With neither,
+ * the words show at once.
  */
 function VoiceNote({ m, who, open, onText }: { m: Msg; who: Who | null; open: boolean; onText: () => void }) {
   useVoices();
   const speaking = useSpeaking();
   const id = `voice-${m.id}`;
   const on = speaking === id;
-  const ready = audioReady();
+  const rec = m.rec ? picOf(m.rec) : undefined;
+  const recorded = rec?.status === "done" && rec.b64 ? rec.b64 : undefined;
+  const ready = !!recorded || audioReady();
   const v = who ? voiceOf(who) : myVoice();
   const bars = useMemo(() => waveform(m.id, 26), [m.id]);
-  const secs = voiceSeconds(m.la, v.rate);
+  const secs = recorded && rec?.secs ? Math.max(1, Math.round(rec.secs)) : voiceSeconds(m.la, v.rate);
   return (
     <span class={`voice-note${on ? " playing" : ""}`}>
       {ready ? (
@@ -1116,6 +1120,7 @@ function VoiceNote({ m, who, open, onText }: { m: Msg; who: Who | null; open: bo
           onClick={(e) => {
             e.stopPropagation();
             if (on) stopSpeaking();
+            else if (recorded) void speakRecording(m.rec!, recorded, m.la, { id, g: v.g, pitch: v.pitch, rate: v.rate });
             else void speak(m.la, { id, g: v.g, pitch: v.pitch, rate: v.rate });
           }}
         >
@@ -1154,7 +1159,7 @@ function PhotoView({ photo, pic, en, onClose }: { photo?: string; pic?: string; 
         {src && <img src={src} alt={what} />}
         <div class="stack" style={{ gap: "4px" }}>
           {what && <p style={{ margin: 0 }}>{mine ? `What they saw: ${what}` : what}</p>}
-          {!mine && <p class="small muted" style={{ margin: 0 }}>{PHOTO_CREDIT}</p>}
+          {!mine && <p class="small muted" style={{ margin: 0 }}>{photo ? PHOTO_CREDIT : "Made with AI for this message."}</p>}
         </div>
       </div>
     </Modal>
@@ -1182,6 +1187,28 @@ function PicInBubble({ m, onOpen }: { m: Msg; onOpen: () => void }) {
       <span class="pic-wait-text small">{failed ? "The photo did not come through" : "Photo on its way…"}</span>
       {m.picEn && m.from !== "me" && <i class="pic-wait-en small">{m.picEn}</i>}
     </span>
+  );
+}
+
+/** The Ācta's picture of the day, at the top of its board: what it shows in words until it is made. */
+function ActaPicture({ m }: { m: Msg }) {
+  const [big, setBig] = useState(false);
+  const p = picOf(m.pic!);
+  const src = picSrc(p);
+  if (p?.status === "failed") return null;
+  return (
+    <figure class="acta-pic">
+      {src ? (
+        <button class="acta-pic-btn" onClick={() => setBig(true)} aria-label={`The picture of the day: ${m.picEn ?? ""}`}>
+          <img src={src} alt={m.picEn ?? "the picture of the day"} />
+        </button>
+      ) : (
+        <span class="acta-pic-wait small muted" role="img" aria-label="The picture of the day, still being painted">
+          <span lang="la">Pictūra pingitur…</span> The picture of the day is on its way.
+        </span>
+      )}
+      {big && <PhotoView pic={m.pic} en={m.picEn} onClose={() => setBig(false)} />}
+    </figure>
   );
 }
 

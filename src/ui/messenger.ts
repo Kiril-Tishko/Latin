@@ -9,7 +9,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
-import { ACTA_ID, actaKey, boardOf, earlierBoards, writeActa } from "../chat/acta";
+import { ACTA_ID, actaKey, actaPicture, boardOf, earlierBoards, writeActa } from "../chat/acta";
 import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, picId, refreshLives, routineMinds, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
@@ -26,6 +26,7 @@ import { calendarBlock, calendarWords, romeDay } from "../chat/calendar";
 import { PHOTO_BY_ID } from "../content/photos";
 import { relativesFact } from "../content/english";
 import { withoutEmoji } from "../chat/emoji";
+import { withRecordings } from "../chat/voices";
 import { Lexicon } from "../latin/analyze";
 import { engineFacts } from "../latin/facts";
 import { Entry } from "../latin/types";
@@ -396,7 +397,7 @@ function takeFromInbox(d: DocSnap) {
   }
   if (pic) void loadPic(pic);
   if (!t.messages.some((m) => m.id === d.id)) {
-    const msg: Msg = {
+    const [msg] = recorded([{
       id: d.id,
       from,
       la: String(x.la ?? ""),
@@ -407,7 +408,7 @@ function takeFromInbox(d: DocSnap) {
       ...(photo ? { photo } : {}),
       ...(pic ? { pic, ...(x.picEn ? { picEn: String(x.picEn).slice(0, 300) } : {}) } : {}),
       ...(glossOf(x.gloss) ? { gloss: glossOf(x.gloss) } : {}),
-    };
+    }]);
     saveThread(merge(t, { ...t, messages: [...t.messages, msg] }));
     // what they will remember of it, and what was told behind the scenes (the routine says so with the message)
     const { memories, tells } = routineMinds(x, chat, meta);
@@ -546,7 +547,7 @@ export async function answer(id: string) {
     // Claude took a while: nothing arrives before it is written, and the first one is typed in front of the learner
     const first = reply.messages[0];
     const shift = first ? Math.max(0, now + 400 - (first.at - typingMs(first))) : 0;
-    const messages = reply.messages.map((m) => ({ ...m, at: m.at + shift }));
+    const messages = recorded(reply.messages.map((m) => ({ ...m, at: m.at + shift })));
     // their reactions to the learner's last message, each a moment after they read it
     const reacted = t.messages.map((m) => {
       const mine = reply.reactions.filter((x) => x.msg === m.id);
@@ -632,7 +633,7 @@ export async function opened() {
     const own = await writeOwn(allThreads(true), meta, ctx, d, 1);
     for (const o of own.messages) {
       const t = getThread(o.chat);
-      saveThread({ ...t, messages: [...t.messages, o.msg] });
+      saveThread({ ...t, messages: [...t.messages, ...recorded([o.msg])] });
     }
     makePictures(own.made);
     remember({ memories: own.memories, settled: own.settled, outdated: own.outdated, tells: own.deeds.tells }, now);
@@ -655,7 +656,7 @@ export async function findSomeone(signal?: AbortSignal): Promise<{ id: string } 
     const { stranger, first, life } = await meetStranger(meta, ctx, { ...d, ask: (p, o) => d.ask(p, { ...o, signal }) });
     meta = { ...meta, strangers: { ...meta.strangers, [stranger.id]: stranger }, life: { ...meta.life, [stranger.id]: life } };
     saveMeta();
-    saveThread({ ...newThread(stranger.id, "stranger"), messages: first });
+    saveThread({ ...newThread(stranger.id, "stranger"), messages: recorded(first) });
     void writeBrief();
     return { id: stranger.id };
   } catch (e) {
@@ -786,6 +787,8 @@ async function writeTodaysBoard(force: boolean): Promise<void> {
     const posts = written.map((m, i) => ({ ...m, at: at + i }));
     const t = getThread(ACTA_ID);
     saveThread(merge(t, { ...t, messages: [...t.messages, ...posts] }));
+    // the picture of the day, made like the people's pictures
+    makePictures(posts.map((m) => actaPicture(m, at)).filter((p): p is Pic => !!p));
   } catch (e) {
     actaError = (e as Error)?.message === "empty" ? "The scribe wrote nothing today." : errorText(e);
   } finally {
@@ -935,6 +938,13 @@ function makePictures(made: Pic[]) {
     void loadPic(p.id);
   }
   void firePictures(made.map((p) => p.id));
+}
+
+/** The people's voice messages get their recordings wanted (chat/voices.ts), made with the pictures. */
+function recorded(msgs: Msg[], now = Date.now()): Msg[] {
+  const { messages, wanted } = withRecordings(msgs, (id) => whoOf(id, meta), now);
+  makePictures(wanted);
+  return messages;
 }
 
 let lastFire = 0;

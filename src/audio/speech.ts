@@ -4,7 +4,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { respell } from "./pronounce";
 import { speakable } from "./speakable";
-import { hasRecording, playRecorded, stopRecorded } from "./recorded";
+import { hasRecording, playData, playRecorded, stopRecorded } from "./recorded";
 
 export const audioSupported = () => typeof window !== "undefined" && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 
@@ -148,6 +148,22 @@ export function speak(latin: string, opts: SpeakOpts = {}): Promise<boolean> {
     });
   }
   return speakDevice(latin, opts);
+}
+
+/**
+ * Plays a person's own recorded voice message (an MP3 in base64, kept under
+ * KEY); where it cannot play, the device's voice reads LATIN instead.
+ */
+export function speakRecording(key: string, b64: string, latin: string, opts: SpeakOpts = {}): Promise<boolean> {
+  const mine = ++generation;
+  if (audioSupported()) speechSynthesis.cancel();
+  setSpeaking(opts.id ?? key);
+  return playData(key, b64).then((ok) => {
+    if (generation !== mine) return false;
+    if (ok === null) return speakDevice(latin, opts);
+    setSpeaking(null);
+    return ok;
+  });
 }
 
 /** Reads Latin with the device's own voice. */

@@ -987,6 +987,7 @@ html, .drawer-body, .modal > .panel, .table-wrap { scrollbar-width: thin; scroll
 .story-title { font-size: clamp(1.9rem, 6vw, 2.6rem); }
 .story-title .latin { font-family: var(--f-display); }
 .story-en { font-style: italic; margin-top: -6px; }
+.story-pic { display: block; width: 100%; max-width: 640px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); box-shadow: 0 8px 20px -16px rgba(60, 40, 20, 0.6); }
 .story-notice { position: relative; align-self: flex-start; margin-inline: 13px; padding: 6px 14px; background: var(--panel-2); border-radius: 4px; }
 .story-text { padding: 10px 18px; }
 .story-line { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); padding: 10px 0; cursor: pointer; align-items: baseline; }
@@ -1960,6 +1961,11 @@ main.page.msgr-page { padding-block: 14px; }
 }
 .acta-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .acta-top .speak { margin: -4px -8px 0 0; }
+/* the picture of the day, at the top of the board's first item */
+.acta-pic { margin: 4px 0 10px; }
+.acta-pic-btn { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.acta-pic img { display: block; width: 100%; max-height: 420px; object-fit: cover; border-radius: 3px; border: 1px solid var(--m-line); }
+.acta-pic-wait { display: block; padding: 18px 14px; border: 1px dashed var(--m-line); border-radius: 3px; text-align: center; background: var(--m-line-soft); }
 
 /* Lines of the messenger itself ("Lūcius left the group"), deleted messages, a status line */
 .chat-sys { display: flex; justify-content: center; margin: 10px 0; }

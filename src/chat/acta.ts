@@ -9,7 +9,7 @@
 import { PEOPLE } from "../content/people";
 import { romeDay } from "./calendar";
 import { clean, Deps, vetAll } from "./engine";
-import { Meta, Msg, Thread } from "./model";
+import { Meta, Msg, Pic, Thread } from "./model";
 import { languageBlock, learnerBlock, PromptCtx } from "./prompts";
 import { publicNow } from "./lives";
 
@@ -81,10 +81,11 @@ export function actaPrompt(meta: Meta, ctx: PromptCtx, earlier: string[]): strin
 3. "friends": one item about the friends: what the neighbours know, as neighbourhood news.
 4. "notice": a notice like those painted on the walls of Pompeii: a lost animal, something for sale, a teacher looking for pupils, a room to let, a candidate to vote for.
 5. "omen" (only now and then, not every day): a wonder or an omen, as the real Ācta reported them.
-Each item has a title of one to four words and one to three sentences. Something true to Roman life, funny or surprising in every item; never generic, never a lesson.`,
+Each item has a title of one to four words and one to three sentences. Something true to Roman life, funny or surprising in every item; never generic, never a lesson.
+THE PICTURE OF THE DAY: one picture for the board, of one of its items (the festival in the street, the notice painted on a wall, the market, the omen), as a Roman of this year with a camera would take it: say in English what it shows (one or two sentences: the place, the people, the light). No writing in it; no nudity or gore.`,
     languageBlock(ctx, false),
     `Reply with only JSON:
-{"items": [{"kind": "day" | "city" | "friends" | "notice" | "omen", "title": "<Latin>", "titleEn": "<English>", "lines": [{"la": "<Latin>", "en": "<English>"}]}]}`,
+{"items": [{"kind": "day" | "city" | "friends" | "notice" | "omen", "title": "<Latin>", "titleEn": "<English>", "lines": [{"la": "<Latin>", "en": "<English>"}]}], "picture": "<what the picture of the day shows, in English>"}`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -92,6 +93,7 @@ Each item has a title of one to four words and one to three sentences. Something
 
 interface RawActa {
   items?: { kind?: unknown; title?: unknown; titleEn?: unknown; lines?: { la?: unknown; en?: unknown }[] }[];
+  picture?: unknown;
 }
 
 interface Item {
@@ -118,6 +120,8 @@ export function itemsOf(raw: RawActa | null | undefined): Item[] {
 /**
  * Today's board, written and vetted: one post per item, with ids of the day
  * ("acta-20261012-0"), so a board two devices wrote at once merges into one.
+ * The first post carries the picture of the day (`pic`, `picEn`), which the
+ * page wants made as a messenger picture (`actaPicture`).
  */
 export async function writeActa(meta: Meta, ctx: PromptCtx, deps: Deps, earlier: string[]): Promise<Msg[]> {
   const raw = await deps.ask<RawActa>(actaPrompt(meta, ctx, earlier), { ...deps.opts, cache: false });
@@ -133,6 +137,7 @@ export async function writeActa(meta: Meta, ctx: PromptCtx, deps: Deps, earlier:
   }
   const slipped = (i: number) => [...new Set(vetted.filter((d) => d.i === i).flatMap((d) => d.newWords ?? []))];
   const key = actaKey(ctx.now);
+  const picture = clean(raw?.picture).slice(0, 400);
   return items.map((x, i) => {
     const newWords = slipped(i);
     return {
@@ -146,6 +151,13 @@ export async function writeActa(meta: Meta, ctx: PromptCtx, deps: Deps, earlier:
       title: x.title,
       tag: x.kind,
       ...(newWords.length ? { newWords } : {}),
+      ...(i === 0 && picture ? { pic: `acta-${key}-pic`, picEn: picture } : {}),
     };
   });
+}
+
+/** The picture of the day a board's post carries, as a picture to be made (by the pictures routine). */
+export function actaPicture(post: Msg, now: number): Pic | null {
+  if (!post.pic || !post.picEn) return null;
+  return { id: post.pic, by: ACTA_ID, en: post.picEn, prompt: post.picEn, status: "wanted", at: now };
 }

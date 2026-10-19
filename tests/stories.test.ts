@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
 import { STORIES } from "../src/content/stories";
 import { LESSONS } from "../src/content/lessons";
 import { annotate } from "../src/latin/analyze";
@@ -140,5 +141,13 @@ describe("the rules a fixed sentence needs", () => {
     const step1 = buildKnowledge([1, 2, 3, 4], [], 0, skillsUpTo([1]));
     const lines = videoLines([1, 2, 3, 4], lex, step1);
     expect(lines.some((l) => l.la.includes("nēmō"))).toBe(false);
+  });
+});
+
+describe("the stories' pictures", () => {
+  it("has a Roman wall painting for every story, made from its own prompt", () => {
+    const prompts = JSON.parse(readFileSync(new URL("../scripts/content/story-pics.json", import.meta.url).pathname, "utf8")) as { id: string; prompt: string }[];
+    expect(prompts.map((p) => p.id).sort()).toEqual(STORIES.map((s) => s.id).sort());
+    for (const s of STORIES) expect(existsSync(new URL(`../src/content/story-pics/${s.id}.webp`, import.meta.url).pathname), s.id).toBe(true);
   });
 });

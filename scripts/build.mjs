@@ -57,7 +57,7 @@ function previewPage(content) {
 }
 
 /** Files beside the page: the messenger's pictures (src/content/<dir>/*.webp) and the recorded voice's packs (audio/*.js). */
-const MEDIA = ["photos", "portraits", "engravings", "audio"];
+const MEDIA = ["photos", "portraits", "engravings", "audio", "story-pics"];
 
 const kb = (text) => `${(Buffer.byteLength(text) / 1024).toFixed(1)} KB`;
 

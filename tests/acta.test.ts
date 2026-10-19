@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTA_ID, actaKey, actaPrompt, boardOf, earlierBoards, itemsOf, linesOf, writeActa } from "../src/chat/acta";
+import { ACTA_ID, actaKey, actaPicture, actaPrompt, boardOf, earlierBoards, itemsOf, linesOf, writeActa } from "../src/chat/acta";
 import { calendarBlock, calendarWords } from "../src/chat/calendar";
 import { newMeta, newThread, preview } from "../src/chat/model";
 import { PromptCtx } from "../src/chat/prompts";
@@ -86,5 +86,20 @@ describe("the Ācta Diurna", () => {
     const earlier = earlierBoards(t, NOW);
     expect(earlier.length).toBe(1);
     expect(earlier[0]).toContain("Lucius does not sleep.");
+  });
+
+  it("carries a picture of the day on the board's first item, made like the people's pictures", async () => {
+    expect(actaPrompt(newMeta(), ctx, [])).toContain("THE PICTURE OF THE DAY");
+    const ask = async <T,>(): Promise<T> => ({ ...BOARD, picture: "  The Forum at dawn, garlands on the shops for the Augustalia.  " }) as T;
+    const posts = await writeActa(newMeta(), ctx, { ask, opts: {}, lex }, []);
+    expect(posts[0]).toMatchObject({ pic: "acta-20261012-pic", picEn: "The Forum at dawn, garlands on the shops for the Augustalia." });
+    expect(posts.slice(1).some((m) => m.pic)).toBe(false);
+    // the list still shows the item's title, not "📷"
+    expect(preview(posts[0])).toBe("Augustālia");
+    expect(actaPicture(posts[0], NOW)).toEqual({ id: "acta-20261012-pic", by: ACTA_ID, en: posts[0].picEn, prompt: posts[0].picEn, status: "wanted", at: NOW });
+    expect(actaPicture(posts[1], NOW)).toBeNull();
+    // no picture asked for: none wanted
+    const plain = await writeActa(newMeta(), ctx, { ask: async <T,>(): Promise<T> => BOARD as T, opts: {}, lex }, []);
+    expect(plain[0].pic).toBeUndefined();
   });
 });

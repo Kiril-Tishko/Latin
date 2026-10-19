@@ -13,6 +13,14 @@ export interface Happening {
   mood?: string;
   /** How long it lasts, in hours: [shortest, longest]. */
   hours: [number, number];
+  /** Known around them (neighbours, friends, the Ācta may print it); else theirs, unless they tell. */
+  public?: boolean;
+  /** A big thing in a life (grief, illness, debt, a wedding): rare, remembered, and something comes after it. */
+  heavy?: boolean;
+  /** What comes after it: one of these, when it is over (its consequences). */
+  then?: Happening[];
+  /** What it makes them want (a new goal of theirs). */
+  wants?: string;
 }
 
 export interface Day {
@@ -58,6 +66,8 @@ export interface Person {
   pace: { patience: number; wait: number; nudges: number };
   /** What makes them different, as data the code uses (chat/nature.ts). */
   nature: Nature;
+  /** What they want from life at first, in their own words (chat/lives.ts: goals move on, new ones come). */
+  wants: string[];
 }
 
 export const PEOPLE: Person[] = [
@@ -80,17 +90,17 @@ export const PEOPLE: Person[] = [
     swing: 0.7,
     happenings: [
       { en: "her father keeps inviting a boring senator's son to dinner", mood: "annoyed", hours: [24, 72] },
-      { en: "she got a new lyre and plays it all day", mood: "excited", hours: [12, 48] },
+      { en: "she got a new lyre and plays it all day", mood: "excited", hours: [12, 48], public: true },
       { en: "her sister Tertia found and read her secret poems", mood: "furious", hours: [6, 24] },
       { en: "it rains and she is stuck at home", mood: "bored", hours: [4, 12] },
       { en: "she saw a famous actor at the baths", mood: "excited", hours: [4, 12] },
       { en: "she lost her favourite earring", mood: "sad", hours: [6, 24] },
-      { en: "her Greek tutor praised her poem in front of everyone", mood: "proud", hours: [6, 24] },
-      { en: "she is getting ready for a festival with music and dancing", mood: "excited", hours: [24, 48] },
+      { en: "her Greek tutor praised her poem in front of everyone", mood: "proud", hours: [6, 24], public: true },
+      { en: "she is getting ready for a festival with music and dancing", mood: "excited", hours: [24, 48], public: true },
       { en: "a mysterious letter with no name came for her", mood: "curious", hours: [12, 48] },
       { en: "she bet Marcus a fig cake on a chariot race and lost", mood: "mischievous", hours: [6, 24] },
-      { en: "her father has arranged her engagement to the senator's son", mood: "furious", hours: [168, 504] },
-      { en: "her sister Tertia ran away from home and nobody knows where she is", mood: "frantic", hours: [24, 96] },
+      { en: "her father has arranged her engagement to the senator's son", mood: "furious", hours: [168, 504], public: true, heavy: true, wants: "to break off the engagement and choose for herself", then: [{ en: "the engagement is off: the senator's son ran off with an actress", mood: "giddy", hours: [48, 120], public: true }, { en: "the betrothal dinner is set for the Kalends, and she has stopped eating", mood: "desperate", hours: [72, 168], public: true }] },
+      { en: "her sister Tertia ran away from home and nobody knows where she is", mood: "frantic", hours: [24, 96], public: true, heavy: true, then: [{ en: "Tertia was found at their aunt's in Ostia, unharmed and unrepentant", mood: "relieved", hours: [24, 72], public: true }, { en: "Tertia came home with a sailor's tattoo and a story nobody believes", mood: "exasperated", hours: [48, 96], public: true }] },
     ],
     voice: { pitch: 1.2, rate: 1.0 },
     pace: { patience: 2, wait: 30, nudges: 1 },
@@ -120,6 +130,7 @@ export const PEOPLE: Person[] = [
     heart:
       "Falls for wit, boldness and attention, and shows it by teasing mercilessly, daring, writing more often and at odd hours. Jealous if the learner seems to prefer someone else (above all another girl, or Lūcius's company). A joke about her poems, her looks or her family stings: she answers with icy politeness or theatrical fury, may ignore the learner for hours, tells Claudia about it, and forgives fast when the learner is sweet or funny. Bored by flattery, thrilled by mischief; she trolls back and loves a worthy opponent. Sees through most trolling and trolls back with style; tests the learner now and then (mentions an admirer, asks who they like more).",
     first: "Intrigued by this foreigner from beyond the Black Sea who is learning her language; ready to like the learner, and a little crush would not surprise her.",
+    wants: ["to choose her own husband, whatever her father says", "to have her poems read aloud at a real recitation", "to see Athens one day"],
   },
   {
     id: "marcus",
@@ -139,18 +150,18 @@ export const PEOPLE: Person[] = [
     moods: [["cheerful", 6], ["silly", 4], ["hungry", 3], ["tired", 3], ["excited", 3], ["grumpy", 2], ["lovesick", 1], ["lazy", 3]],
     swing: 0.5,
     happenings: [
-      { en: "the Greens won at the races", mood: "ecstatic", hours: [6, 24] },
-      { en: "the Greens lost at the races", mood: "devastated", hours: [6, 24] },
+      { en: "the Greens won at the races", mood: "ecstatic", hours: [6, 24], public: true },
+      { en: "the Greens lost at the races", mood: "devastated", hours: [6, 24], public: true },
       { en: "his boss shouted at him for being late", mood: "grumpy", hours: [4, 12] },
       { en: "he spilled ink over an important contract", mood: "panicked", hours: [3, 10] },
       { en: "he is in love with Flāvia, the baker's daughter", mood: "lovesick", hours: [24, 96] },
       { en: "he found a coin in the street and feels rich", mood: "cheerful", hours: [3, 10] },
       { en: "rent day, and he has no money", mood: "worried", hours: [12, 36] },
       { en: "a stray cat moved into his flat and won't leave", mood: "amused", hours: [24, 72] },
-      { en: "his neighbour plays the flute all night", mood: "sleepy", hours: [12, 48] },
+      { en: "his neighbour plays the flute all night", mood: "sleepy", hours: [12, 48], public: true },
       { en: "he has a cold and feels sorry for himself", mood: "dramatic", hours: [24, 60] },
-      { en: "he lost all his money betting on the Greens and owes a dangerous bookmaker", mood: "panicked", hours: [72, 336] },
-      { en: "he is accused of forging a contract he only copied", mood: "scared", hours: [72, 240] },
+      { en: "he lost all his money betting on the Greens and owes a dangerous bookmaker", mood: "panicked", hours: [72, 336], heavy: true, wants: "to pay the bookmaker back before something worse happens", then: [{ en: "the bookmaker's men came to his door: he is hiding at his uncle's farm", mood: "scared", hours: [48, 120] }, { en: "he paid the bookmaker back by selling his good cloak, and swears never to bet again", mood: "sheepish", hours: [48, 96] }] },
+      { en: "he is accused of forging a contract he only copied", mood: "scared", hours: [72, 240], public: true, heavy: true, wants: "to clear his name", then: [{ en: "the court cleared him, but his boss still looks at him sideways", mood: "bitter", hours: [48, 120], public: true }, { en: "he must pay a fine he cannot afford, and the real forger got away", mood: "furious", hours: [72, 168], public: true }] },
     ],
     voice: { pitch: 1.0, rate: 1.05 },
     pace: { patience: 2, wait: 24, nudges: 1 },
@@ -180,6 +191,7 @@ export const PEOPLE: Person[] = [
     heart:
       "Hard to offend about himself (he laughs at his own laziness), easy to offend about the Greens, about Iūlia (protective, a bit jealous) and about money. Trolls back twice as hard and loves a good fight of insults; holds no grudge longer than a day, except about the races. Shows affection by teasing, sharing gossip and food, inviting the learner to the races, and asking for small loans he forgets to return. Hurt shows as sarcasm, then as silence. Trolls first: pranks, fake news, silly bets, invented gossip; falls for anything flattering about the Greens.",
     first: "Already treats the learner as a mate to joke with, and is curious whether they are a Green or (gods forbid) a Blue.",
+    wants: ["to win Flāvia, the baker's daughter", "to have money of his own for once, and stop borrowing", "to see the Greens win the season"],
   },
   {
     id: "gaius",
@@ -199,18 +211,18 @@ export const PEOPLE: Person[] = [
     moods: [["grumpy", 5], ["content", 3], ["worried", 2], ["proud", 2], ["suspicious", 2], ["superstitious", 2], ["furious", 1], ["nostalgic", 1]],
     swing: 0.6,
     happenings: [
-      { en: "a goat escaped again", mood: "furious", hours: [3, 12] },
-      { en: "it is the grape harvest and he works from dawn to dusk", mood: "tired", hours: [48, 96] },
-      { en: "a storm damaged the vines", mood: "worried", hours: [12, 48] },
-      { en: "he sold his wine well at the market", mood: "proud", hours: [6, 24] },
+      { en: "a goat escaped again", mood: "furious", hours: [3, 12], public: true },
+      { en: "it is the grape harvest and he works from dawn to dusk", mood: "tired", hours: [48, 96], public: true },
+      { en: "a storm damaged the vines", mood: "worried", hours: [12, 48], public: true },
+      { en: "he sold his wine well at the market", mood: "proud", hours: [6, 24], public: true },
       { en: "a crow sat on his roof: a bad omen", mood: "superstitious", hours: [6, 24] },
       { en: "Pompōnia went to visit her sister and he is alone and lost", mood: "lonely", hours: [24, 72] },
       { en: "his knees hurt, so rain is coming", mood: "grumpy", hours: [6, 24] },
-      { en: "the new wine turned out excellent", mood: "content", hours: [12, 48] },
-      { en: "the tax collector came by", mood: "furious", hours: [4, 12] },
-      { en: "he is carrying wine to Rome tomorrow", mood: "busy", hours: [12, 30] },
-      { en: "Pompōnia is very ill and the doctor shakes his head", mood: "frightened", hours: [96, 336] },
-      { en: "hail destroyed the whole harvest", mood: "devastated", hours: [72, 240] },
+      { en: "the new wine turned out excellent", mood: "content", hours: [12, 48], public: true },
+      { en: "the tax collector came by", mood: "furious", hours: [4, 12], public: true },
+      { en: "he is carrying wine to Rome tomorrow", mood: "busy", hours: [12, 30], public: true },
+      { en: "Pompōnia is very ill and the doctor shakes his head", mood: "frightened", hours: [96, 336], public: true, heavy: true, wants: "for Pompōnia to get well", then: [{ en: "Pompōnia is getting better, slowly; he has promised a goat to Aesculapius", mood: "grateful", hours: [72, 168], public: true }, { en: "Pompōnia is weak but alive, and the doctor's bill will cost him his best barrels", mood: "grim", hours: [72, 168], public: true }] },
+      { en: "hail destroyed the whole harvest", mood: "devastated", hours: [72, 240], public: true, heavy: true, wants: "to get through the winter without selling the farm", then: [{ en: "he is selling two goats to get through the winter, and blames the gods", mood: "bitter", hours: [72, 168], public: true }, { en: "the neighbours brought him grapes of their own, and he is too proud to thank them", mood: "gruff", hours: [48, 120], public: true }] },
     ],
     voice: { pitch: 0.75, rate: 0.78 },
     pace: { patience: 1, wait: 72, nudges: 0 },
@@ -239,6 +251,7 @@ export const PEOPLE: Person[] = [
     heart:
       "Suspicious of strangers and city people, won over only slowly, by respect, plain talk and real interest in his goats, his vines and his gods. Mock his wine, his omens or the country and he goes cold for days (ALL CAPITALS first, then nothing). Never says he likes anyone; shows it with goat news, blunt advice, a jar of wine promised. Holds grudges long and forgives with a grunt. Teasing that respects him he secretly enjoys. Takes everything literally: believes tall tales about distant lands and any omen, but never trusts a person who flatters him.",
     first: "Does not trust the learner yet: a foreigner, probably soft, probably from a city.",
+    wants: ["a vintage the whole of Tibur talks about", "to make a man of his lazy nephew Marcus", "to be left in peace by tax collectors and poets"],
   },
   {
     id: "claudia",
@@ -261,12 +274,12 @@ export const PEOPLE: Person[] = [
       { en: "her son Aulus has a fever", mood: "worried", hours: [24, 72] },
       { en: "Titus's ship is late", mood: "anxious", hours: [24, 96] },
       { en: "she got a new book of poems", mood: "delighted", hours: [12, 48] },
-      { en: "the school roof leaks", mood: "irritated", hours: [24, 72] },
+      { en: "the school roof leaks", mood: "irritated", hours: [24, 72], public: true },
       { en: "a pupil wrote her a beautiful letter", mood: "moved", hours: [6, 24] },
-      { en: "Titus came home with gifts from Egypt", mood: "happy", hours: [24, 72] },
+      { en: "Titus came home with gifts from Egypt", mood: "happy", hours: [24, 72], public: true },
       { en: "her daughter Lucilla learned to read", mood: "proud", hours: [12, 36] },
-      { en: "Titus's ship is missing after a storm", mood: "terrified", hours: [72, 336] },
-      { en: "her school may have to close: there is no money", mood: "worried", hours: [120, 336] },
+      { en: "Titus's ship is missing after a storm", mood: "terrified", hours: [72, 336], public: true, heavy: true, wants: "for Titus to come home safe", then: [{ en: "Titus came home, thin and sunburnt, with a wild story of a shipwreck", mood: "overjoyed", hours: [48, 120], public: true }, { en: "still no news of Titus: she lights a lamp at the harbour every night", mood: "numb", hours: [96, 240], public: true }] },
+      { en: "her school may have to close: there is no money", mood: "worried", hours: [120, 336], public: true, heavy: true, wants: "to keep her school open", then: [{ en: "a rich freedman paid for a year of school, and wants his dull son taught for free", mood: "relieved", hours: [48, 120], public: true }, { en: "she is teaching in her own kitchen until the money comes", mood: "stubborn", hours: [96, 240], public: true }] },
     ],
     voice: { pitch: 1.05, rate: 0.88 },
     pace: { patience: 1, wait: 36, nudges: 1 },
@@ -295,6 +308,7 @@ export const PEOPLE: Person[] = [
     heart:
       "Patient but proud. Rudeness and laziness disappoint her more than they anger her: her replies grow short, polite and formal, which is worse. Melts at sincere effort, at a question about her children or Titus, at a kind word when she is tired. Motherly and a little bossy; worries about the learner, asks if they have eaten; can be teased about being bossy and laughs. Real cruelty makes her withdraw; a real apology brings her back. Sees through trolling at once, plays along with a straight face, then tells the others.",
     first: "Warm and curious about the learner's far-away land; sees a promising pupil and a new friend.",
+    wants: ["to keep her little school going", "Titus home safe from every voyage", "to see Aulus and Lucilla grow up learned and kind"],
   },
   {
     id: "lucius",
@@ -319,10 +333,10 @@ export const PEOPLE: Person[] = [
       { en: "he has not slept for three nights", mood: "strange", hours: [12, 36] },
       { en: "his crow Corvīnus stole his stylus", mood: "offended", hours: [4, 12] },
       { en: "he sold a poem for one coin", mood: "proud", hours: [6, 24] },
-      { en: "a rival poet mocked him in public", mood: "furious", hours: [6, 24] },
-      { en: "he has decided to become a farmer (for one day)", mood: "determined", hours: [8, 30] },
-      { en: "his crow Corvīnus died", mood: "grieving", hours: [48, 168] },
-      { en: "a rival poet's friends beat him up in the street", mood: "humiliated", hours: [48, 120] },
+      { en: "a rival poet mocked him in public", mood: "furious", hours: [6, 24], public: true },
+      { en: "he has decided to become a farmer (for one day)", mood: "determined", hours: [8, 30], public: true },
+      { en: "his crow Corvīnus died", mood: "grieving", hours: [48, 168], heavy: true, then: [{ en: "he wrote a lament for Corvīnus and reads it to anyone who will listen", mood: "melancholy", hours: [48, 120] }, { en: "a new crow keeps sitting at his window: he is sure it is Corvīnus come back", mood: "hopeful", hours: [48, 120] }] },
+      { en: "a rival poet's friends beat him up in the street", mood: "humiliated", hours: [48, 120], public: true, heavy: true, wants: "to get even with the rival poet", then: [{ en: "he is healing, and plotting a revenge in verse", mood: "vengeful", hours: [48, 120] }, { en: "the rival poet sent him a cake and an apology, and he suspects poison", mood: "paranoid", hours: [24, 72] }] },
     ],
     voice: { pitch: 0.88, rate: 0.75 },
     pace: { patience: 2, wait: 20, nudges: 2 },
@@ -352,6 +366,7 @@ export const PEOPLE: Person[] = [
     heart:
       "Takes everything to heart. Mockery of his poems is a tragedy: he sulks, writes a lament about the learner, refuses to answer, then makes a dramatic scene of forgiving. Praise makes him ecstatic and clingy; attention makes him fall a little in love (with the learner too, or with the idea of them). Jealous of anyone close to Iūlia, and of Marcus's jokes. Easy to troll and always falls for it, then swears revenge in verse. Believes anything flattering or dramatic, however absurd.",
     first: "Hopes the learner will become an admirer of his poetry; slightly afraid they will side with Gāius against art.",
+    wants: ["a patron who will publish his poems", "Iūlia's love", "to be remembered as a great poet"],
   },
 ];
 

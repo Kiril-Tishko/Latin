@@ -4,6 +4,7 @@
 import type { Day } from "../content/people";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../content/people";
 import type { Gain, Levels, Tie } from "./bond";
+import type { Goal, WorldEvent } from "./lives";
 import type { Life } from "./life";
 import type { Stranger } from "./strangers";
 
@@ -77,6 +78,8 @@ export interface World {
   away?: Record<string, { until: number; where: string }>;
   status?: Record<string, { text: string; at: number }>;
   dramas?: Drama[];
+  /** What happened in their world, and who knows it (chat/lives.ts). */
+  timeline?: WorldEvent[];
   updatedAt: number;
 }
 
@@ -119,7 +122,9 @@ export function mergeWorld(a: World | undefined, b: World | undefined): World | 
   // groups: each the newer copy, from either side
   const groups = { ...(older.groups ?? {}) };
   for (const [id, g] of Object.entries(newer.groups ?? {})) if (!groups[id] || g.updatedAt >= groups[id].updatedAt) groups[id] = g;
-  return { ...newer, dramas: [...dramas.values()], groups };
+  // the timeline: every event from either side, once
+  const timeline = new Map([...(older.timeline ?? []), ...(newer.timeline ?? [])].map((e) => [e.id, e]));
+  return { ...newer, dramas: [...dramas.values()], groups, ...(timeline.size ? { timeline: [...timeline.values()].sort((a, b) => a.at - b.at).slice(-60) } : {}) };
 }
 
 /** The emoji anyone may react with: the learner's bar, and what the people may choose. */
@@ -219,6 +224,8 @@ export interface Meta {
   bonds?: Record<string, Bond>;
   /** How they see each other, where something has changed (chat/bond.ts; "from>to"). */
   ties?: Record<string, Tie>;
+  /** What each of them wants from life, as it goes (chat/lives.ts); a friend without any here has their first wants. */
+  goals?: Record<string, Goal[]>;
   /** What the people did to the messenger itself (see World). */
   world?: World;
   /** What the learner chose: people they blocked, chats they muted. */

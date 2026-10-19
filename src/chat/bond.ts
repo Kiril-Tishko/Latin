@@ -192,13 +192,13 @@ export interface TieChange {
 export function tieChangesOf(raw: unknown, froms: Set<string>, everyone: Set<string>): TieChange[] {
   const list = (Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : []) as unknown[];
   return list
-    .slice(0, 6)
     .map((x) => {
       const o = obj(x);
       const note = typeof o.note === "string" ? o.note.trim().slice(0, 240) : "";
       return { from: String(o.from ?? ""), to: String(o.to ?? ""), ...(note ? { note } : {}), delta: levelsIn(o) };
     })
-    .filter((t) => froms.has(t.from) && everyone.has(t.to) && t.from !== t.to && (t.note || Object.keys(t.delta).length));
+    .filter((t) => froms.has(t.from) && everyone.has(t.to) && t.from !== t.to && (t.note || Object.keys(t.delta).length))
+    .slice(0, 6);
 }
 
 /** Keeps what changed among them (changes meta in place); the oldest ties go past MAX_TIES. */
@@ -248,7 +248,7 @@ export function standingLine(who: Who, meta: Meta, now: number, ask = true): str
   const { lv, set } = standing(who.id, meta, now);
   if (set) return `Where ${who.name} stands with the learner now (0-10, private): ${levelsLine(lv)}.`;
   return ask
-    ? `Where ${who.name} stands with the learner: NOT SET YET (their nature would start at ${levelsLine(lv)}). With this answer give "levels" for ${who.name}: where they stand now, 0-10 each, read from how they feel and what has happened.`
+    ? `Where ${who.name} stands with the learner: NOT SET YET (their nature would start at ${levelsLine(lv)}). With this answer give "levels" for ${who.name}: where they stood before this moment, 0-10 each, read from how they feel and what has happened.`
     : `Where ${who.name} stands with the learner, by their nature (0-10, private; how they feel above says more): ${levelsLine(lv)}.`;
 }
 

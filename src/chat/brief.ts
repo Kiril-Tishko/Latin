@@ -16,6 +16,7 @@ import { Pace, paceOf } from "./pace";
 import { natureOf } from "./nature";
 import { memoryLines, Mind, recall } from "./mind";
 import { standingLine, tiesLine } from "./bond";
+import { goalsLine, timelineBlock } from "./lives";
 
 export interface Brief {
   v: 1;
@@ -76,6 +77,7 @@ function sheet(w: Who, meta: Meta, now: number, minds?: Record<string, Mind>): s
     // how they feel about the learner now, where they stand, and a silent treatment going on; blocked, away, a status line, the group
     bondBlock(w, meta.bonds?.[w.id], now, !memories.length),
     standingLine(w, meta, now, false),
+    goalsLine(w, meta, now),
     memories.length ? `What ${w.name} remembers (theirs alone; ${w.name} knows only this, their chats, and their own life):\n${memoryLines(memories, (id) => whoOf(id, meta)?.name ?? (id === "me" ? "the learner" : id)).join("\n")}` : "",
     worldLine(w, meta, now),
   ]
@@ -116,6 +118,7 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
     world: [
       ...groupIds(meta).map((g) => `THE GROUP «${groupName(meta, g)}» (chat id "${g}"): ${groupMembers(meta, g).map((id) => whoOf(id, meta)?.name ?? id).join(", ")} and the learner.`),
       dramaBlock(meta),
+      timelineBlock(meta, undefined, ctx.now),
     ]
       .filter(Boolean)
       .join("\n"),

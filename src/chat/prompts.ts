@@ -12,6 +12,7 @@ import { groupMayWrite, paceLine, paceNow, paceOf } from "./pace";
 import { discretionText, natureOf, openText, photoText, talkText } from "./nature";
 import { memoryLines, Mind, recall } from "./mind";
 import { standingLine, tiesLine } from "./bond";
+import { goalsLine, publicNow, quietDays, timelineBlock } from "./lives";
 import { awayNow, Bond, CoachTurn, deletedNow, Drama, groupIds, groupMembers, groupName, groupsOf, iBlocked, isBlocked, isGroupId, Meta, Msg, REACTIONS, SYS, Thread, Who, membersOf, silentNow, whoOf } from "./model";
 import type { Stranger } from "./strangers";
 import type { AllowedWord } from "./words";
@@ -173,6 +174,7 @@ export function personBlock(who: Who, life: Life | undefined, now: number, meta?
     knownPeople(who, meta),
     bondBlock(who, meta?.bonds?.[who.id], now, !minds?.[who.id]?.memories.length),
     meta ? standingLine(who, meta, now) : "",
+    meta ? goalsLine(who, meta, now) : "",
     meta ? worldLine(who, meta, now) : "",
     `Right now: ${dayNow(who, now)}; ${lifeLine(life)}.`,
   ];
@@ -268,6 +270,8 @@ const CAN_DO = `WHAT THEY CAN DO (only what they would really do now; usually no
 - bring someone new into their lives: a lover, a rival, a relative, a creditor, a new friend ("newPerson"), who may join the group or write to the learner
 - start a storyline among them or move one on: a romance, a feud, a secret, a debt, a scandal, a betrayal ("drama", with who knows of it)
 - tell someone else what they know, out of the learner's sight: news, gossip, a secret they cannot keep, a warning, a lie ("tell")
+- go after what they want, get it, give it up, or find a new want ("goals")
+- something happens in someone's life: a consequence of what went on (fired after a prank, a fight with the landlord after the learner's advice, a gift arriving), or life out of the blue now and then ("happen")
 - whatever else a real person would do with a messenger, as far as words, emoji and these can carry it`;
 
 /** The JSON fields for what they do besides writing. */
@@ -275,7 +279,15 @@ const DEEDS = `- "acts" (optional): [{"who": "<person id>", "do": "block" | "unb
 - "drama" (optional): [{"id": "<short id, new or one shown>", "en": "<what is going on now among them, and who knows what (English)>", "who": ["<person ids in it>"], "knows": ["<person ids who know of it>"], "over": true when it has ended}]
 - "newPerson" (optional): [{"name": "<Latin name>", "g": "m" | "f", "age": <years>, "job": "...", "city": "...", "about": "<who they are, two sentences>", "link": {"to": "<friend id>", "how": "<how they know them>"}, "first": "<how they feel about the learner>", "joinGroup": true, "messages": [{"la": "<Latin>", "en": "<English>"}]}]
 - "tell" (optional): [{"from": "<person id>", "to": "<person id>", "what": "<what they tell, in English, as they tell it>", "about": ["me", "<person id>"], "weight": <1-5>, "untrue": true, "secret": true}]: someone passes something on to someone else, out of the learner's sight (gossip, news, a warning, a lie). Only what the teller knows (their memories, their chats); a secret only if their nature would spill it; it may come out exaggerated or wrong ("untrue": the one told believes it).
+- "goals" (optional): [{"who": "<person id>", "id": "<a goal's id, as shown>", "step": "<what just happened toward it, or away from it>", "status": "open" | "done" | "dropped"}], or a new want: [{"who": "<person id>", "text": "<what they want now, their words>"}]. Goals move slowly, over days and weeks; usually [].
+- "happen" (optional): [{"who": "<person id>", "what": "<what is going on in their life now, English>", "mood": "<the mood it brings>", "hours": <how long it lasts, 1-336>, "public": true when the neighbours would know}]: rarely, with a cause; it becomes their life now, and it stays true afterwards.
 - A message may also carry "gloss": {"<new word>": "<meaning>"} for a new word in it, and "unsend": <seconds> to take it back that long after sending.`;
+
+/** What everyone around knows of the others' lives now (their public happenings): the people of a chat hear it like neighbours. */
+export function neighbourhoodBlock(meta: Meta, now: number, here: string[]): string {
+  const others = publicNow(meta, now).filter((line) => !here.some((id) => line.startsWith(`${whoOf(id, meta)?.name ?? id}:`)));
+  return others.length ? `WHAT EVERYONE AROUND KNOWS OF THE OTHERS NOW (neighbourhood news; anything else about them they know only if they saw it or were told):\n${others.map((l) => `- ${l}`).join("\n")}` : "";
+}
 
 /** For a reply: everyone in the thread, with their state now and what each remembers. */
 function peopleOf(thread: Thread, meta: Meta, ctx: PromptCtx): string {
@@ -294,7 +306,7 @@ const PICTURE = `- "picture": "<what the photo shows, in English, as their camer
 
 /** How Claude reports what moved between them and the learner, and among themselves (chat/bond.ts). */
 const BONDS = `- "bond" (for anyone this moved): how it changed where they stand with the learner, only the levels that moved, by small steps: ±1 for most things, ±2 for something that matters, ±3 for a shock. Real feelings move slowly: a crush grows over many conversations, trust is built slowly and lost at once, a joke at the wrong moment stings; each person moves in their own way (their nature and heart). Hurt heals with time by itself. Usually {}.
-- "levels" (only for someone whose standing says NOT SET YET): where they stand with the learner now, 0-10 each, read from how they feel and what has happened between them.
+- "levels" (only for someone whose standing says NOT SET YET): where they stood with the learner before this moment, 0-10 each, read from how they feel and what has happened between them; what this moment does to them goes in "bond", as for anyone.
 - "ties" (when something between two of them changed: a fight, a kindness, a betrayal, jealousy, a spark, gossip that stung): who feels it ("from"), about whom ("to"), how they see them now in their own words ("note"), and the levels that moved, by small steps. Feelings among them are as real as toward the learner, and as private. Usually [].`;
 
 const OUTPUT = `Reply with only JSON:
@@ -387,6 +399,8 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
     `WHO ${group ? "THEY ARE" : "YOU ARE"}:\n${peopleOf(thread, meta, ctx)}`,
     ctx.calendar ?? "",
     dramaBlock(meta, members.map((w) => w.id)),
+    timelineBlock(meta, members.map((w) => w.id), ctx.now),
+    neighbourhoodBlock(meta, ctx.now, members.map((w) => w.id)),
     groupLately(thread, meta, ctx),
     `THE CONVERSATION (oldest first; times where ${group ? "they are" : `${members[0]?.name} is`}). The learner's Latin may have mistakes.\n${conversationBlock(thread, meta, ctx, tz)}`,
     !group && members[0] ? returnLine(thread, members[0], ctx) : "",
@@ -433,6 +447,8 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
     strangers ? `STRANGERS THE LEARNER HAS MET:\n${strangers}` : "",
     ctx.calendar ?? "",
     dramaBlock(meta),
+    timelineBlock(meta, undefined, ctx.now),
+    quietDays(meta, ctx.now) >= 4 ? `Nothing much has happened in their lives for days. Life may bring something now (news, a visitor, trouble, luck), with a cause in their lives; or not.` : "",
     `THE CHATS NOW (last messages):\n${recent}`,
     `DECIDE like life, no script: sometimes nothing happens; sometimes someone writes, double-texts, starts a fight in the group, makes up, disappears, brings someone new, or a storyline among them takes a turn the learner did not see coming. Someone writes only when awake, and for their own reasons. Feelings drive it: someone who misses or fancies the learner writes more, someone hurt waits for an apology or writes something pointed, someone ignoring or blocking the learner does not write to them (but may talk about them in the group). Do not write into a chat that has messages still on their way. Like real people, they do not keep writing to someone who does not answer: each chat says in [brackets] who may write there now and who is waiting for an answer; someone waiting writes nothing there (they may still talk in a group, about other things). Nobody repeats what they already said: every message brings something new (news, a question about something else, a change of mood) or is not sent.
 Away from the learner they live and talk to each other too: news and gossip pass between them ("tell"), each knowing only what they lived, saw in their chats or were told, so one may know a secret another does not, hear a rumour wrong, or keep quiet. A storyline moves on only for those in it or told of it.`,

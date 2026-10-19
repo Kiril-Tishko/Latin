@@ -15,6 +15,7 @@ import { allowOwn, paceOf } from "./pace";
 import { natureOf } from "./nature";
 import { MemoryDraft, memoriesOf, Tell, tellsOf } from "./mind";
 import { applyBondChanges, applyTieChanges, BondChange, bondChangesOf, TieChange, tieChangesOf } from "./bond";
+import { applyGoalChanges, applyHappen, GoalChange, goalChangesOf, Happen, happensOf, heavyOk, noteHappening } from "./lives";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, storyPersonPrompt, strangerPrompt } from "./prompts";
 import { inventStranger, NewPerson, rollStranger, Stranger } from "./strangers";
@@ -44,16 +45,22 @@ export function specOf(id: string, meta: Meta): LifeSpec | null {
   return s ? { moods: s.moods, swing: s.swing, happenings: s.happenings } : null;
 }
 
-/** Rolls on the lives of these people where it is time; true if anything changed. */
-export function refreshLives(meta: Meta, ids: string[], now: number, r: Rand = Math.random): boolean {
+/**
+ * Rolls on the lives of these people where it is time (a heavy happening only
+ * after a calm week: chat/lives.ts); a happening that begins goes on the
+ * timeline when it matters, may bring a want, and is remembered (into `out`,
+ * for the minds). True if anything changed.
+ */
+export function refreshLives(meta: Meta, ids: string[], now: number, r: Rand = Math.random, out?: MemoryDraft[]): boolean {
   let changed = false;
   for (const id of ids) {
     const spec = specOf(id, meta);
     if (!spec) continue;
-    const { life, changed: c } = lifeNow(spec, meta.life[id], now, r);
+    const { life, changed: c, started } = lifeNow(spec, meta.life[id], now, r, heavyOk(meta, id, now));
     if (c) {
       meta.life[id] = life;
       changed = true;
+      if (started) out?.push(...noteHappening(meta, id, started, now));
     }
   }
   return changed;
@@ -188,6 +195,9 @@ export interface Reply {
   /** Where they stand with the learner, and how they see each other, as it moved (chat/bond.ts). */
   bonds: BondChange[];
   ties: TieChange[];
+  /** What moved in their lives: goals, and things that happen (chat/lives.ts). */
+  goals: GoalChange[];
+  happen: Happen[];
   /** What they did besides writing (see world.ts). */
   deeds: Deeds;
   /** When the learner's messages were read (one-to-one chats). */
@@ -220,8 +230,9 @@ export function timingFor(members: Who[], now: number, r: Rand = Math.random, me
 export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps, timing?: Timing, images?: unknown[]): Promise<Reply> {
   const r = deps.r ?? Math.random;
   const members = membersOf(thread.id, meta);
-  if (!members.length) return { messages: [], memories: [], settled: [], outdated: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {}, bonds: [], ties: [], deeds: noDeeds(), made: [] };
-  refreshLives(meta, members.map((w) => w.id), ctx.now, r);
+  if (!members.length) return { messages: [], memories: [], settled: [], outdated: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {}, bonds: [], ties: [], goals: [], happen: [], deeds: noDeeds(), made: [] };
+  const lived: MemoryDraft[] = [];
+  refreshLives(meta, members.map((w) => w.id), ctx.now, r, lived);
   const { first, byId } = timing ?? timingFor(members, ctx.now, r, meta);
   // the learner's last messages, read word by word: a mistake is taken literally
   const burst: string[] = [];
@@ -246,6 +257,8 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     bond?: unknown;
     levels?: unknown;
     ties?: unknown;
+    goals?: unknown;
+    happen?: unknown;
     acts?: unknown;
     drama?: unknown;
     newPerson?: unknown;
@@ -282,7 +295,7 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     return { id: msgId(), from: d.from!, at: Math.round(t), src: "reply", ...fields(d, pic), ...deletedAtOf(d, Math.round(t)) };
   });
   // what each will remember (only the people of this chat), and memories now done or no longer true
-  const memories = memoriesOf(raw ?? {}, members.map((w) => w.id), allPeople(meta));
+  const memories = [...lived, ...memoriesOf(raw ?? {}, members.map((w) => w.id), allPeople(meta))];
   // reactions to the learner's last message: one per person, a moment after they read it
   const target = [...thread.messages].reverse().find((m) => m.from === "me");
   const reactions: Reply["reactions"] = [];
@@ -295,7 +308,7 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   // what they did besides writing: blocking, leaving, renaming, travelling, new people, storylines
   const deeds = deedsOf(raw ?? {}, ids, allPeople(meta), shown, new Set(groupIds(meta)));
   const saw = images?.length ? clean(raw?.saw).slice(0, 200) || undefined : undefined;
-  return { messages: messages.filter((m) => m.la || m.photo || m.pic), memories, settled: idsOf(raw?.settled), outdated: idsOf(raw?.outdated), readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids), bonds: bondChangesOf(raw ?? {}, ids), ties: tieChangesOf(raw?.ties, ids, allPeople(meta)), deeds, made, ...(saw ? { saw } : {}) };
+  return { messages: messages.filter((m) => m.la || m.photo || m.pic), memories, settled: idsOf(raw?.settled), outdated: idsOf(raw?.outdated), readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids), bonds: bondChangesOf(raw ?? {}, ids), ties: tieChangesOf(raw?.ties, ids, allPeople(meta)), goals: goalChangesOf(raw?.goals, ids), happen: happensOf(raw?.happen, allPeople(meta)), deeds, made, ...(saw ? { saw } : {}) };
 }
 
 /** Memory ids Claude gave (to settle or outdate), checked. */
@@ -325,12 +338,14 @@ const dayStamp = (t: number) => new Date(t).toLocaleDateString("en-GB", { day: "
 /**
  * Keeps what a conversation did to the people: their feelings about the
  * learner (in their own words, and as levels: chat/bond.ts), how they see each
- * other, the silent treatment, and a mood that lasts a few hours. Changes meta
- * in place.
+ * other, the silent treatment, a mood that lasts a few hours, their goals, and
+ * what happens to them because of it (chat/lives.ts). Changes meta in place;
+ * returns the memories the happenings leave.
  */
-export function applyFeelings(meta: Meta, r: Pick<Reply, "feelings" | "moods"> & Partial<Pick<Reply, "bonds" | "ties">>, now: number) {
+export function applyFeelings(meta: Meta, r: Pick<Reply, "feelings" | "moods"> & Partial<Pick<Reply, "bonds" | "ties" | "goals" | "happen">>, now: number): MemoryDraft[] {
   applyBondChanges(meta, r.bonds ?? [], now);
   applyTieChanges(meta, r.ties ?? [], now);
+  applyGoalChanges(meta, r.goals ?? [], now);
   const bonds = { ...(meta.bonds ?? {}) };
   for (const [id, f] of Object.entries(r.feelings)) {
     const old = bonds[id] ?? { feel: "", moments: [], updatedAt: 0 };
@@ -349,6 +364,8 @@ export function applyFeelings(meta: Meta, r: Pick<Reply, "feelings" | "moods"> &
     const life = meta.life[id];
     if (life) meta.life[id] = { ...life, mood, level: "", moodUntil: now + 4 * 3600_000 };
   }
+  // what happens because of it (after the moods: a happening brings its own)
+  return applyHappen(meta, r.happen ?? [], now);
 }
 
 // -------------------------------------------------------- on their own
@@ -362,7 +379,8 @@ export interface Own {
 export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, deps: Deps, hours = 3): Promise<{ messages: Own[]; deeds: Deeds; made: Pic[]; memories: MemoryDraft[]; settled: string[]; outdated: string[] }> {
   const r = deps.r ?? Math.random;
   const live = threads.filter((t) => !t.gone);
-  refreshLives(meta, [...new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)))], ctx.now, r);
+  const lived: MemoryDraft[] = [];
+  refreshLives(meta, [...new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)))], ctx.now, r, lived);
   const raw = await deps.ask<{
     messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown; picture?: unknown; gloss?: unknown; unsend?: unknown }[];
     feel?: Record<string, unknown>;
@@ -373,6 +391,8 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
     bond?: unknown;
     levels?: unknown;
     ties?: unknown;
+    goals?: unknown;
+    happen?: unknown;
     acts?: unknown;
     drama?: unknown;
     newPerson?: unknown;
@@ -383,8 +403,12 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
   );
   // feelings move while the learner is away too (missing them, cooling off)
   const everyone = new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)));
-  applyFeelings(meta, { ...feelingsOf({ feel: raw?.feel }, everyone), bonds: bondChangesOf(raw ?? {}, everyone), ties: tieChangesOf(raw?.ties, everyone, allPeople(meta)) }, ctx.now);
-  const memories = memoriesOf({ remember: raw?.remember, moment: raw?.moment }, [...everyone], allPeople(meta));
+  const happened = applyFeelings(
+    meta,
+    { ...feelingsOf({ feel: raw?.feel }, everyone), bonds: bondChangesOf(raw ?? {}, everyone), ties: tieChangesOf(raw?.ties, everyone, allPeople(meta)), goals: goalChangesOf(raw?.goals, everyone), happen: happensOf(raw?.happen, allPeople(meta)) },
+    ctx.now,
+  );
+  const memories = [...lived, ...happened, ...memoriesOf({ remember: raw?.remember, moment: raw?.moment }, [...everyone], allPeople(meta))];
   // what they do besides writing; someone unblocking the learner now may write to them again
   const deeds = deedsOf(raw ?? {}, allPeople(meta), allPeople(meta), [], new Set(groupIds(meta)));
   const unblocking = new Set(deeds.acts.filter((a) => a.do === "unblock").map((a) => a.who));

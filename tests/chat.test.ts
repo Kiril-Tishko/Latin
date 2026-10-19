@@ -586,8 +586,8 @@ describe("real relationships: feelings about the learner, trolling, grudges, sil
     const threads = [...PEOPLE.map((p) => newThread(p.id, "dm")), newThread(GROUP.id, "group")];
     const own = await writeOwn(threads, meta, ctxFor(SEEN, at), { ask, opts: {}, lex, r: seeded(4) });
     expect(meta.bonds!.claudia.feel).toContain("I worry");
-    // a moment is a memory now (chat/mind.ts)
-    expect(own.memories).toEqual([{ who: "claudia", text: "noticed Kiril's silence", kind: "moment", weight: 3, about: ["me"] }]);
+    // a moment is a memory now (chat/mind.ts); what began in their lives meanwhile is remembered too (chat/lives.ts)
+    expect(own.memories).toContainEqual({ who: "claudia", text: "noticed Kiril's silence", kind: "moment", weight: 3, about: ["me"] });
   });
 
   it("keep each one's feelings their own (the others learn them only if told), the newer from two devices, and tell the phone routine", () => {

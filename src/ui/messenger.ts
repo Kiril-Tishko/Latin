@@ -14,9 +14,10 @@ import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, 
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
 import { allowOwn, overPace, paceOf } from "../chat/pace";
-import { applyMinds, mergeMinds, migrateMinds, Mind } from "../chat/mind";
+import { applyMinds, MemoryDraft, mergeMinds, migrateMinds, Mind } from "../chat/mind";
 import { natureOf } from "../chat/nature";
 import { mergeTies } from "../chat/bond";
+import { mergeGoals } from "../chat/lives";
 import { deviceZone, hashRand } from "../chat/life";
 import { CoachTurn, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
@@ -297,6 +298,8 @@ function follow(s: NonNullable<typeof store>) {
         // feelings: for each person the newer, from either copy; how they see each other, for each pair
         bonds: mergeBonds(meta.bonds, remote.bonds),
         ties: mergeTies(meta.ties, remote.ties),
+        // what they want from life: each goal the newer
+        goals: mergeGoals(meta.goals, remote.goals),
       };
       saveLocal();
       emit();
@@ -546,13 +549,13 @@ export async function answer(id: string) {
     const seen = new Set(photos.map((x) => x.msg));
     const described = reply.saw ? reacted.map((m) => (seen.has(m.id) ? { ...m, picEn: reply.saw } : m)) : reacted;
     saveThread({ ...t, messages: [...described, ...messages] });
-    // what each will remember, what is settled or no longer true, and what someone told someone
-    remember({ memories: reply.memories, chat: id, settled: reply.settled, outdated: reply.outdated, tells: reply.deeds.tells }, now);
+    // what the conversation did to them: feelings about the learner, how they see each other, a mood, the silent treatment, their goals, what happens to them
+    const happened = applyFeelings(meta, reply, now);
+    // what each will remember (and what happened to them), what is settled or no longer true, and what someone told someone
+    remember({ memories: [...reply.memories, ...happened], chat: id, settled: reply.settled, outdated: reply.outdated, tells: reply.deeds.tells }, now);
     for (const x of photos) if (reply.saw) void updatePic(x.pic, { en: reply.saw });
     // fresh pictures their messages carry
     makePictures(reply.made);
-    // what the conversation did to them: feelings about the learner, a moment, a mood, the silent treatment
-    applyFeelings(meta, reply, now);
     await enact(reply.deeds, ctx, d, Math.max(now, (messages.at(-1)?.at ?? now) + 1000), isGroupId(id, meta) ? id : GROUP.id);
     meta = { ...meta };
     saveMeta();
@@ -581,7 +584,7 @@ export const composing = (id: string) => (writing.has(id) ? readingAt.get(id) ??
 async function enact(deeds: Deeds, ctx: PromptCtx, d: Deps, at: number, groupId: string = GROUP.id) {
   if (!deeds.acts.length && !deeds.dramas.length && !deeds.newPeople.length) return;
   const born = welcome(meta, deeds.newPeople, Math.random, at);
-  refreshLives(meta, born.map((s) => s.id), at);
+  rollLives(born.map((s) => s.id), at);
   const specOf = (name: string) => deeds.newPeople.find((p) => p.name === name)!;
   const joining = born.filter((s) => specOf(s.name).joinGroup);
   // the first words of a group they start are vetted like any message
@@ -763,7 +766,7 @@ async function writeTodaysBoard(force: boolean): Promise<void> {
   actaWriting = true;
   actaError = "";
   meta = { ...meta, actaAt: now };
-  refreshLives(meta, PEOPLE.map((p) => p.id), now);
+  rollLives(PEOPLE.map((p) => p.id), now);
   saveMeta();
   emit();
   try {
@@ -784,9 +787,17 @@ async function writeTodaysBoard(force: boolean): Promise<void> {
   }
 }
 
+/** Rolls on their lives where it is time; what begins in them is remembered (chat/lives.ts). True if anything changed. */
+function rollLives(ids: string[], now: number): boolean {
+  const lived: MemoryDraft[] = [];
+  const changed = refreshLives(meta, ids, now, Math.random, lived);
+  if (lived.length) remember({ memories: lived }, now);
+  return changed;
+}
+
 /** Rolls the people's moods where it is time (for their profiles), and saves what changed. */
 export function touchLives(ids: string[]) {
-  if (refreshLives(meta, ids, Date.now())) saveMeta();
+  if (rollLives(ids, Date.now())) saveMeta();
 }
 
 let briefKey = "";

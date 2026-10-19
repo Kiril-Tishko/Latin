@@ -146,10 +146,20 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
       brief).
 
 ### 5. Lives
-- [ ] Goals and plans per person, moved on by events and by Claude.
-- [ ] Happenings with follow-ups; heavy ones remembered.
-- [ ] A world timeline of important events.
-- [ ] Surprises paced: something unexpected now and then, with a cause.
+- [x] Goals per person (`src/chat/lives.ts`): each friend's wants at first,
+      moved on by Claude ("goals": a step, got, given up, a new want; four
+      open at most); plans are memories with a date (stage 3).
+- [x] Happenings with consequences: public or private; a heavy one (grief,
+      illness, debt, an engagement) is followed by one of two outcomes;
+      a happening that matters is remembered and may bring a want.
+- [x] A world timeline (heavy and public happenings, goals got or given up),
+      each chat seeing what its people know of; the own-writing prompt and
+      the routine see it all, with who knows.
+- [x] Surprises paced: a heavy happening only after a calm week in the world
+      (three weeks for one person; before, one a day across the five friends
+      was likely); after four quiet days life may bring something; Claude
+      may make things happen ("happen"), as consequences or out of the blue.
+- [x] The Ācta prints only what the neighbours know (public happenings).
 
 ### 6. The group
 - [ ] Who is around (asleep, busy, away) decides who can talk.

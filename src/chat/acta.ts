@@ -10,7 +10,8 @@ import { PEOPLE } from "../content/people";
 import { romeDay } from "./calendar";
 import { clean, Deps, vetAll } from "./engine";
 import { Meta, Msg, Thread } from "./model";
-import { dayNow, languageBlock, learnerBlock, lifeLine, PromptCtx } from "./prompts";
+import { languageBlock, learnerBlock, PromptCtx } from "./prompts";
+import { publicNow } from "./lives";
 
 export const ACTA_ID = "acta";
 
@@ -63,17 +64,21 @@ export function earlierBoards(t: Thread, now: number): string[] {
 
 /** What Claude reads to write today's board. */
 export function actaPrompt(meta: Meta, ctx: PromptCtx, earlier: string[]): string {
-  const friends = PEOPLE.map((p) => `- ${p.name} (${p.age}, ${p.job}, ${p.city}): ${dayNow({ ...p, stranger: false }, ctx.now)}; ${lifeLine(meta.life[p.id])}`).join("\n");
+  const friends = PEOPLE.map((p) => `- ${p.name} (${p.age}, ${p.job}, ${p.city})`).join("\n");
+  // only what the neighbours know: public happenings now, and public news of the last days (chat/lives.ts)
+  const known = [
+    ...new Set([...publicNow(meta, ctx.now), ...(meta.world?.timeline ?? []).filter((e) => e.public && e.at <= ctx.now && ctx.now - e.at < 3 * 86400_000).map((e) => e.en)]),
+  ];
   return [
     `You are the scribe of the «Ācta Diurna», the daily notices of Rome written up on a white board in the Forum (the real ones told of the day, the city, births and weddings, trials, the games and prodigies). You write TODAY'S BOARD for a learner of Latin far away, who reads it as their daily Roman newspaper and must understand every word.`,
     learnerBlock(ctx),
     ctx.calendar ?? "",
-    `THE LEARNER'S FRIENDS, ordinary people in and around Rome (the board may tell a little neighbourhood news of one or two of them, as the neighbours would tell it; never anything private or unkind):\n${friends}`,
+    `THE LEARNER'S FRIENDS, ordinary people in and around Rome:\n${friends}\nWhat the neighbours know of them now (the board may tell a little of it, as the neighbours would; never anything else about them, nothing private or unkind):\n${known.length ? known.map((l) => `- ${l}`).join("\n") : "- nothing in particular: then a small, harmless neighbourhood item (a friend seen at the market, at the baths, at the races)"}`,
     earlier.length ? `EARLIER BOARDS (do not repeat them; now and then follow one up, as a newspaper would: the lost animal found, the room let):\n${earlier.join("\n")}` : "",
     `TODAY'S BOARD: 4 or 5 short items, in this order:
 1. "day": the day itself: its festival, or what an ordinary day in Rome is like now (the season's weather, the market, the baths).
 2. "city": the news of Rome from the day above, as a Roman of this year knows it, or everyday life in the city (the new harbour at Portus, building, the games, the aqueducts).
-3. "friends": one or two items about the friends: what is going on in their lives now, as neighbourhood news.
+3. "friends": one item about the friends: what the neighbours know, as neighbourhood news.
 4. "notice": a notice like those painted on the walls of Pompeii: a lost animal, something for sale, a teacher looking for pupils, a room to let, a candidate to vote for.
 5. "omen" (only now and then, not every day): a wonder or an omen, as the real Ācta reported them.
 Each item has a title of one to four words and one to three sentences. Something true to Roman life, funny or surprising in every item; never generic, never a lesson.`,

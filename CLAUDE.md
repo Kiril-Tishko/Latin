@@ -539,7 +539,29 @@ learner is there, also when something below grows (fonts, a card, Check's note).
 - Lives (src/chat/life.ts): `lifeNow` rolls a mood (slightly / plainly /
   extremely, by the person's swing) and maybe a happening (their own, an everyday
   one, or now and then an odd one) and keeps them for hours; the profile shows
-  "Today". `statusAt` says asleep / busy / free in their time zone;
+  "Today". What lives add up to is in src/chat/lives.ts: a happening is
+  `public` (the neighbours know: others' prompts carry it as neighbourhood
+  news, `neighbourhoodBlock`, and the Ācta may print it) or theirs alone; a
+  `heavy` one (grief, illness, debt, an engagement, two of each friend's own)
+  starts only after a calm week in the world and three weeks for that person
+  (`heavyOk`, `CALM_DAYS`), their own heavy ones seldom even then, and what
+  comes after it always comes (`then`: one of two consequences, e.g. Titus
+  home with a wild story, or still no news). A happening that matters is
+  remembered by its person (`noteHappening`: lasts 12 h, public or heavy),
+  goes on the timeline (heavy, or public for a day) and may bring a want.
+  Goals (`Meta.goals`, `goalsOf`: each friend's `wants` at first; `goalsLine`
+  in every person block with ids): Claude reports "goals" (a step, done,
+  dropped, or a new want; four open at most); done or dropped goes on the
+  timeline. The timeline (`Meta.world.timeline`, 60 kept, merged by id) is
+  the world's shared history, shown to a chat only as far as its people know
+  of it (`timelineBlock`, `knowsOf`), all of it with who knows in the
+  own-writing prompt and the brief; after four quiet days the own-writing
+  prompt says life may bring something (`quietDays`). Claude may make
+  something happen ("happen": a consequence of what went on, or out of the
+  blue; `applyHappen`: their life now, the timeline, a memory; 72 h or more
+  is heavy). `applyFeelings` applies goals and happenings and returns the
+  memories they leave; `refreshLives(…, out)` collects what began.
+  `tests/lives.test.ts`. `statusAt` says asleep / busy / free in their time zone;
   `replyTiming` decides when they read and answer (a sleeper answers after waking,
   one in twenty is woken up; busy people answer in between or later).
 - Strangers (src/chat/strangers.ts): "Someone new" rolls the dice (sex, age,
@@ -638,8 +660,6 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   and its messages may carry `remember` and `tell` too (kept on the inbox
   document; the page applies them, checked by `routineMinds`, when it takes
   the message in).
-  (The Ācta Diurna still prints the friends' current happenings as
-  neighbourhood news: a public board.)
 - Pacing, as the learner chose ("like real people"; src/chat/pace.ts): plenty
   while the learner is chatting; when they go quiet, each person sends a burst
   or two (`Person.pace.patience`), waits (`wait` hours, longer each time), tries
@@ -762,7 +782,7 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   "last seen a long time ago", and their profile shows nothing they set; a
   message from them (or an "unblock") ends it. Away: they read much later.
   Heavy happenings (`HEAVY_HAPPENINGS`, and two of each friend's own) come
-  rarely and last days. Opening the messenger lets them act every hour
+  rarely, last days and have consequences (Lives above). Opening the messenger lets them act every hour
   (`PLAN_EVERY`). Add a new ability by adding it to `ACT_KINDS`, `applyDeeds`,
   `CAN_DO` and the page.
 - Like a real messenger (the learner asked for it to feel even more like real
@@ -797,8 +817,9 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   model (`ensureActa` in src/ui/messenger.ts: when the page opens and when the
   messenger opens, after the account's chats have come in; Try again after a
   failure): 4-5 items, each a kind (Diēs the day and its festival, Urbs the news
-  of Trajan's Rome from the calendar, Amīcī the friends' lives as neighbourhood
-  news, Titulus a notice like those painted on Pompeii's walls, now and then a
+  of Trajan's Rome from the calendar, Amīcī what the neighbours know of the
+  friends (only their public happenings and public news of the last days:
+  `publicNow`, the timeline), Titulus a notice like those painted on Pompeii's walls, now and then a
   Prōdigium), a title and one to three short lines, only in the learner's words
   and rules (`actaPrompt` with `languageBlock(ctx, false)`; every title and line
   vetted with `vetAll`), earlier boards given so it does not repeat and may

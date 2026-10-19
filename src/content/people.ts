@@ -50,6 +50,8 @@ export interface Person {
   first: string;
   /** Their voice in voice messages: pitch (1 = the voice's own) and pace. */
   voice: { pitch: number; rate: number };
+  /** When the learner goes quiet: bursts they send unanswered, hours they then wait, tries after that (chat/pace.ts). */
+  pace: { patience: number; wait: number; nudges: number };
 }
 
 export const PEOPLE: Person[] = [
@@ -85,6 +87,7 @@ export const PEOPLE: Person[] = [
       { en: "her sister Tertia ran away from home and nobody knows where she is", mood: "frantic", hours: [24, 96] },
     ],
     voice: { pitch: 1.2, rate: 1.0 },
+    pace: { patience: 2, wait: 30, nudges: 1 },
     ties: {
       marcus: "childhood friend; they tease each other all the time",
       lucius: "he writes her poems; she finds them far too dramatic but secretly a little sweet",
@@ -127,6 +130,7 @@ export const PEOPLE: Person[] = [
       { en: "he is accused of forging a contract he only copied", mood: "scared", hours: [72, 240] },
     ],
     voice: { pitch: 1.0, rate: 1.05 },
+    pace: { patience: 2, wait: 24, nudges: 1 },
     ties: {
       iulia: "childhood friend; teases her about her poems and her suitors",
       gaius: "his uncle, who thinks he is lazy (he is)",
@@ -169,6 +173,7 @@ export const PEOPLE: Person[] = [
       { en: "hail destroyed the whole harvest", mood: "devastated", hours: [72, 240] },
     ],
     voice: { pitch: 0.75, rate: 0.78 },
+    pace: { patience: 1, wait: 72, nudges: 0 },
     ties: {
       marcus: "his nephew, a lazy city boy (he loves him)",
       lucius: "a poet, so useless; they bicker",
@@ -208,6 +213,7 @@ export const PEOPLE: Person[] = [
       { en: "her school may have to close: there is no money", mood: "worried", hours: [120, 336] },
     ],
     voice: { pitch: 1.05, rate: 0.88 },
+    pace: { patience: 1, wait: 36, nudges: 1 },
     ties: {
       iulia: "her favourite former pupil",
       marcus: "a former pupil, clever but lazy",
@@ -247,6 +253,7 @@ export const PEOPLE: Person[] = [
       { en: "a rival poet's friends beat him up in the street", mood: "humiliated", hours: [48, 120] },
     ],
     voice: { pitch: 0.88, rate: 0.75 },
+    pace: { patience: 2, wait: 20, nudges: 2 },
     ties: {
       iulia: "in love with her; writes her poems",
       gaius: "thinks farmers have no soul; they bicker",

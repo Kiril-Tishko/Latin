@@ -8,6 +8,7 @@ import { GROUP, PEOPLE } from "../content/people";
 import { SKILLS } from "../latin/skills";
 import type { Me } from "../trainer/progress";
 import { Life, localTime, moodText, partOfDay, statusAt } from "./life";
+import { groupMayWrite, paceLine, paceNow, paceOf } from "./pace";
 import { awayNow, Bond, CoachTurn, deletedNow, groupIds, groupMembers, groupName, groupsOf, iBlocked, isBlocked, isGroupId, Meta, Msg, REACTIONS, SYS, Thread, Who, membersOf, silentNow, whoOf } from "./model";
 import type { Stranger } from "./strangers";
 import type { AllowedWord } from "./words";
@@ -354,6 +355,23 @@ function groupInfoLine(meta: Meta, id: string): string {
   return g.by === "me" ? " (a group the learner made and named; the learner decides who is in it)" : ` (a group ${whoOf(g.by, meta)?.name ?? g.by} started)`;
 }
 
+/**
+ * When the learner comes back to a private chat after leaving someone's
+ * messages unanswered: how long, and how many times they wrote meanwhile (as
+ * real people do, they notice).
+ */
+export function returnLine(thread: Thread, who: Who, ctx: PromptCtx): string {
+  const msgs = thread.messages.filter((m) => m.at <= ctx.now);
+  let i = msgs.length - 1;
+  while (i >= 0 && msgs[i].from === "me") i--;
+  const back = msgs[i + 1]?.at;
+  if (!back || i < 0) return "";
+  const p = paceNow(thread, who.id, back - 1);
+  if (!p.unanswered) return "";
+  const quiet = ago(back - p.lastAt);
+  return `${who.name.toUpperCase()} HAD BEEN WAITING: since ${ctx.me.name} last wrote here (${ago(back - p.learnerAt)} ago) ${who.name} wrote ${p.unanswered === 1 ? "once more" : `${p.unanswered} more times`} with no answer, the last ${quiet} ago. Now ${ctx.me.name} writes again: they notice, and react as they would (relieved, cool, hurt, teasing, or they let it go).`;
+}
+
 /** The prompt for an answer to what the learner wrote. */
 export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: { at: number; why: string }, literal = ""): string {
   const group = thread.kind === "group";
@@ -374,6 +392,7 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
     dramaBlock(meta),
     groupLately(thread, meta, ctx),
     `THE CONVERSATION (oldest first; times where ${group ? "they are" : `${members[0]?.name} is`}). The learner's Latin may have mistakes.\n${conversationBlock(thread, meta, ctx, tz)}`,
+    !group && members[0] ? returnLine(thread, members[0], ctx) : "",
     literalBlock(literal),
     `The answer arrives at ${deliver.weekday} ${deliver.hm} their time (${timing.why}); write for that moment.`,
     HOW_TO_BE_REAL,
@@ -396,12 +415,16 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
   const recent = threads
     .filter((t) => !t.gone)
     .map((t) => {
-      const last = t.messages.filter((m) => m.at <= ctx.now).slice(-6);
-      const title = t.kind === "group" ? `«${groupName(meta, t.id)}» (group: ${membersOf(t.id, meta).map((w) => w.name).join(", ")})` : `${whoOf(t.id, meta)?.name ?? t.id}${iBlocked(meta, t.id) ? " (the learner has blocked them: nothing they send here arrives)" : ""}`;
+      const last = t.messages.filter((m) => m.at <= ctx.now).slice(-10);
+      const group = isGroupId(t.id, meta);
+      const title = group ? `«${groupName(meta, t.id)}» (group: ${membersOf(t.id, meta).map((w) => w.name).join(", ")})` : `${whoOf(t.id, meta)?.name ?? t.id}${iBlocked(meta, t.id) ? " (the learner has blocked them: nothing they send here arrives)" : ""}`;
       const lastMine = [...t.messages].reverse().find((m) => m.from === "me" && m.at <= ctx.now);
       const waiting = t.messages.some((m) => m.from !== "me" && m.at > ctx.now);
       const remembers = t.memory.length ? `\n  (remembers about ${ctx.me.name}: ${t.memory.slice(-6).join("; ")})` : "";
-      return `${title} [chat id "${t.id}"]${waiting ? " (has messages still on their way)" : ""}${lastMine ? `, learner last wrote ${ago(ctx.now - lastMine.at)} ago` : ""}:${remembers}\n${last.length ? last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${m.la}`).join("\n") : "  (nothing yet)"}`;
+      // like real people: who may write here now, and who is waiting for an answer
+      const who = whoOf(t.id, meta);
+      const pace = group ? `  [${groupMayWrite(t, ctx.now).why}]` : who ? `  [${paceLine(who.name, paceOf(who.id, meta), paceNow(t, who.id, ctx.now), ctx.now, who.tz, ctx.me.name)}]` : "";
+      return `${title} [chat id "${t.id}"]${waiting ? " (has messages still on their way)" : ""}${lastMine ? `, learner last wrote ${ago(ctx.now - lastMine.at)} ago` : ""}:${remembers}\n${last.length ? last.map((m) => `  ${nameOf(m.from, meta, ctx.me)}: ${m.la}`).join("\n") : "  (nothing yet)"}\n${pace}`;
     })
     .join("\n");
   return [
@@ -412,7 +435,7 @@ export function ownPrompt(threads: Thread[], meta: Meta, ctx: PromptCtx, hours: 
     ctx.calendar ?? "",
     dramaBlock(meta),
     `THE CHATS NOW (last messages):\n${recent}`,
-    `DECIDE like life, no script: sometimes nothing happens; sometimes someone writes, double-texts, starts a fight in the group, makes up, disappears, brings someone new, or a storyline among them takes a turn the learner did not see coming. Someone writes only when awake, and for their own reasons. Feelings drive it: someone who misses or fancies the learner writes more, someone hurt waits for an apology or writes something pointed, someone ignoring or blocking the learner does not write to them (but may talk about them in the group). Do not write into a chat that has messages still on their way.`,
+    `DECIDE like life, no script: sometimes nothing happens; sometimes someone writes, double-texts, starts a fight in the group, makes up, disappears, brings someone new, or a storyline among them takes a turn the learner did not see coming. Someone writes only when awake, and for their own reasons. Feelings drive it: someone who misses or fancies the learner writes more, someone hurt waits for an apology or writes something pointed, someone ignoring or blocking the learner does not write to them (but may talk about them in the group). Do not write into a chat that has messages still on their way. Like real people, they do not keep writing to someone who does not answer: each chat says in [brackets] who may write there now and who is waiting for an answer; someone waiting writes nothing there (they may still talk in a group, about other things). Nobody repeats what they already said: every message brings something new (news, a question about something else, a change of mood) or is not sent.`,
     HOW_TO_BE_REAL,
     CAN_DO,
     languageBlock(ctx),

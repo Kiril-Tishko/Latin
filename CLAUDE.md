@@ -596,6 +596,25 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   Remote connector (`callConnector` in platform.ts, `firePictures`, at most once
   in 90 s); without the connector the hourly routine makes them. The routine
   also makes fresh pictures for its own messages (`nuntii.py picture`).
+- Pacing, as the learner chose ("like real people"; src/chat/pace.ts): plenty
+  while the learner is chatting; when they go quiet, each person sends a burst
+  or two (`Person.pace.patience`), waits (`wait` hours, longer each time), tries
+  once or twice more (`nudges`) and then leaves it to the learner. A burst is
+  messages within 30 minutes; their answer to the learner's last message does
+  not count (`paceNow`, `mayWrite`). Strangers wait by their temper
+  (`strangerPace`). The group has a rhythm of its own (`groupMayWrite`: up to
+  four talks a day while the learner takes part, one a day when they have been
+  away for days, three hours apart). Nobody says again what they said in that
+  chat lately (`similar`, `repeats`), nor sends a photo sent there lately
+  (`photoSentLately`). `allowOwn` applies all of it to every message written on
+  their own: in `writeOwn`, to the routine's messages when they come in from
+  the inbox (in the order written), and once per page load to what is already
+  in a chat but not seen yet (`overPace`, as tombstones). The prompts say who
+  may write and who is waiting (`paceLine`), and when the learner comes back
+  the person knows how long they waited (`returnLine`). The routine's helper
+  has the same rules (`may_write`, `allow_own`; `tests/pace.test.ts` checks
+  both decide alike). On 19 Oct the routine had sent 70 messages unanswered
+  (Marcus's "Hodiē Mārs!" fifteen times): that is what this stops.
 - Claude is asked only on the learner's actions: Send (one answer per burst:
   2.5 s pause; answers still on their way are taken back and written again),
   opening the messenger (at most every 3 hours, `writeOwn`: what they write on
@@ -733,12 +752,16 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   notification line): it reads the brief (src/chat/brief.ts: the learner, the language block, every
   allowed spelling, everyone's sheet and their lives rolled 48 h ahead, the day
   in Rome for today and the next two days, the photos, the groups, whom the
-  learner blocked and muted), makes the pictures still wanted, writes 0-3
-  messages into the inbox (a voice message, a photo or a fresh picture now and
-  then; none from someone the learner blocked, in private), and ends with one
-  line about the unseen messages (muted chats left out),
-  which becomes the notification. Change its schedule or prompt with
-  update_trigger (keep the prompt in sync with that file).
+  learner blocked and muted, each person's pace, the groups' members), and the
+  inbox (messages it wrote earlier that the page has not moved in yet count as
+  sent), makes the pictures still wanted, plans 0-3 messages (a voice message,
+  a photo or a fresh picture now and then), and passes them through
+  `nuntii.py vet`: words, pace, repeats, a photo sent lately, asleep, blocked
+  or giving the silent treatment; only what passes is saved, as the inbox
+  documents vet makes (ids and times). It ends with one line about the unseen
+  messages (muted chats left out), which becomes the notification. Change its
+  schedule or prompt with update_trigger (keep the prompt in sync with that
+  file).
 
 ## Audio
 

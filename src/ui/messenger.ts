@@ -13,6 +13,7 @@ import { ACTA_ID, actaKey, boardOf, earlierBoards, writeActa } from "../chat/act
 import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, picId, refreshLives, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
+import { allowOwn, overPace, paceOf } from "../chat/pace";
 import { deviceZone, hashRand } from "../chat/life";
 import { CoachTurn, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, MOMENTS, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
@@ -223,6 +224,8 @@ function saveMeta() {
 }
 
 let connected = false;
+/** Chats tidied of what was written beyond the people's pace, this page load. */
+const tidied = new Set<string>();
 let gotThreads: () => void = () => undefined;
 /** Resolves once the account's chats have come in (or there is no account to wait for). */
 const threadsReady = new Promise<void>((resolve) => (gotThreads = resolve));
@@ -285,6 +288,13 @@ function follow(s: NonNullable<typeof store>) {
       }
       if (first) for (const t of Object.values(threads)) if (!seen.has(t.id) && t.messages.length) saveThread(t);
       first = false;
+      // once per page: what the people wrote beyond their pace, not seen yet, goes (like real people, they would have waited)
+      for (const t of Object.values(threads)) {
+        if (tidied.has(t.id) || t.kind === "channel") continue;
+        tidied.add(t.id);
+        const drop = overPace(t, meta, isGroupId(t.id, meta));
+        if (drop.length) saveThread({ ...t, messages: t.messages.filter((m) => !drop.includes(m.id)), dropped: [...(t.dropped ?? []), ...drop].slice(-400) });
+      }
       saveLocal();
       emit();
     },
@@ -295,7 +305,9 @@ function follow(s: NonNullable<typeof store>) {
   // messages the phone routine wrote while the page was closed
   s.inbox.onSnapshot(
     (snap) => {
-      for (const d of snap.docs) takeFromInbox(d);
+      // in the order they were written, so that each one is judged with the ones before it in its chat
+      const at = (d: DocSnap) => Number((d.data() as { at?: unknown } | undefined)?.at) || 0;
+      for (const d of [...snap.docs].sort((a, b) => at(a) - at(b))) takeFromInbox(d);
     },
     () => undefined,
   );
@@ -312,15 +324,23 @@ function takeFromInbox(d: DocSnap) {
     void store?.inbox.doc(d.id).delete().catch(() => undefined);
     return;
   }
-  if (pic) void loadPic(pic);
   const t = getThread(chat);
+  const at = Number(x.at) || Date.now();
+  const from = String(x.from ?? chat);
+  // like real people: what the routine wrote beyond someone's pace, a repeat, or a photo sent there lately never arrives
+  const member = membersOf(chat, meta).find((w) => w.id === from);
+  if (!t.messages.some((m) => m.id === d.id) && (!member || !allowOwn(t, from, { la: String(x.la ?? ""), photo }, at, paceOf(from, meta), isGroupId(chat, meta)).ok)) {
+    void store?.inbox.doc(d.id).delete().catch(() => undefined);
+    return;
+  }
+  if (pic) void loadPic(pic);
   if (!t.messages.some((m) => m.id === d.id)) {
     const msg: Msg = {
       id: d.id,
-      from: String(x.from ?? chat),
+      from,
       la: String(x.la ?? ""),
       en: x.en ? String(x.en) : undefined,
-      at: Number(x.at) || Date.now(),
+      at,
       src: "routine",
       ...(x.voice === true && !photo && !pic ? { voice: true } : {}),
       ...(photo ? { photo } : {}),

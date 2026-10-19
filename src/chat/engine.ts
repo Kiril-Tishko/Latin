@@ -10,7 +10,8 @@ import { Lexicon } from "../latin/analyze";
 import { checkAnswer, literalReading } from "../latin/facts";
 import { PHOTO_BY_ID, photoSrc } from "../content/photos";
 import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from "./life";
-import { awayNow, groupIds, iBlocked, isBlocked, Meta, MOMENTS, Msg, msgId, Pic, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
+import { awayNow, groupIds, iBlocked, isBlocked, isGroupId, Meta, MOMENTS, Msg, msgId, Pic, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
+import { allowOwn, paceOf } from "./pace";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, storyPersonPrompt, strangerPrompt } from "./prompts";
 import { inventStranger, NewPerson, rollStranger, Stranger } from "./strangers";
@@ -344,22 +345,32 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
   const deeds = deedsOf(raw ?? {}, allPeople(meta), allPeople(meta), [], new Set(groupIds(meta)));
   const unblocking = new Set(deeds.acts.filter((a) => a.do === "unblock").map((a) => a.who));
   const byChat = new Map(live.map((t) => [t.id, t]));
+  // each chat as it will be, message by message: a new burst must be allowed by the person's pace or the group's rhythm
+  const sim = new Map<string, Thread>();
   const drafts = (raw?.messages ?? [])
     .map((m) => ({ chat: String(m.chat ?? ""), from: String(m.from ?? ""), la: clean(m.la), en: clean(m.en), in: Math.max(0, Math.min(hours * 60, Number(m.in) || 0)), gloss: glossOf(m.gloss), unsend: unsendOf(m.unsend), ...extras(m, ctx.canMake) }))
+    .sort((a, b) => a.in - b.in)
     .filter((m) => {
-      const t = byChat.get(m.chat);
-      if (!t || !(m.la || m.photo || m.picture)) return false;
+      const orig = byChat.get(m.chat);
+      const t = sim.get(m.chat) ?? orig;
+      if (!t || !orig || !(m.la || m.photo || m.picture)) return false;
       // never into a chat with messages still on their way; only its own people; only someone awake then
-      if (t.messages.some((x) => x.from !== "me" && x.at > ctx.now)) return false;
+      if (orig.messages.some((x) => x.from !== "me" && x.at > ctx.now)) return false;
       const member = membersOf(t.id, meta).find((w) => w.id === m.from);
       if (!member) return false;
+      const at = ctx.now + m.in * 60000;
+      const group = isGroupId(t.id, meta);
       // the silent treatment: not a word to the learner in private (in the group they may still talk)
-      if (t.kind !== "group" && silentNow(meta.bonds?.[member.id], ctx.now + m.in * 60000)) return false;
+      if (!group && silentNow(meta.bonds?.[member.id], at)) return false;
       // blocked: nothing reaches the learner in private, unless they unblock them now
-      if (t.kind !== "group" && isBlocked(meta, member.id) && !unblocking.has(member.id)) return false;
+      if (!group && isBlocked(meta, member.id) && !unblocking.has(member.id)) return false;
       // blocked by the learner: what they send in private never arrives
-      if (t.kind !== "group" && iBlocked(meta, member.id)) return false;
-      return statusAt(member.day, member.tz, ctx.now + m.in * 60000).state !== "asleep";
+      if (!group && iBlocked(meta, member.id)) return false;
+      if (statusAt(member.day, member.tz, at).state === "asleep") return false;
+      // like real people: when the learner does not answer, they wait; nobody repeats themselves
+      if (!allowOwn(t, member.id, m, at, paceOf(member.id, meta), group).ok) return false;
+      sim.set(t.id, { ...t, messages: [...t.messages, { id: "planned", from: member.id, la: m.la, at, src: "own", ...(m.photo ? { photo: m.photo } : {}) }] });
+      return true;
     })
     .slice(0, 10);
   const vetted = await vetAll(drafts, ctx, deps);

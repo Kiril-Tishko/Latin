@@ -12,6 +12,7 @@ import { calendarBlock, calendarWords, romeDay } from "./calendar";
 import { PHOTOS } from "../content/photos";
 import { stripMarks } from "../latin/text";
 import { specOf } from "./engine";
+import { Pace, paceOf } from "./pace";
 
 export interface Brief {
   v: 1;
@@ -24,7 +25,7 @@ export interface Brief {
   /** Every allowed spelling, without long marks, lower case: a quick check of any message. */
   forms: string[];
   /** Who everyone is (without the time of day and mood, which change). */
-  people: { id: string; name: string; tz: string; wake: number; sleep: number; busy: [number, number, string][]; sheet: string }[];
+  people: { id: string; name: string; tz: string; wake: number; sleep: number; busy: [number, number, string][]; sheet: string; pace: Pace }[];
   /** Moods and happenings rolled ahead: each from its time on. */
   lives: Record<string, (Life & { from: number })[]>;
   /** The day in Rome for today and the next two days (date in Rome, YYYY-MM-DD): festivals, birthdays, news. */
@@ -33,6 +34,8 @@ export interface Brief {
   photos: { id: string; en: string; who: string[] | "any" }[];
   /** The groups (their names and members now) and the storylines among them. */
   world: string;
+  /** The groups the learner is in, by chat id: their names and members now. */
+  groups: Record<string, { name: string; members: string[] }>;
   /** Chats the learner muted (no notification for them) and people the learner blocked (nothing of theirs in private reaches the learner). */
   muted: string[];
   blocked: string[];
@@ -77,7 +80,7 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
   const people = ids
     .map((id) => whoOf(id, meta))
     .filter((w): w is Who => !!w)
-    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now) }));
+    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now), pace: paceOf(w.id, meta) }));
   const lives: Brief["lives"] = {};
   for (const id of ids) {
     const spec = specOf(id, meta);
@@ -108,6 +111,7 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
     ]
       .filter(Boolean)
       .join("\n"),
+    groups: Object.fromEntries(groupIds(meta).map((g) => [g, { name: groupName(meta, g), members: groupMembers(meta, g) }])),
     muted: meta.mine?.muted ?? [],
     blocked: meta.mine?.blocked ?? [],
   };

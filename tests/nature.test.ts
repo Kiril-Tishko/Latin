@@ -43,7 +43,8 @@ describe("each person's nature, as data the code uses", () => {
   });
 
   it("lets each say only as many messages as is theirs (Gāius two at most)", async () => {
-    const t: Thread = { ...newThread(GROUP.id, "group"), messages: [{ id: "a", from: "me", la: "Salvēte!", at: T0 - 1000 }] };
+    // named, so the quiet Gāius may say more than a word (chat/group.ts); his burst is still two at most
+    const t: Thread = { ...newThread(GROUP.id, "group"), messages: [{ id: "a", from: "me", la: "Salvēte! Gāī, quid agis?", at: T0 - 1000 }] };
     const ask = async <T,>(): Promise<T> =>
       ({
         messages: [

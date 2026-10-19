@@ -162,8 +162,15 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
 - [x] The Ācta prints only what the neighbours know (public happenings).
 
 ### 6. The group
-- [ ] Who is around (asleep, busy, away) decides who can talk.
-- [ ] Talkative and quiet people; not everyone answers everything.
+- [x] Who is around (asleep, busy, away) decides who can talk
+      (`src/chat/group.ts`): the ones here talk live; the others catch up
+      later with a message or two, on their own clock (a sleeper's line no
+      longer holds up the others until morning).
+- [x] Talkative and quiet people: Gāius says a word or nothing unless named;
+      the talkative, the named and the ones who care most are likely to
+      answer first; not everyone answers everything.
+- [x] Named in the learner's message (any case of the name): they want to
+      answer, now or when they come back.
 
 ### 7. Pictures
 - [ ] Photo habits per person.

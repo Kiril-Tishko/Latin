@@ -762,6 +762,17 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   `tiesLine` shows each person only their own (Marcus does not see how Lūcius
   feels about him). Merged per pair (`mergeTies`), 80 kept. Never shown on the
   page. `tests/bond.test.ts`.
+- The group as a group (src/chat/group.ts): for a group answer, `sceneOf`
+  reads when each member reads the learner's message (`timingFor`): those
+  within ten minutes of the first reader are here for the live talk, the
+  others (asleep, busy with no time to look, away) catch up later; it finds
+  whom the learner named (any case of the name, `namedIn`: «Iūliam», «Gāī»)
+  and who is likely to answer first (talkativeness, named, interest, desire,
+  hurt, a little chance). `sceneBlock` says it in the group's prompt.
+  `groupCaps`: someone not around sends two messages at most (`CATCH_UP`), a
+  quiet one (talk under 0.3: Gāius) one, unless named. Someone not around is
+  scheduled on their own clock, from when they read it: before, a sleeper's
+  line held up every message after it until morning. `tests/group.test.ts`.
 - Freedom (src/chat/world.ts): the persona text describes people, not a plot
   ("BE THEM"), and `CAN_DO` lists what they may do, never must; Claude chooses.
   Besides messages a reply or their own writing may carry `acts` (block /

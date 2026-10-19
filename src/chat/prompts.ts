@@ -385,7 +385,7 @@ export function returnLine(thread: Thread, who: Who, ctx: PromptCtx): string {
 }
 
 /** The prompt for an answer to what the learner wrote. */
-export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: { at: number; why: string }, literal = ""): string {
+export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: { at: number; why: string }, literal = "", scene = ""): string {
   const group = thread.kind === "group";
   const members = membersOf(thread.id, meta);
   const tz = members[0]?.tz ?? "Europe/Rome";
@@ -405,6 +405,7 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
     `THE CONVERSATION (oldest first; times where ${group ? "they are" : `${members[0]?.name} is`}). The learner's Latin may have mistakes.\n${conversationBlock(thread, meta, ctx, tz)}`,
     !group && members[0] ? returnLine(thread, members[0], ctx) : "",
     literalBlock(literal),
+    scene,
     `The answer arrives at ${deliver.weekday} ${deliver.hm} their time (${timing.why}); write for that moment.`,
     HOW_TO_BE_REAL,
     CAN_DO,

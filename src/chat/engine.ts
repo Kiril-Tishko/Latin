@@ -16,6 +16,7 @@ import { natureOf } from "./nature";
 import { MemoryDraft, memoriesOf, Tell, tellsOf } from "./mind";
 import { applyBondChanges, applyTieChanges, BondChange, bondChangesOf, TieChange, tieChangesOf } from "./bond";
 import { applyGoalChanges, applyHappen, GoalChange, goalChangesOf, Happen, happensOf, heavyOk, noteHappening } from "./lives";
+import { groupCaps, sceneBlock, sceneOf } from "./group";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, storyPersonPrompt, strangerPrompt } from "./prompts";
 import { inventStranger, NewPerson, rollStranger, Stranger } from "./strangers";
@@ -241,7 +242,9 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     burst.unshift(m.la);
   }
   const literal = burst.length ? literalReading(withoutEmoji(burst.join(" ")), deps.lex) : "";
-  const prompt = replyPrompt(thread, meta, ctx, { at: first.t.startAt, why: first.t.why }, literal);
+  // a group: who is around now, who reads it later, whom the learner named, who is likely to answer (chat/group.ts)
+  const scene = isGroupId(thread.id, meta) && members.length > 1 ? sceneOf(members, meta, ctx.now, byId, burst.join(" "), r) : undefined;
+  const prompt = replyPrompt(thread, meta, ctx, { at: first.t.startAt, why: first.t.why }, literal, scene ? sceneBlock(scene, members, byId, meta) : "");
   const raw = await deps.ask<{
     messages?: { from?: string; la?: string; en?: string; gap?: number; re?: unknown; voice?: unknown; photo?: unknown; picture?: unknown; gloss?: unknown; unsend?: unknown }[];
     react?: { from?: string; emoji?: string }[];
@@ -282,13 +285,23 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
       return n <= (natureOf(m.from, meta)?.burst ?? 4);
     })
     .slice(0, members.length > 1 ? 8 : 5);
-  const vetted = await vetAll(drafts, ctx, deps);
-  // each message arrives after the one before it: a pause, then the typing; a sleeper answers when awake
+  const vetted = await vetAll(scene ? groupCaps(drafts, scene, meta) : drafts, ctx, deps);
+  // each message arrives after the one before it: a pause, then the typing; a sleeper answers when awake.
+  // In a group, someone not around catches up on their own time, without holding up the others.
   let t = first.t.startAt;
+  const own = new Map<string, number>();
   const made: Pic[] = [];
   const messages: Msg[] = vetted.map((d) => {
-    const own = byId.get(d.from!);
-    t = Math.max(t, own?.startAt ?? t) + Math.min(40, Math.max(0, d.gap)) * 1000 + typingTime(d.la);
+    const when = byId.get(d.from!);
+    const step = Math.min(40, Math.max(0, d.gap)) * 1000 + typingTime(d.la);
+    if (scene?.later.includes(d.from!)) {
+      const at = Math.max(own.get(d.from!) ?? 0, when?.startAt ?? t) + step;
+      own.set(d.from!, at);
+      const pic = d.picture && !made.length ? picId() : undefined;
+      if (pic) made.push(wanted(d, ctx.now, pic));
+      return { id: msgId(), from: d.from!, at: Math.round(at), src: "reply", ...fields(d, pic), ...deletedAtOf(d, Math.round(at)) };
+    }
+    t = Math.max(t, when?.startAt ?? t) + step;
     // a fresh picture: one a reply at most
     const pic = d.picture && !made.length ? picId() : undefined;
     if (pic) made.push(wanted(d, ctx.now, pic));

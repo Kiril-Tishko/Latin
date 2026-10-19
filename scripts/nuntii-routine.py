@@ -6,7 +6,7 @@
 #   python3 nuntii.py check  DIR "msg" ...   every word allowed?
 #   python3 nuntii.py vet    DIR DRAFT.json OUT.json   each planned message allowed (words, pace, repeats,
 #                                            photos, blocked, asleep)? OUT gets the inbox documents to save
-#   python3 nuntii.py notify DIR [new.json]  the line for the phone notification
+#   python3 nuntii.py notify DIR [new.json]  the line for the phone notification (only what arrived since the last run)
 #   python3 nuntii.py picture ID FROM "what it shows" OUT.json [DIR]   a fresh picture someone sends (DIR: drawn as they look)
 #   python3 nuntii.py looks  DIR FROM "what it shows"            the prompt a picture is made from
 #   python3 nuntii.py pictures WANTED.json OUTDIR                every picture waiting to be made
@@ -92,14 +92,32 @@ def names(brief):
     return out
 
 
-def unseen(threads, now, extra=(), muted=()):
+# the routine runs at :51 every hour from 7 to 23, Kyiv time (the trigger's schedule)
+RUN_HOURS = range(7, 24)
+RUN_MINUTE = 51
+
+
+def last_run(now):
+    """when the routine ran before this run (the night's pause skipped): what arrived since then is new"""
+    kyiv = ZoneInfo("Europe/Kyiv")
+    t = datetime.fromtimestamp(now / 1000, kyiv).replace(minute=RUN_MINUTE, second=0, microsecond=0).timestamp() * 1000
+    t -= 3600_000 if t > now else 0
+    t -= 3600_000
+    while datetime.fromtimestamp(t / 1000, kyiv).hour not in RUN_HOURS:
+        t -= 3600_000
+    return int(t)
+
+
+def unseen(threads, now, extra=(), muted=(), since=0):
+    """the messages the learner has not seen that came since SINCE: each is told of once, when it arrives
+    (what an earlier run wrote was told of by that run, so the routine's own messages count only as EXTRA, this run's)"""
     out = []
     for cid, t in threads.items():
         # the Ācta Diurna is a news board, not a chat; a muted chat makes no notification
         if t.get("gone") or cid == "acta" or cid in muted:
             continue
         for m in t.get("messages", []):
-            if m.get("from") not in ("me", "sys") and t.get("readAt", 0) < m.get("at", 0) <= now:
+            if m.get("from") not in ("me", "sys") and m.get("src") != "routine" and max(t.get("readAt", 0), since) < m.get("at", 0) <= now:
                 out.append(dict(m, chat=cid))
     out += [dict(m) for m in extra]
     return sorted(out, key=lambda m: m.get("at", 0))
@@ -470,7 +488,9 @@ def notify(d, new_path=None):
         return
     extra = load(new_path, []) if new_path else []
     muted = set(brief.get("muted", []))
-    msgs = unseen(threads, now + 60_000, [m for m in extra if m.get("chat") not in muted], muted)
+    # what the people wrote on their own since the last run (the page plans a few hours ahead), and what this run wrote;
+    # a run starts a minute or two after its time and tells of what arrives within a minute of it
+    msgs = unseen(threads, now + 60_000, [m for m in extra if m.get("chat") not in muted], muted, last_run(now) + 3 * 60_000)
     if not msgs:
         print("No new messages.")
         return

@@ -232,3 +232,49 @@ describe("the phone routine's helper paces exactly like the page", () => {
     expect(saved.find((s) => s.la === "Et nunc")).not.toHaveProperty("remember");
   });
 });
+
+describe("the phone is told of each message once", () => {
+  it("tells of what arrived since the routine's last run, not of everything still unread", () => {
+    const dir = mkdtempSync(join(tmpdir(), "nuntii-"));
+    const base = join(dir, "data/users/me/messenger");
+    mkdirSync(join(base, "threads"), { recursive: true });
+    mkdirSync(join(base, "inbox"), { recursive: true });
+    mkdirSync(join(base, "brief"), { recursive: true });
+    // the run of 12:51 in Kyiv (09:51 UTC), a minute late; the one before was at 11:51
+    const now = Date.UTC(2026, 9, 19, 9, 52);
+    const threads: Record<string, Thread> = {
+      // old and unread: told of when it came, days ago
+      iulia: chat("iulia", [msg("iulia", now - 48 * H, "Ubi es?"), msg("iulia", now - 32 * M, "Ecce, lūna!")]),
+      // Gāius answered after his nap (the page had planned it)
+      gaius: chat("gaius", [msg("me", now - 3 * H), msg("gaius", now - 12 * M, "Bene, Cyrille.", { src: "reply" })]),
+      // muted: no notification
+      claudia: chat("claudia", [msg("claudia", now - 20 * M, "Salvē!")]),
+      marcus: chat("marcus", []),
+    };
+    for (const [id, t] of Object.entries(threads)) writeFileSync(join(base, "threads", `${id}.json`), JSON.stringify(t));
+    // what the last run wrote, still in the inbox: it was told of then
+    writeFileSync(join(base, "inbox", "rprev.json"), JSON.stringify({ chat: "marcus", from: "marcus", la: "Hodiē Mārs!", en: "x", at: now - 59 * M }));
+    writeFileSync(base + ".json", JSON.stringify(newMeta()));
+    const brief = { v: 1, me: { name: "Cyrillus", g: "m", tz: "Europe/Kyiv" }, forms: [], muted: ["claudia"], people: PEOPLE.map((p) => ({ id: p.id, name: p.name, tz: p.tz, wake: p.day.wake, sleep: p.day.sleep, busy: p.day.busy, sheet: "" })) };
+    writeFileSync(join(base, "brief/now.json"), JSON.stringify(brief));
+    writeFileSync(join(dir, "new.json"), JSON.stringify([{ chat: "lucius", from: "lucius", la: "Carmen novum!", en: "A new poem!", at: now + 5000 }]));
+    const env = (globalThis as unknown as { process: { env: Record<string, string> } }).process.env;
+    const helper = new URL("../scripts/nuntii-routine.py", import.meta.url).pathname;
+    const notify = (at: number, ...args: string[]) => {
+      try {
+        return execFileSync("python3", ["-I", helper, "notify", dir, ...args], { env: { ...env, NUNTII_NOW: String(at) }, encoding: "utf8" }).trim();
+      } catch (e) {
+        if ((e as { code?: string }).code === "ENOENT") return null; // no python here
+        throw e;
+      }
+    };
+    const line = notify(now, join(dir, "new.json"));
+    if (line === null) return;
+    expect(line).toBe("Lūcius: Carmen novum! (A new poem!) · and 2 more from Iūlia, Gāius");
+    // the next run, with nothing new: no notification about the same messages again
+    expect(notify(now + H)).toBe("No new messages.");
+    // the first run of the morning tells of the night
+    writeFileSync(join(base, "threads", "iulia.json"), JSON.stringify(chat("iulia", [msg("iulia", Date.UTC(2026, 9, 19, 23, 0), "Nōn dormiō...")])));
+    expect(notify(Date.UTC(2026, 9, 20, 4, 52))).toBe("Iūlia: Nōn dormiō...");
+  });
+});

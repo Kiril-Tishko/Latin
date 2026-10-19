@@ -253,3 +253,4 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
   arrived since its last run. Fixed too: a memory of a message that never
   reached the learner (not sent, taken back, cut by pacing) is forgotten with
   it, and only the friends know where the learner lives.
+  Published as v43; both routines updated and checked against the files.

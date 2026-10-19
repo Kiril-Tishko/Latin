@@ -955,9 +955,10 @@ async function messenger() {
   if (!(await p.locator(".bubble.mine .ticks.read").count())) errors.push("messenger: the learner's message never shows as read");
   const prompts = await p.evaluate(() => window.__prompts.join("\n---\n"));
   if (!prompts.includes("You write as Iūlia") || !prompts.includes("THE LEARNER: Kiril")) errors.push("messenger: the reply prompt lacks the person or the learner");
-  // they live in Rome's calendar, hear each other's news, and read the learner's Latin literally
+  // they live in Rome's calendar, know only what they were told (no omniscient news of the others), and read the learner's Latin literally
   if (!prompts.includes("THE DAY IN ROME") || !prompts.includes("a.d. IV Īd. Oct.")) errors.push("messenger: the reply prompt lacks the day in Rome");
-  if (!prompts.includes("THE OTHER FRIENDS, RIGHT NOW")) errors.push("messenger: the reply prompt lacks the other friends' news");
+  if (prompts.includes("THE OTHER FRIENDS, RIGHT NOW") || prompts.includes("WHAT THE OTHERS KNOW ABOUT")) errors.push("messenger: the reply prompt tells Iūlia what she was never told");
+  if (!prompts.includes('"remember": [{"who"') || !prompts.includes('"tell"')) errors.push("messenger: the reply prompt asks for no memories or telling");
   if (!prompts.includes("HOW THE LEARNER'S LAST MESSAGE READS") || !prompts.includes("«Librum»: accusative singular")) errors.push("messenger: the reply prompt does not read the learner's message literally");
   if (!prompts.includes("PHOTOS THEY HAVE ON THEIR TABULA") || !prompts.includes('"voice": true') || !prompts.includes('"picture"')) errors.push("messenger: the reply prompt offers no photos, pictures or voice messages");
   if (!((await p.locator(".msgr-date").textContent()) ?? "").includes("Īd. Oct.")) errors.push("messenger: no Roman date over the chats");

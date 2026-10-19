@@ -552,8 +552,8 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   ten strangers know one of the friends (`LINKS`: Marcus's landlord, a sailor on
   Titus's ship, Gāius's neighbour…, living where the link needs them), and that
   friend knows them too (`knownPeople` in their sheet). In a private chat the
-  prompt carries the other friends' lives now (`friendsNews`: friends hear each
-  other's news) and what was said lately in the group (`groupLately`).
+  prompt carries what was said lately in the group, if the person is in it
+  (`groupLately`); the others' news reach them only as memories (told or seen).
 - They live through the Roman year in real time (src/chat/calendar.ts, content
   in src/content/calendar.ts): 2026 is AD 100 (`YEAR_OFFSET`), so the friends
   live under Trajan and next spring he leaves for the Dacian war. Every prompt
@@ -610,6 +610,30 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   person block and the routine's sheets; the language block lets length follow
   the person and the moment (short small talk, more when it matters, never a
   paragraph).
+- Minds (src/chat/mind.ts): what each person remembers and how they know it,
+  one document each, `messenger/minds/<id>` (merged by memory id across
+  devices; a thread's old `memory` facts and a bond's `moments` were moved in
+  once, `migrateMinds`, with steady ids). A `Memory` is in their own words,
+  with whom it concerns (`about`), a kind (moment, fact, promise, plan,
+  secret, joke, conflict, news), a weight (1-5), how they know it (`from`:
+  "saw" = was there or lived it, a person's id = told by them, "rumour"), the
+  chat, and flags: `secret`, `untrue` (believed but false), `done` (settled),
+  `outdated`. `recall` picks for a prompt what weighs, what is recent, what is
+  open (promises, plans, fights), and what the conversation touches (its
+  people, its chat, its words); `prune` keeps 80, the most salient. Replies and
+  their own writing return `remember` (per person: in a group each may
+  remember it differently), `settled`, `outdated`, and `tell` (someone passes
+  something on out of the learner's sight; it may be garbled or a lie;
+  `applyMinds` gives the one told the memory, and the teller the memory of
+  telling). Knowledge has boundaries: a prompt carries only its people's own
+  memories (`memoryBlock`); the old blocks that let every friend know what the
+  learner said to the others, and how the others feel, are gone; storylines
+  carry who knows of them (`Drama.knows`) and show only to them (`dramaBlock`
+  with viewers; the own-writing prompt, which decides for everyone, sees all
+  with their knowers); a private chat sees the group's recent talk only if its
+  person is in the group. The routine's sheets carry each person's memories.
+  (The Ācta Diurna still prints the friends' current happenings as
+  neighbourhood news: a public board.)
 - Pacing, as the learner chose ("like real people"; src/chat/pace.ts): plenty
   while the learner is chatting; when they go quiet, each person sends a burst
   or two (`Person.pace.patience`), waits (`wait` hours, longer each time), tries
@@ -675,14 +699,15 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   ("the learner's own abilities") and the smoke test's `abilities` part.
 - Relationships (src/chat/model.ts `Bond`, `Meta.bonds`): each person keeps
   how they feel about the learner in their own words (`feel`, first person,
-  private: never shown on the page), dated `moments` between them, and the
-  silent treatment (`silentUntil`). Friends start from `first` and have a
+  private: never shown on the page) and the silent treatment (`silentUntil`);
+  what happened between them is in their memories now (Minds above; the old
+  `moments` were moved in). Friends start from `first` and have a
   `heart` (src/content/people.ts: what stings them, what wins them over, how
   they fight, sulk, make up and show love); a stranger's first impression comes
   from Claude (`Stranger.first`). The prompts read `bondBlock` in every person
-  block (and in the routine's sheets) and `gossipBlock` carries how the others
-  feel; the persona text (`HOW_TO_BE_REAL`, "BE THEM") describes people, not
-  rules. A reply may be no answer at all, and returns `feel`, `moment`, `mood`
+  block (and in the routine's sheets); how the others feel reaches someone only
+  if told; the persona text (`HOW_TO_BE_REAL`, "BE THEM") describes people, not
+  rules. A reply may be no answer at all, and returns `feel`, `mood`
   (lasts four hours) and `silent` (hours, 0 ends it) per person
   (`feelingsOf`, kept by `applyFeelings` after each answer); writing on their
   own, feelings drift too (missing the learner, cooling off), and someone
@@ -720,12 +745,10 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   whole answer) and quote an earlier message by its number (`"re"`: the
   conversation block numbers its lines, `shownMessages`, and shows quotes and
   reactions). Reactions merge per person, the newer winning, a taken-back one
-  included (`mergeReactions`). Friends talk: each chat's memory reaches the
-  others (`gossipBlock`, `PromptCtx.memories`): in a private chat what the
-  learner told the other friends and the group, in the group what each was
-  told in private (kept or let slip, as fits them), to a stranger what the
-  friend they know may have told them; and when they write on their own they
-  see what they remember, to follow up.
+  included (`mergeReactions`). Friends talk, but only as people do: what one
+  was told in private reaches another only if they pass it on (`tell`, by
+  their nature: Marcus spills, Gāius keeps; see Minds), and when they write
+  on their own they see what they remember, to follow up.
 - Feels real: typing dots (from reading, while Claude writes, until each
   message), read ticks, "online" / "last seen", day separators, a "New" line,
   a notice for a message arriving elsewhere in the app, an unread count (Roman

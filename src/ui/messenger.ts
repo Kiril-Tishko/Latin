@@ -14,9 +14,10 @@ import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, 
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
 import { allowOwn, overPace, paceOf } from "../chat/pace";
+import { applyMinds, mergeMinds, migrateMinds, Mind } from "../chat/mind";
 import { natureOf } from "../chat/nature";
 import { deviceZone, hashRand } from "../chat/life";
-import { CoachTurn, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, MOMENTS, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
+import { CoachTurn, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
 import { allowedWords, calendarEntry, chatEntries, chatLexicon, nameEntry } from "../chat/words";
 import { calendarBlock, calendarWords, romeDay } from "../chat/calendar";
@@ -39,13 +40,16 @@ const PLAN_EVERY = 3600_000;
 interface Local {
   meta: Meta;
   threads: Record<string, Thread & { dropped?: string[] }>;
+  minds?: Record<string, Mind>;
 }
 
 type T = Thread & { dropped?: string[] };
 
 let meta: Meta = newMeta();
 let threads: Record<string, T> = {};
-let store: { meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection; pics: DocCollection } | null = null;
+/** Each person's mind: what they remember and how they know it (chat/mind.ts). */
+let minds: Record<string, Mind> = {};
+let store: { meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection; pics: DocCollection; minds: DocCollection } | null = null;
 const listeners = new Set<() => void>();
 /** Threads whose people are writing an answer right now (Claude is working), with any error. */
 const writing = new Map<string, { ctl: AbortController; error?: string }>();
@@ -58,13 +62,14 @@ function load() {
     const raw = JSON.parse(storage.get(LOCAL_KEY) ?? "null") as Local | null;
     if (raw?.meta) meta = { ...newMeta(), ...raw.meta };
     if (raw?.threads) threads = raw.threads;
+    if (raw?.minds) minds = raw.minds;
   } catch {
     /* a fresh start */
   }
 }
 
 function saveLocal() {
-  const keep: Local = { meta, threads: Object.fromEntries(Object.entries(threads).map(([id, t]) => [id, { ...t, messages: t.messages.slice(-150) }])) };
+  const keep: Local = { meta, threads: Object.fromEntries(Object.entries(threads).map(([id, t]) => [id, { ...t, messages: t.messages.slice(-150) }])), minds };
   storage.set(LOCAL_KEY, JSON.stringify(keep));
 }
 
@@ -215,6 +220,20 @@ function saveThread(t: T) {
   }
 }
 
+function saveMind(m: Mind) {
+  minds[m.id] = m;
+  saveLocal();
+  if (store) {
+    const s = store;
+    queueWrite(`k:${m.id}`, () => s.minds.doc(m.id).set(toBody(minds[m.id])));
+  }
+}
+
+/** Keeps what a conversation or a stretch of their lives did to the people's minds. */
+function remember(change: Parameters<typeof applyMinds>[1], now: number) {
+  for (const m of applyMinds(minds, change, now, (id) => whoOf(id, meta)?.name ?? (id === "me" ? getProgress().settings.me?.name ?? "the learner" : id))) saveMind(m);
+}
+
 function saveMeta() {
   saveLocal();
   emit();
@@ -225,6 +244,16 @@ function saveMeta() {
 }
 
 let connected = false;
+let gotChats = false;
+let gotMinds = false;
+let movedIn = false;
+/** Once the account's chats and minds are in: the old facts and moments move into the minds (once; ids are steady, so two devices make one memory). */
+function moveIn() {
+  if (movedIn || !gotChats || !gotMinds) return;
+  movedIn = true;
+  const all = allThreads(true).filter((t) => t.kind !== "channel");
+  for (const m of migrateMinds(meta, all, minds, (chat) => membersOf(chat, meta).map((w) => w.id), Date.now())) saveMind(mergeMinds(minds[m.id], m)!);
+}
 /** Chats tidied of what was written beyond the people's pace, this page load. */
 const tidied = new Set<string>();
 let gotThreads: () => void = () => undefined;
@@ -289,6 +318,8 @@ function follow(s: NonNullable<typeof store>) {
       }
       if (first) for (const t of Object.values(threads)) if (!seen.has(t.id) && t.messages.length) saveThread(t);
       first = false;
+      gotChats = true;
+      moveIn();
       // once per page: what the people wrote beyond their pace, not seen yet, goes (like real people, they would have waited)
       for (const t of Object.values(threads)) {
         if (tidied.has(t.id) || t.kind === "channel") continue;
@@ -300,6 +331,24 @@ function follow(s: NonNullable<typeof store>) {
       emit();
     },
     () => undefined,
+  );
+  // each person's mind, followed live (every device and the phone routine's brief see the same memories)
+  s.minds.onSnapshot(
+    (snap) => {
+      for (const d of snap.docs) {
+        const body = d.data() as unknown as Mind | undefined;
+        if (!body || !Array.isArray(body.memories)) continue;
+        minds[d.id] = mergeMinds(minds[d.id], { ...body, id: d.id })!;
+      }
+      gotMinds = true;
+      saveLocal();
+      emit();
+      moveIn();
+    },
+    () => {
+      gotMinds = true;
+      moveIn();
+    },
   );
   // pictures that were waiting to be made
   for (const t of Object.values(threads)) for (const m of t.messages) if (m.pic && m.from !== "me" && Date.now() - m.at < 3 * 86400_000) void loadPic(m.pic);
@@ -383,9 +432,7 @@ export function promptCtx(now = Date.now()): PromptCtx | null {
   const p = getProgress();
   if (!p.settings.me) return null;
   const seen = derived().seenKnowledge.skills;
-  // what each chat remembers about the learner: friends talk to each other
-  const memories = Object.fromEntries(Object.values(threads).filter((t) => t.memory.length && !t.gone).map((t) => [t.id, t.memory]));
-  return { now, me: p.settings.me, tz: p.settings.tz ?? deviceZone(), words: allowedWords(chatWords().entries, seen), seen, calendar: calendarBlock(now), group: getThread(GROUP.id), memories, canMake: madeToday(now) < MAKE_PER_DAY };
+  return { now, me: p.settings.me, tz: p.settings.tz ?? deviceZone(), words: allowedWords(chatWords().entries, seen), seen, calendar: calendarBlock(now), group: getThread(GROUP.id), minds, canMake: madeToday(now) < MAKE_PER_DAY };
 }
 
 async function deps(): Promise<Deps | { error: string }> {
@@ -493,7 +540,9 @@ export async function answer(id: string) {
     // what they saw in the learner's photos, so they remember it
     const seen = new Set(photos.map((x) => x.msg));
     const described = reply.saw ? reacted.map((m) => (seen.has(m.id) ? { ...m, picEn: reply.saw } : m)) : reacted;
-    saveThread({ ...t, messages: [...described, ...messages], memory: [...new Set([...t.memory, ...reply.remember])].slice(-24) });
+    saveThread({ ...t, messages: [...described, ...messages] });
+    // what each will remember, what is settled or no longer true, and what someone told someone
+    remember({ memories: reply.memories, chat: id, settled: reply.settled, outdated: reply.outdated, tells: reply.deeds.tells }, now);
     for (const x of photos) if (reply.saw) void updatePic(x.pic, { en: reply.saw });
     // fresh pictures their messages carry
     makePictures(reply.made);
@@ -571,6 +620,7 @@ export async function opened() {
       saveThread({ ...t, messages: [...t.messages, o.msg] });
     }
     makePictures(own.made);
+    remember({ memories: own.memories, settled: own.settled, outdated: own.outdated, tells: own.deeds.tells }, now);
     await enact(own.deeds, ctx, d, now + 60_000);
     meta = { ...meta };
     saveMeta();
@@ -1025,10 +1075,7 @@ export function addToGroup(id: string, who: string[]) {
 /** The learner takes someone out of a group: they notice, and it stays with them. */
 export function removeFromGroup(id: string, who: string) {
   changeGroups(id, (g) => ({ ...g, members: g.members.filter((x) => x !== who) }), [`You removed ${namesOf([who])}.`]);
-  const bond = meta.bonds?.[who] ?? { feel: "", moments: [], updatedAt: 0 };
-  const day = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/Rome" });
-  meta = { ...meta, bonds: { ...meta.bonds, [who]: { ...bond, moments: [...bond.moments, `${day}: the learner removed me from the group «${groupName(meta, id)}»`].slice(-MOMENTS), updatedAt: Date.now() } } };
-  saveMeta();
+  remember({ memories: [{ who, text: `${getProgress().settings.me?.name ?? "The learner"} removed me from the group «${groupName(meta, id)}»`, kind: "conflict", weight: 3, about: ["me"] }], chat: id }, Date.now());
   answerSoon(id);
 }
 

@@ -56,6 +56,8 @@ export interface Drama {
   id: string;
   en: string;
   who: string[];
+  /** Who knows of it (those in it, unless told otherwise); only they can speak of it. */
+  knows?: string[];
   since: number;
   updatedAt: number;
 }

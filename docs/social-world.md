@@ -109,14 +109,21 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
       same questions again".
 
 ### 3. Minds
-- [ ] Per-person memory store (`messenger/minds/<id>`), weighted, merged by id
-      across devices, pruned by importance and age.
-- [ ] Memories formed from conversations, in each person's own view.
-- [ ] Recall: the memories that matter for this conversation, plus open
-      promises and conflicts.
-- [ ] Old thread memories and bond moments migrated.
-- [ ] Knowledge boundaries: no omniscient gossip; told / witnessed / rumour,
-      secrets kept or spilled by nature.
+- [x] Per-person memory store (`messenger/minds/<id>`), weighted, merged by id
+      across devices, pruned by salience (weight, age, open, outdated).
+- [x] Memories formed from conversations and from their own writing, per
+      person, in each one's own view ("remember"); "settled" / "outdated".
+- [x] Recall: what weighs, what is recent, what is open, what the
+      conversation touches (people, chat, words).
+- [x] Old thread facts and bond moments migrated (live data: Iūlia 36,
+      Marcus 18, Gāius 17, Claudia 16, Lūcius 13 memories).
+- [x] Knowledge boundaries: no omniscient gossip or feelings; storylines
+      only to those who know (`Drama.knows`); news spreads by "tell"
+      (garbled or a lie: `untrue`); secrets flagged, kept or spilled by
+      nature. Tests: a secret told to Iūlia stays out of Marcus's prompt
+      until she tells someone.
+- [ ] Not yet: the phone routine cannot record memories or tells (its
+      messages are remembered when the page next sees them in a reply).
 
 ### 4. Bonds
 - [ ] Relationship with the learner in a few dimensions, changed by

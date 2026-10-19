@@ -11,6 +11,7 @@ import { Rand } from "./life";
 import { GROUP } from "../content/people";
 import { Drama, GroupInfo, groupMembers, Meta, Msg, msgId, newThread, SYS, Thread, whoOf } from "./model";
 import { inventStranger, NewPerson, Stranger } from "./strangers";
+import { Tell, tellsOf } from "./mind";
 
 const clean = (s: unknown) => knownEmojiOnly(String(s ?? "").replace(/\s+/g, " ").trim());
 
@@ -39,6 +40,8 @@ export interface DramaUpdate {
   id: string;
   en: string;
   who: string[];
+  /** Who knows of it now. */
+  knows?: string[];
   over?: boolean;
 }
 
@@ -53,9 +56,11 @@ export interface Deeds {
   acts: Act[];
   dramas: DramaUpdate[];
   newPeople: NewPersonSpec[];
+  /** What someone told someone else, out of the learner's sight (chat/mind.ts). */
+  tells: Tell[];
 }
 
-export const noDeeds = (): Deeds => ({ acts: [], dramas: [], newPeople: [] });
+export const noDeeds = (): Deeds => ({ acts: [], dramas: [], newPeople: [], tells: [] });
 
 const MAX_DRAMAS = 6;
 const HOUR = 3600_000;
@@ -68,7 +73,7 @@ export const allPeople = (meta: Meta) => new Set([...PEOPLE.map((p) => p.id), ..
  * of their own to delete (by its number in the conversation shown), at most a
  * few of each.
  */
-export function deedsOf(raw: { acts?: unknown; drama?: unknown; newPerson?: unknown }, actors: Set<string>, everyone: Set<string>, shown: Msg[] = [], groups: Set<string> = new Set([GROUP.id])): Deeds {
+export function deedsOf(raw: { acts?: unknown; drama?: unknown; newPerson?: unknown; tell?: unknown }, actors: Set<string>, everyone: Set<string>, shown: Msg[] = [], groups: Set<string> = new Set([GROUP.id])): Deeds {
   const list = (x: unknown) => (Array.isArray(x) ? x : x && typeof x === "object" ? [x] : []) as Record<string, unknown>[];
   const acts: Act[] = [];
   for (const x of list(raw.acts).slice(0, 8)) {
@@ -112,6 +117,7 @@ export function deedsOf(raw: { acts?: unknown; drama?: unknown; newPerson?: unkn
       id: clean(x?.id).toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 40),
       en: clean(x?.en).slice(0, 500),
       who: (Array.isArray(x?.who) ? x.who : []).map(String).filter((id) => everyone.has(id)),
+      ...(Array.isArray(x?.knows) ? { knows: x.knows.map(String).filter((id) => everyone.has(id)) } : {}),
       over: x?.over === true,
     }))
     .filter((d) => d.id && (d.en || d.over));
@@ -137,7 +143,7 @@ export function deedsOf(raw: { acts?: unknown; drama?: unknown; newPerson?: unkn
       };
     })
     .filter((p) => /^\p{Lu}\p{L}+$/u.test(p.name));
-  return { acts, dramas, newPeople };
+  return { acts, dramas, newPeople, tells: tellsOf(raw.tell, actors, everyone) };
 }
 
 /** A line of the messenger itself in a chat ("Lūcius left the group"). */
@@ -281,7 +287,8 @@ export function applyDeeds(meta: Meta, threads: Record<string, Thread>, deeds: D
     if (d.over) dramas.delete(d.id);
     else {
       const old = dramas.get(d.id);
-      dramas.set(d.id, { id: d.id, en: d.en || old?.en || "", who: d.who.length ? d.who : old?.who ?? [], since: old?.since ?? now, updatedAt: now } satisfies Drama);
+      const knows = d.knows ?? old?.knows;
+      dramas.set(d.id, { id: d.id, en: d.en || old?.en || "", who: d.who.length ? d.who : old?.who ?? [], ...(knows ? { knows } : {}), since: old?.since ?? now, updatedAt: now } satisfies Drama);
     }
   }
   world.dramas = [...dramas.values()].sort((x, y) => y.updatedAt - x.updatedAt).slice(0, MAX_DRAMAS);

@@ -4,6 +4,7 @@ import { applyFeelings, meetFromStory, meetStranger, refreshLives, writeOwn, wri
 import { COMMON_HAPPENINGS, lifeNow, localTime, replyTiming, statusAt } from "../src/chat/life";
 import { deletedNow, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Msg, newMeta, newThread, preview, reactionsOf, silentNow, SYS, Thread, voiceOf } from "../src/chat/model";
 import { applyDeeds, deedsOf, welcome } from "../src/chat/world";
+import { applyMinds } from "../src/chat/mind";
 import { adYear, birthdaysNear, calendarBlock, calendarWords, festivalsNear, romanDate, todayLine } from "../src/chat/calendar";
 import { PHOTO_CREDIT, PHOTOS, photoSrc, photosFor } from "../src/content/photos";
 import scenes from "../scripts/content/photos.json";
@@ -12,7 +13,7 @@ import routineMd from "../scripts/messenger-routine.md?raw";
 import picturesMd from "../scripts/pictures-routine.md?raw";
 import { phrasebook } from "../src/content/phrases";
 import { literalReading } from "../src/latin/facts";
-import { conversationBlock, gossipBlock, languageBlock, ownPrompt, PromptCtx, replyPrompt, worldLine } from "../src/chat/prompts";
+import { conversationBlock, languageBlock, ownPrompt, PromptCtx, replyPrompt, worldLine } from "../src/chat/prompts";
 import { LINKS, rollStranger } from "../src/chat/strangers";
 import { vetMessage, withMacrons } from "../src/chat/vet";
 import { allowedWords, calendarEntry, CHAT_WORDS, chatEntries, chatLexicon, formsFor, nameEntry, notLatin, strangeWords, vocativeOf } from "../src/chat/words";
@@ -210,7 +211,7 @@ describe("writing as the people (Claude played by the test)", () => {
     expect(reply.messages.map((m) => m.la)).toEqual(["Salvē! Epistulam scrībō 😄", "Nōn dormiō."]);
     expect(reply.messages[1].at).toBeGreaterThan(reply.messages[0].at);
     expect(reply.messages[0].at).toBeGreaterThan(reply.readAt);
-    expect(reply.remember).toEqual(["likes letters"]);
+    expect(reply.memories).toEqual([{ who: "marcus", text: "likes letters", kind: "fact", weight: 2, about: ["me"] }]);
     expect(prompts[0]).toContain("You write as Marcus");
     expect(prompts[0]).toMatch(/mood: /);
     expect(prompts[0]).toContain("Salvē Marce!");
@@ -332,15 +333,13 @@ describe("people who know each other", () => {
     const group = { ...newThread(GROUP.id, "group"), messages: [{ id: "g1", from: "lucius", la: "Heu...", at: Date.UTC(2026, 9, 12, 11, 0) }] };
     const t = { ...newThread("marcus", "dm"), messages: [{ id: "a", from: "me", la: "Salvē Marce!", at: Date.UTC(2026, 9, 12, 11, 59) }] };
     const p = replyPrompt(t, meta, { ...ctxFor(SEEN), group, calendar: calendarBlock(Date.UTC(2026, 9, 12, 12, 0)) }, { at: Date.UTC(2026, 9, 12, 12, 5), why: "free" });
-    expect(p).toContain("THE OTHER FRIENDS, RIGHT NOW");
-    expect(p).toMatch(/- Iūlia: .*mood/);
+    // the others' lives reach him only as memories (told, or seen in the group): no news of them for free
+    expect(p).not.toContain("THE OTHER FRIENDS, RIGHT NOW");
     expect(p).toContain("LATELY IN THE GROUP «Amīcī»");
     expect(p).toContain(`${s.name} (${s.job}, ${s.city}): Marcus owes them money`);
     expect(p).toContain("THE DAY IN ROME");
     const sp = replyPrompt({ ...newThread(s.id, "stranger"), messages: t.messages }, meta, ctxFor(SEEN), { at: Date.UTC(2026, 9, 12, 12, 5), why: "free" });
     expect(sp).toContain("Knows Marcus: Marcus owes them money");
-    expect(sp).toContain("FRIEND AMONG THE LEARNER'S FRIENDS");
-    expect(sp).toMatch(/- Marcus: .*mood/);
   });
 });
 
@@ -507,17 +506,11 @@ describe("like a real messenger: quotes, reactions, friends who talk", () => {
     expect(reactionsOf(m, 10)).toEqual([{ e: "😂", who: ["iulia", "marcus"] }]);
   });
 
-  it("lets friends know what the learner told the others, and the group what each was told", () => {
-    const ctx = { ...ctxFor(SEEN), memories: { iulia: ["has a cat named Felix"], marcus: ["works at a bank"], [GROUP.id]: ["likes wine"] } };
-    const toMarcus = gossipBlock({ ...newThread("marcus", "dm") }, newMeta(), ctx);
-    expect(toMarcus).toContain("Iūlia: has a cat named Felix");
-    expect(toMarcus).toContain("likes wine");
-    expect(toMarcus).not.toContain("works at a bank");
-    const toGroup = gossipBlock(newThread(GROUP.id, "group"), newMeta(), ctx);
-    expect(toGroup).toContain("Marcus: works at a bank");
-    expect(toGroup).not.toContain("likes wine");
-    expect(replyPrompt(newThread("marcus", "dm"), newMeta(), ctx, { at: ctx.now, why: "free" })).toContain("WHAT THE OTHERS KNOW ABOUT KIRIL");
-    expect(gossipBlock(newThread("marcus", "dm"), newMeta(), ctxFor(SEEN))).toBe("");
+  it("keeps what the learner says in private out of the others' prompts (chat/mind.ts carries what each knows)", () => {
+    const ctx = { ...ctxFor(SEEN), minds: { iulia: { id: "iulia", memories: [{ id: "k1", at: ctxFor(SEEN).now - 3600_000, text: "Kiril has a cat named Felix", about: ["me"], kind: "fact" as const, weight: 3, from: "saw", chat: "iulia", updatedAt: 0 }], updatedAt: 0 } } };
+    expect(replyPrompt(newThread("marcus", "dm"), newMeta(), ctx, { at: ctx.now, why: "free" })).not.toContain("Felix");
+    expect(replyPrompt(newThread("iulia", "dm"), newMeta(), ctx, { at: ctx.now, why: "free" })).toContain("Kiril has a cat named Felix");
+    expect(replyPrompt(newThread(GROUP.id, "group"), newMeta(), ctx, { at: ctx.now, why: "free" })).toContain("WHAT IŪLIA REMEMBERS");
   });
 });
 
@@ -560,19 +553,21 @@ describe("real relationships: feelings about the learner, trolling, grudges, sil
     applyFeelings(meta, reply, at);
     const bond = meta.bonds!.lucius;
     expect(bond.feel).toContain("I hate him");
-    expect(bond.moments).toEqual(["12 Oct: mocked my poem about the moon"]);
+    // the moment is his memory now (chat/mind.ts)
+    expect(reply.memories).toEqual([{ who: "lucius", text: "mocked my poem about the moon", kind: "moment", weight: 3, about: ["me"] }]);
+    const minds = Object.fromEntries(applyMinds({}, { memories: reply.memories, chat: "lucius" }, at, (id) => id).map((m) => [m.id, m]));
     expect(silentNow(bond, at + 5 * 3600_000)).toBe(true);
     expect(silentNow(bond, at + 7 * 3600_000)).toBe(false);
     expect(meta.life.lucius.mood).toBe("wounded");
     // the next prompt knows: how he feels, what happened, and that he is ignoring the learner
-    const next = replyPrompt(thread("lucius", "dm", "Ignosce!"), meta, ctxFor(ALL, at + 3600_000), { at: at + 3700_000, why: "free" });
+    const next = replyPrompt(thread("lucius", "dm", "Ignosce!"), meta, { ...ctxFor(ALL, at + 3600_000), minds }, { at: at + 3700_000, why: "free" });
     expect(next).toContain("I hate him. A little.");
     expect(next).toContain("mocked my poem about the moon");
     expect(next).toContain("silent treatment");
     // making up ends the silence, and the feeling moves on
-    applyFeelings(meta, { feelings: { lucius: { feel: "Fine. I forgive him. Poets must.", silent: 0, moment: "apologised" } }, moods: {} }, at + 3600_000);
+    applyFeelings(meta, { feelings: { lucius: { feel: "Fine. I forgive him. Poets must.", silent: 0 } }, moods: {} }, at + 3600_000);
     expect(silentNow(meta.bonds!.lucius, at + 2 * 3600_000)).toBe(false);
-    expect(meta.bonds!.lucius.moments.length).toBe(2);
+    expect(meta.bonds!.lucius.feel).toContain("I forgive him");
   });
 
   it("let someone giving the silent treatment write nothing to the learner in private, but still talk in the group", async () => {
@@ -589,17 +584,18 @@ describe("real relationships: feelings about the learner, trolling, grudges, sil
     const meta = newMeta();
     const ask = async <T,>(): Promise<T> => ({ messages: [], feel: { claudia: "Kiril has not written for days. I worry." }, moment: { claudia: "noticed Kiril's silence" } }) as T;
     const threads = [...PEOPLE.map((p) => newThread(p.id, "dm")), newThread(GROUP.id, "group")];
-    await writeOwn(threads, meta, ctxFor(SEEN, at), { ask, opts: {}, lex, r: seeded(4) });
+    const own = await writeOwn(threads, meta, ctxFor(SEEN, at), { ask, opts: {}, lex, r: seeded(4) });
     expect(meta.bonds!.claudia.feel).toContain("I worry");
-    expect(meta.bonds!.claudia.moments[0]).toContain("noticed Kiril's silence");
+    // a moment is a memory now (chat/mind.ts)
+    expect(own.memories).toEqual([{ who: "claudia", text: "noticed Kiril's silence", kind: "moment", weight: 3, about: ["me"] }]);
   });
 
-  it("let friends hear how the others feel, keep the newer feelings from two devices, and tell the phone routine", () => {
+  it("keep each one's feelings their own (the others learn them only if told), the newer from two devices, and tell the phone routine", () => {
     const meta = newMeta();
     applyFeelings(meta, { feelings: { iulia: { feel: "I think I have a crush on Kiril." } }, moods: {} }, at);
     const p = replyPrompt(thread("marcus", "dm", "Salvē!"), meta, ctxFor(SEEN, at), { at: at + 60_000, why: "free" });
-    expect(p).toContain("HOW THE OTHERS FEEL ABOUT KIRIL");
-    expect(p).toContain("crush on Kiril");
+    expect(p).not.toContain("crush on Kiril");
+    expect(replyPrompt(thread("iulia", "dm", "Salvē!"), meta, ctxFor(SEEN, at), { at: at + 60_000, why: "free" })).toContain("crush on Kiril");
     const older = { iulia: { feel: "old", moments: [], updatedAt: 1 } };
     expect(mergeBonds(older, meta.bonds).iulia.feel).toContain("crush");
     expect(mergeBonds(meta.bonds, older).iulia.feel).toContain("crush");
@@ -714,7 +710,7 @@ describe("people with freedom: what they do besides writing", () => {
     expect(r2.messages[1].deletedAt).toBe(r2.messages[1].at + 5000);
     expect(preview(r2.messages[1], r2.messages[1].at + 6000)).toBe("🚫 Message deleted");
     // blocked: whoever blocked the learner writes nothing to them in private, unless they unblock them now
-    applyDeeds(meta, threads(), { acts: [{ who: "marcus", do: "block" }], dramas: [], newPeople: [] }, at, GROUP.id);
+    applyDeeds(meta, threads(), { acts: [{ who: "marcus", do: "block" }], dramas: [], newPeople: [], tells: [] }, at, GROUP.id);
     const own = async <T,>(): Promise<T> => ({ messages: [{ chat: "marcus", from: "marcus", la: "Salvē.", en: "Hi.", in: 1 }] }) as T;
     const ts = [...PEOPLE.map((p) => newThread(p.id, "dm")), newThread(GROUP.id, "group")];
     expect((await writeOwn(ts, meta, ctxFor(SEEN, at), { ask: own, opts: {}, lex, r: seeded(4) })).messages).toEqual([]);

@@ -13,6 +13,7 @@ import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from
 import { awayNow, groupIds, iBlocked, isBlocked, isGroupId, Meta, MOMENTS, Msg, msgId, Pic, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
 import { allowOwn, paceOf } from "./pace";
 import { natureOf } from "./nature";
+import { MemoryDraft, memoriesOf } from "./mind";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
 import { checkPrompt, ownPrompt, PromptCtx, repairPrompt, replyPrompt, shownMessages, storyPersonPrompt, strangerPrompt } from "./prompts";
 import { inventStranger, NewPerson, rollStranger, Stranger } from "./strangers";
@@ -170,7 +171,10 @@ export interface Feeling {
 
 export interface Reply {
   messages: Msg[];
-  remember: string[];
+  /** What each will remember of it (chat/mind.ts), and memories now done or no longer true. */
+  memories: MemoryDraft[];
+  settled: string[];
+  outdated: string[];
   /** How the conversation moved each person: feelings about the learner, and moods. */
   feelings: Record<string, Feeling>;
   moods: Record<string, string>;
@@ -206,7 +210,7 @@ export function timingFor(members: Who[], now: number, r: Rand = Math.random, me
 export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, deps: Deps, timing?: Timing, images?: unknown[]): Promise<Reply> {
   const r = deps.r ?? Math.random;
   const members = membersOf(thread.id, meta);
-  if (!members.length) return { messages: [], remember: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {}, deeds: noDeeds(), made: [] };
+  if (!members.length) return { messages: [], memories: [], settled: [], outdated: [], readAt: ctx.now, reactions: [], feelings: {}, moods: {}, deeds: noDeeds(), made: [] };
   refreshLives(meta, members.map((w) => w.id), ctx.now, r);
   const { first, byId } = timing ?? timingFor(members, ctx.now, r, meta);
   // the learner's last messages, read word by word: a mistake is taken literally
@@ -220,7 +224,10 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   const raw = await deps.ask<{
     messages?: { from?: string; la?: string; en?: string; gap?: number; re?: unknown; voice?: unknown; photo?: unknown; picture?: unknown; gloss?: unknown; unsend?: unknown }[];
     react?: { from?: string; emoji?: string }[];
-    remember?: string[];
+    remember?: unknown;
+    settled?: unknown;
+    outdated?: unknown;
+    tell?: unknown;
     saw?: unknown;
     feel?: Record<string, unknown>;
     moment?: Record<string, unknown>;
@@ -261,7 +268,8 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
     if (pic) made.push(wanted(d, ctx.now, pic));
     return { id: msgId(), from: d.from!, at: Math.round(t), src: "reply", ...fields(d, pic), ...deletedAtOf(d, Math.round(t)) };
   });
-  const remember = (raw?.remember ?? []).map(clean).filter(Boolean).slice(0, 2);
+  // what each will remember (only the people of this chat), and memories now done or no longer true
+  const memories = memoriesOf(raw ?? {}, members.map((w) => w.id), allPeople(meta));
   // reactions to the learner's last message: one per person, a moment after they read it
   const target = [...thread.messages].reverse().find((m) => m.from === "me");
   const reactions: Reply["reactions"] = [];
@@ -274,10 +282,13 @@ export async function writeReply(thread: Thread, meta: Meta, ctx: PromptCtx, dep
   // what they did besides writing: blocking, leaving, renaming, travelling, new people, storylines
   const deeds = deedsOf(raw ?? {}, ids, allPeople(meta), shown, new Set(groupIds(meta)));
   const saw = images?.length ? clean(raw?.saw).slice(0, 200) || undefined : undefined;
-  return { messages: messages.filter((m) => m.la || m.photo || m.pic), remember, readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids), deeds, made, ...(saw ? { saw } : {}) };
+  return { messages: messages.filter((m) => m.la || m.photo || m.pic), memories, settled: idsOf(raw?.settled), outdated: idsOf(raw?.outdated), readAt: first.t.readAt, reactions, ...feelingsOf(raw ?? {}, ids), deeds, made, ...(saw ? { saw } : {}) };
 }
 
-/** The feelings, moments, moods and silences Claude reported, for the people of the thread only. */
+/** Memory ids Claude gave (to settle or outdate), checked. */
+export const idsOf = (x: unknown): string[] => (Array.isArray(x) ? x : []).map((v) => String(v ?? "")).filter((v) => /^k[0-9a-z]{2,12}$/.test(v)).slice(0, 8);
+
+/** The feelings, moods and silences Claude reported, for the people of the thread only (moments are memories now: chat/mind.ts). */
 export function feelingsOf(
   raw: { feel?: Record<string, unknown>; moment?: Record<string, unknown>; mood?: Record<string, unknown>; silent?: Record<string, unknown> },
   ids: Set<string>,
@@ -287,7 +298,6 @@ export function feelingsOf(
   const obj = (x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : {});
   const of = (id: string) => (feelings[id] ??= {});
   for (const [id, v] of Object.entries(obj(raw.feel))) if (ids.has(id) && clean(v)) of(id).feel = clean(v).slice(0, 400);
-  for (const [id, v] of Object.entries(obj(raw.moment))) if (ids.has(id) && clean(v)) of(id).moment = clean(v).slice(0, 160);
   for (const [id, v] of Object.entries(obj(raw.silent))) {
     const h = Number(v);
     if (ids.has(id) && Number.isFinite(h) && h >= 0) of(id).silent = Math.min(24, h);
@@ -331,7 +341,7 @@ export interface Own {
 }
 
 /** What the people write on their own in the next hours (written now, each shown at its moment). */
-export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, deps: Deps, hours = 3): Promise<{ messages: Own[]; deeds: Deeds; made: Pic[] }> {
+export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, deps: Deps, hours = 3): Promise<{ messages: Own[]; deeds: Deeds; made: Pic[]; memories: MemoryDraft[]; settled: string[]; outdated: string[] }> {
   const r = deps.r ?? Math.random;
   const live = threads.filter((t) => !t.gone);
   refreshLives(meta, [...new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)))], ctx.now, r);
@@ -339,16 +349,21 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
     messages?: { chat?: string; from?: string; la?: string; en?: string; in?: number; voice?: unknown; photo?: unknown; picture?: unknown; gloss?: unknown; unsend?: unknown }[];
     feel?: Record<string, unknown>;
     moment?: Record<string, unknown>;
+    remember?: unknown;
+    settled?: unknown;
+    outdated?: unknown;
     acts?: unknown;
     drama?: unknown;
     newPerson?: unknown;
+    tell?: unknown;
   }>(
     ownPrompt(live, meta, ctx, hours),
     { ...deps.opts, cache: false },
   );
   // feelings move while the learner is away too (missing them, cooling off)
   const everyone = new Set(live.flatMap((t) => membersOf(t.id, meta).map((w) => w.id)));
-  applyFeelings(meta, feelingsOf({ feel: raw?.feel, moment: raw?.moment }, everyone), ctx.now);
+  applyFeelings(meta, feelingsOf({ feel: raw?.feel }, everyone), ctx.now);
+  const memories = memoriesOf({ remember: raw?.remember, moment: raw?.moment }, [...everyone], allPeople(meta));
   // what they do besides writing; someone unblocking the learner now may write to them again
   const deeds = deedsOf(raw ?? {}, allPeople(meta), allPeople(meta), [], new Set(groupIds(meta)));
   const unblocking = new Set(deeds.acts.filter((a) => a.do === "unblock").map((a) => a.who));
@@ -394,7 +409,7 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
     if (pic) made.push(wanted(d, ctx.now, pic));
     return { chat: d.chat, msg: { id: msgId(), from: d.from, at, src: "own" as const, ...fields(d, pic), ...deletedAtOf(d, at) } };
   });
-  return { messages: messages.filter((x) => x.msg.la || x.msg.photo || x.msg.pic), deeds, made };
+  return { messages: messages.filter((x) => x.msg.la || x.msg.photo || x.msg.pic), deeds, made, memories, settled: idsOf(raw?.settled), outdated: idsOf(raw?.outdated) };
 }
 
 // ------------------------------------------------------------ strangers

@@ -78,14 +78,14 @@ export interface LiveDoc extends DocRef {
 }
 
 /** The messenger's documents in the viewer's private space, or null when the account store is unavailable. */
-export async function messengerStore(): Promise<{ meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection; pics: DocCollection } | null> {
+export async function messengerStore(): Promise<{ meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection; pics: DocCollection; minds: DocCollection } | null> {
   const [db, user] = await Promise.all([use("db"), use("user")]);
   if (!db || !user) return null;
   const id: string | null = await user.id().catch(() => null);
   if (!id) return null;
   try {
     const meta = db.doc(`data/users/${id}/messenger`);
-    return { meta, brief: meta.collection("brief").doc("now"), threads: meta.collection("threads"), inbox: meta.collection("inbox"), pics: meta.collection("pics") };
+    return { meta, brief: meta.collection("brief").doc("now"), threads: meta.collection("threads"), inbox: meta.collection("inbox"), pics: meta.collection("pics"), minds: meta.collection("minds") };
   } catch {
     return null;
   }

@@ -14,6 +14,7 @@ import { stripMarks } from "../latin/text";
 import { specOf } from "./engine";
 import { Pace, paceOf } from "./pace";
 import { natureOf } from "./nature";
+import { memoryLines, Mind, recall } from "./mind";
 
 export interface Brief {
   v: 1;
@@ -57,7 +58,9 @@ export function rollAhead(spec: LifeSpec, life: Life | undefined, now: number, h
   return out;
 }
 
-function sheet(w: Who, meta: Meta, now: number): string {
+function sheet(w: Who, meta: Meta, now: number, minds?: Record<string, Mind>): string {
+  // what they remember that matters most (theirs alone: what they lived, saw in their chats, or were told)
+  const memories = recall(minds?.[w.id], { now, with: ["me"], chat: w.id, text: "", k: 10 });
   return [
     `${w.name} (${w.age}, ${w.g === "m" ? "man" : "woman"}; called «${w.voc}»), ${w.city}. ${w.job}.`,
     `Character: ${w.about}`,
@@ -70,7 +73,8 @@ function sheet(w: Who, meta: Meta, now: number): string {
     w.ties ? `With the others: ${Object.entries(w.ties).map(([id, t]) => `${PEOPLE.find((p) => p.id === id)?.name ?? id}: ${t}`).join("; ")}.` : "",
     knownPeople(w, meta),
     // how they feel about the learner now, and a silent treatment going on; blocked, away, a status line, the group
-    bondBlock(w, meta.bonds?.[w.id], now),
+    bondBlock(w, meta.bonds?.[w.id], now, !memories.length),
+    memories.length ? `What ${w.name} remembers (theirs alone; ${w.name} knows only this, their chats, and their own life):\n${memoryLines(memories, (id) => whoOf(id, meta)?.name ?? (id === "me" ? "the learner" : id)).join("\n")}` : "",
     worldLine(w, meta, now),
   ]
     .filter(Boolean)
@@ -82,7 +86,7 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
   const people = ids
     .map((id) => whoOf(id, meta))
     .filter((w): w is Who => !!w)
-    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now), pace: paceOf(w.id, meta), burst: natureOf(w.id, meta)?.burst ?? 4 }));
+    .map((w) => ({ id: w.id, name: w.name, tz: w.tz, wake: w.day.wake, sleep: w.day.sleep, busy: w.day.busy, sheet: sheet(w, meta, ctx.now, ctx.minds), pace: paceOf(w.id, meta), burst: natureOf(w.id, meta)?.burst ?? 4 }));
   const lives: Brief["lives"] = {};
   for (const id of ids) {
     const spec = specOf(id, meta);

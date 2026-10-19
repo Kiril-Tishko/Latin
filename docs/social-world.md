@@ -262,3 +262,8 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
   nearly as well for a third of the price; both now make the fresh pictures,
   AI Horde as before when there is no Pollen. The test spent the account's
   0.25 Quest Pollen. Google AI Plus has no API, so it cannot help.
+- 19 Oct, late: the learner heard three voices and chose the Spanish one:
+  voice messages are now recorded in each person's own voice (Microsoft's
+  voices reading the classical respelling; the device's voice until the
+  recording comes); the Ācta has a picture of the day; each story has a Roman
+  wall painting. Published as v44; both routines updated and checked.

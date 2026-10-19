@@ -284,12 +284,18 @@ const CAN_DO = `WHAT THEY CAN DO (only what they would really do now; usually no
 
 /** The JSON fields for what they do besides writing. */
 const DEEDS = `- "acts" (optional): [{"who": "<person id>", "do": "block" | "unblock" | "leave" | "join" | "add" | "remove" | "rename" | "newGroup" | "delete" | "status" | "away" | "back", "text": "...", "whom": "...", "group": "<chat id>", "with": ["me", "<person id>"], "messages": [{"from": "<person id>", "la": "<Latin>", "en": "<English>"}], "msg": <number>, "hours": <number>}]
-- "drama" (optional): [{"id": "<short id, new or one shown>", "en": "<what is going on now among them, and who knows what (English)>", "who": ["<person ids in it>"], "knows": ["<person ids who know of it>"], "over": true when it has ended}]
+- "drama" (optional): [{"id": "<short id, new or one shown>", "en": "<what is going on now among them, and who knows what (English), a few sentences>", "who": ["<person ids in it, "me" if the learner is part of it>"], "knows": ["<person ids who know of it>"], "over": true when it has ended}]
 - "newPerson" (optional): [{"name": "<Latin name>", "g": "m" | "f", "age": <years>, "job": "...", "city": "...", "about": "<who they are, two sentences>", "link": {"to": "<friend id>", "how": "<how they know them>"}, "first": "<how they feel about the learner>", "joinGroup": true, "messages": [{"la": "<Latin>", "en": "<English>"}]}]
 - "tell" (optional): [{"from": "<person id>", "to": "<person id>", "what": "<what they tell, in English, as they tell it>", "about": ["me", "<person id>"], "weight": <1-5>, "untrue": true, "secret": true}]: someone passes something on to someone else, out of the learner's sight (gossip, news, a warning, a lie). Only what the teller knows (their memories, their chats); a secret only if their nature would spill it; it may come out exaggerated or wrong ("untrue": the one told believes it).
 - "goals" (optional): [{"who": "<person id>", "id": "<a goal's id, as shown>", "step": "<what just happened toward it, or away from it>", "status": "open" | "done" | "dropped"}], or a new want: [{"who": "<person id>", "text": "<what they want now, their words>"}]. Goals move slowly, over days and weeks; usually [].
 - "happen" (optional): [{"who": "<person id>", "what": "<what is going on in their life now, English>", "mood": "<the mood it brings>", "hours": <how long it lasts, 1-336>, "public": true when the neighbours would know}]: rarely, with a cause; it becomes their life now, and it stays true afterwards.
 - A message may also carry "gloss": {"<new word>": "<meaning>"} for a new word in it, and "unsend": <seconds> to take it back that long after sending.`;
+
+/** Everyone else's ids, for "about", "tell", "ties" and "happen" (none when the chat holds everyone). */
+const others = (members: Who[], meta: Meta) => {
+  const rest = [...PEOPLE.map((p) => ({ id: p.id, name: p.name })), ...Object.values(meta.strangers)].filter((x) => !members.some((w) => w.id === x.id));
+  return rest.length ? `; everyone else by id (for "about", "tell", "ties", "happen"): ${rest.map((x) => `"${x.id}" (${x.name})`).join(", ")}` : "";
+};
 
 /** What everyone around knows of the others' lives now (their public happenings): the people of a chat hear it like neighbours. */
 export function neighbourhoodBlock(meta: Meta, now: number, here: string[]): string {
@@ -425,7 +431,7 @@ export function replyPrompt(thread: Thread, meta: Meta, ctx: PromptCtx, timing: 
     languageBlock(ctx),
     // photos only from those whose habit allows one now (chat/pictures.ts)
     photosBlock(members.filter((w) => photoRoom(w.id, meta, [thread, ctx.group], ctx.now) > 0), recentPhotos(thread), ctx.canMake),
-    `${OUTPUT}\nPerson ids: ${ids}; everyone else by id (for "about", "tell", "ties", "happen"): ${[...PEOPLE.filter((p) => !members.some((w) => w.id === p.id)).map((p) => `"${p.id}" (${p.name})`), ...Object.values(meta.strangers).filter((x) => !members.some((w) => w.id === x.id)).map((x) => `"${x.id}" (${x.name})`)].join(", ")}.`,
+    `${OUTPUT}\nPerson ids: ${ids}${others(members, meta)}; the learner is "me".`,
   ]
     .filter(Boolean)
     .join("\n\n");

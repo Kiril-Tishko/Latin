@@ -336,6 +336,16 @@ export function membersOf(threadId: string, meta: Meta): Who[] {
 
 export const newThread = (id: string, kind: Thread["kind"]): Thread => ({ id, kind, messages: [], readAt: 0, memory: [], updatedAt: 0 });
 
+/** A text cut to at most `n` characters, at the end of a sentence or a word, with "…" when cut mid-sentence. */
+export function clip(s: string, n: number): string {
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n - 1);
+  const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  if (end > n * 0.6) return cut.slice(0, end + 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > n * 0.5 ? cut.slice(0, space) : cut).replace(/[\s,;:–-]+$/, "")}…`;
+}
+
 export const msgId = () => `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 /** Messages that have arrived by now. */

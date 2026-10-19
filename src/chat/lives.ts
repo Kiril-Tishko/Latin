@@ -7,6 +7,7 @@
 // Claude moves goals on and may make things happen ("happen": a consequence of
 // what went on, or life out of the blue); the code keeps them steady.
 import { Happening, PEOPLE, PERSON_BY_ID } from "../content/people";
+import { clip } from "./model";
 import type { Meta, Who } from "./model";
 import type { MemoryDraft } from "./mind";
 
@@ -89,7 +90,7 @@ export function goalChangesOf(raw: unknown, ids: Set<string>): GoalChange[] {
   return list
     .map((o) => {
       const status = ["open", "done", "dropped"].includes(str(o?.status)) ? (str(o.status) as Goal["status"]) : undefined;
-      return { who: str(o?.who), ...(str(o?.id) ? { id: str(o.id) } : {}), ...(str(o?.text) ? { text: str(o.text).slice(0, 160) } : {}), ...(str(o?.step) ? { step: str(o.step).slice(0, 200) } : {}), ...(status ? { status } : {}) };
+      return { who: str(o?.who), ...(str(o?.id) ? { id: str(o.id) } : {}), ...(str(o?.text) ? { text: clip(str(o.text), 160) } : {}), ...(str(o?.step) ? { step: clip(str(o.step), 200) } : {}), ...(status ? { status } : {}) };
     })
     .filter((g) => ids.has(g.who) && (g.id || g.text) && (g.text || g.step || g.status))
     .slice(0, 4);
@@ -197,7 +198,7 @@ export function happensOf(raw: unknown, everyone: Set<string>): Happen[] {
   return list
     .map((o) => ({
       who: str(o?.who),
-      en: str(o?.what ?? o?.en).slice(0, 200),
+      en: clip(str(o?.what ?? o?.en), 200),
       ...(str(o?.mood) ? { mood: str(o.mood).split(/[,;]/)[0].split(/\s+/).slice(0, 3).join(" ").slice(0, 30) } : {}),
       hours: Math.max(1, Math.min(336, Math.round(Number(o?.hours) || 12))),
       ...(o?.public === true ? { public: true } : {}),

@@ -10,7 +10,7 @@ import { Lexicon } from "../latin/analyze";
 import { checkAnswer, literalReading } from "../latin/facts";
 import { PHOTO_BY_ID, photoSrc } from "../content/photos";
 import { Life, LifeSpec, lifeNow, Rand, replyTiming, statusAt, typingTime } from "./life";
-import { awayNow, groupIds, iBlocked, isBlocked, isGroupId, Meta, MOMENTS, Msg, msgId, Pic, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
+import { awayNow, clip, groupIds, iBlocked, isBlocked, isGroupId, Meta, MOMENTS, Msg, msgId, Pic, REACTIONS, Thread, membersOf, silentNow, Who } from "./model";
 import { allowOwn, paceOf } from "./pace";
 import { natureOf } from "./nature";
 import { MemoryDraft, memoriesOf, Tell, tellsOf } from "./mind";
@@ -347,7 +347,7 @@ export function feelingsOf(
   const moods: Record<string, string> = {};
   const obj = (x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : {});
   const of = (id: string) => (feelings[id] ??= {});
-  for (const [id, v] of Object.entries(obj(raw.feel))) if (ids.has(id) && clean(v)) of(id).feel = clean(v).slice(0, 400);
+  for (const [id, v] of Object.entries(obj(raw.feel))) if (ids.has(id) && clean(v)) of(id).feel = clip(clean(v), 400);
   for (const [id, v] of Object.entries(obj(raw.silent))) {
     const h = Number(v);
     if (ids.has(id) && Number.isFinite(h) && h >= 0) of(id).silent = Math.min(24, h);
@@ -486,8 +486,8 @@ export async function writeOwn(threads: Thread[], meta: Meta, ctx: PromptCtx, de
 
 /** What Claude said of someone's look, love and interests (chat/nature.ts), checked. */
 export function naturePartsOf(raw: { look?: unknown; romance?: unknown; interests?: unknown } | undefined): Pick<Stranger, "look" | "romance" | "interests"> {
-  const look = clean(raw?.look).slice(0, 300);
-  const romance = clean(raw?.romance).slice(0, 300);
+  const look = clip(clean(raw?.look), 300);
+  const romance = clip(clean(raw?.romance), 300);
   const interests = (Array.isArray(raw?.interests) ? raw!.interests : []).map(clean).filter(Boolean).map((x) => x.slice(0, 80)).slice(0, 6);
   return { ...(look ? { look } : {}), ...(romance ? { romance } : {}), ...(interests.length ? { interests } : {}) };
 }
@@ -541,9 +541,9 @@ export async function meetFromStory(text: string, meta: Meta, ctx: PromptCtx, de
     age: Math.max(5, Math.min(99, Number(raw?.age) || 30)),
     job: clean(raw?.job).slice(0, 80) || "lives in Rome",
     city: clean(raw?.city).slice(0, 60) || "Rome",
-    about: clean(raw?.about).slice(0, 500),
+    about: clip(clean(raw?.about), 500),
     ...(PERSON_BY_ID.has(to) ? { link: { to, how: clean(link?.how).slice(0, 160) } } : {}),
-    ...(clean(raw?.first) ? { first: clean(raw?.first).slice(0, 300) } : {}),
+    ...(clean(raw?.first) ? { first: clip(clean(raw?.first), 300) } : {}),
   };
   if (!/^\p{Lu}\p{L}+$/u.test(spec.name)) throw Object.assign(new Error("no one"), { code: "no_person" });
   const used = Object.values(meta.strangers);

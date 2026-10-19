@@ -4,7 +4,8 @@ import { HEAVY_HAPPENINGS, lifeNow } from "../src/chat/life";
 import { applyFeelings, refreshLives, writeReply } from "../src/chat/engine";
 import { actaPrompt } from "../src/chat/acta";
 import { MemoryDraft } from "../src/chat/mind";
-import { Meta, mergeWorld, newMeta, newThread, Thread } from "../src/chat/model";
+import { clip, Meta, mergeWorld, newMeta, newThread, Thread } from "../src/chat/model";
+import { deedsOf } from "../src/chat/world";
 import { ownPrompt, replyPrompt } from "../src/chat/prompts";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../src/content/people";
 import { allowedWords, chatEntries, chatLexicon, nameEntry } from "../src/chat/words";
@@ -193,5 +194,20 @@ describe("things that happen because of what went on", () => {
     expect(goalsOf("marcus", meta).some((g) => g.text === "to get his own back on Kiril")).toBe(true);
     expect(meta.life.marcus.event).toBe("his boss caught him napping on the scrolls");
     expect(replyPrompt(dm("marcus", "Salvē!"), meta, ctxAt(T0 + HOUR), { at: T0 + HOUR, why: "free" })).toContain("to get his own back on Kiril");
+  });
+});
+
+describe("their texts, kept whole", () => {
+  it("cuts a long text at a sentence or a word, never mid-word, and lets the learner be part of a storyline", () => {
+    expect(clip("Lūcius sulks all day long in his room. Marcus laughs at everyone", 45)).toBe("Lūcius sulks all day long in his room.");
+    expect(clip("Lūcius sulks. Marcus, who started the rumour, laughs at everyone", 40)).toBe("Lūcius sulks. Marcus, who started the…");
+    const cut = clip("the senator's son stares at her through dinner and her father insists on the wedding", 50);
+    expect(cut.endsWith("…")).toBe(true);
+    expect("the senator's son stares at her through dinner and her father insists on the wedding".startsWith(cut.slice(0, -1))).toBe(true);
+    expect(cut.slice(0, -1).endsWith(" ")).toBe(false);
+    expect(clip("short", 50)).toBe("short");
+    const d = deedsOf({ drama: [{ id: "taurus", en: "x ".repeat(400), who: ["me", "iulia", "ghost"] }] }, everyone, everyone);
+    expect(d.dramas[0].who).toEqual(["me", "iulia"]);
+    expect(d.dramas[0].en.length).toBeLessThanOrEqual(600);
   });
 });

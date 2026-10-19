@@ -9,7 +9,7 @@ import { PEOPLE } from "../content/people";
 import { knownEmojiOnly } from "./emoji";
 import { Rand } from "./life";
 import { GROUP } from "../content/people";
-import { Drama, GroupInfo, groupMembers, Meta, Msg, msgId, newThread, SYS, Thread, whoOf } from "./model";
+import { clip, Drama, GroupInfo, groupMembers, Meta, Msg, msgId, newThread, SYS, Thread, whoOf } from "./model";
 import { inventStranger, NewPerson, Stranger } from "./strangers";
 import { Tell, tellsOf } from "./mind";
 
@@ -115,8 +115,8 @@ export function deedsOf(raw: { acts?: unknown; drama?: unknown; newPerson?: unkn
     .slice(0, 4)
     .map((x) => ({
       id: clean(x?.id).toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 40),
-      en: clean(x?.en).slice(0, 500),
-      who: (Array.isArray(x?.who) ? x.who : []).map(String).filter((id) => everyone.has(id)),
+      en: clip(clean(x?.en), 600),
+      who: (Array.isArray(x?.who) ? x.who : []).map(String).filter((id) => id === "me" || everyone.has(id)),
       ...(Array.isArray(x?.knows) ? { knows: x.knows.map(String).filter((id) => everyone.has(id)) } : {}),
       over: x?.over === true,
     }))
@@ -132,9 +132,9 @@ export function deedsOf(raw: { acts?: unknown; drama?: unknown; newPerson?: unkn
         age: Number(x?.age) || 30,
         job: clean(x?.job).slice(0, 80),
         city: clean(x?.city).slice(0, 60) || "Rome",
-        about: clean(x?.about).slice(0, 400),
+        about: clip(clean(x?.about), 400),
         ...(PEOPLE.some((p) => p.id === to) ? { link: { to, how: clean(link?.how).slice(0, 160) } } : {}),
-        ...(clean(x?.first) ? { first: clean(x?.first).slice(0, 300) } : {}),
+        ...(clean(x?.first) ? { first: clip(clean(x?.first), 300) } : {}),
         joinGroup: x?.joinGroup === true,
         firstMessages: (Array.isArray(x?.messages) ? x.messages : [])
           .map((m: { la?: unknown; en?: unknown }) => ({ la: clean(m?.la), en: clean(m?.en) }))

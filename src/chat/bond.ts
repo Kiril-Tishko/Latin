@@ -11,6 +11,7 @@
 // alive. Nothing here is ever shown on the page.
 import { PERSON_BY_ID, PEOPLE } from "../content/people";
 import { romeDay } from "./calendar";
+import { clip } from "./model";
 import type { Bond, Meta, Who } from "./model";
 import { natureOf } from "./nature";
 import type { Pace } from "./pace";
@@ -194,7 +195,7 @@ export function tieChangesOf(raw: unknown, froms: Set<string>, everyone: Set<str
   return list
     .map((x) => {
       const o = obj(x);
-      const note = typeof o.note === "string" ? o.note.trim().slice(0, 240) : "";
+      const note = typeof o.note === "string" ? clip(o.note.trim(), 240) : "";
       return { from: String(o.from ?? ""), to: String(o.to ?? ""), ...(note ? { note } : {}), delta: levelsIn(o) };
     })
     .filter((t) => froms.has(t.from) && everyone.has(t.to) && t.from !== t.to && (t.note || Object.keys(t.delta).length))

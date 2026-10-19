@@ -8,6 +8,7 @@
 // marked outdated when something newer replaces them, and pruned by weight and
 // age, so a small fact does not push out what matters.
 // Kept in messenger/minds/<person id>, one document per person.
+import { clip } from "./model";
 import type { Meta, Thread } from "./model";
 
 export const MEMORY_KINDS = ["moment", "fact", "promise", "plan", "secret", "joke", "conflict", "news"] as const;
@@ -194,7 +195,7 @@ export function memoriesOf(raw: { remember?: unknown; moment?: unknown }, rememb
     const o = (typeof x === "string" ? { text: x } : x ?? {}) as Record<string, unknown>;
     // someone named who is not here does not remember it; unnamed, in a private chat it is the one person's
     const who = rememberers.includes(str(o.who)) ? str(o.who) : str(o.who) ? undefined : one;
-    const text = str(o.text).slice(0, 300);
+    const text = clip(str(o.text), 300);
     if (!who || !text) continue;
     const kind = (MEMORY_KINDS as readonly string[]).includes(str(o.kind)) ? (str(o.kind) as MemoryKind) : "fact";
     const about = (Array.isArray(o.about) ? o.about : ["me"]).map(str).filter((a) => a === "me" || everyone.has(a));
@@ -203,7 +204,7 @@ export function memoriesOf(raw: { remember?: unknown; moment?: unknown }, rememb
   }
   // the old "moment": what happened between someone and the learner
   const moments = raw.moment && typeof raw.moment === "object" && !Array.isArray(raw.moment) ? (raw.moment as Record<string, unknown>) : {};
-  for (const [who, v] of Object.entries(moments)) if (rememberers.includes(who) && str(v)) out.push({ who, text: str(v).slice(0, 300), kind: "moment", weight: 3, about: ["me"] });
+  for (const [who, v] of Object.entries(moments)) if (rememberers.includes(who) && str(v)) out.push({ who, text: clip(str(v), 300), kind: "moment", weight: 3, about: ["me"] });
   return out.slice(0, 8);
 }
 
@@ -228,7 +229,7 @@ export function tellsOf(raw: unknown, tellers: Set<string>, everyone: Set<string
     .map((o) => ({
       from: str(o?.from),
       to: str(o?.to),
-      what: str(o?.what).slice(0, 300),
+      what: clip(str(o?.what), 300),
       about: (Array.isArray(o?.about) ? o.about : []).map(str).filter((a) => a === "me" || everyone.has(a)),
       weight: Math.max(1, Math.min(5, Math.round(Number(o?.weight) || 3))),
       ...(o?.untrue === true ? { untrue: true } : {}),

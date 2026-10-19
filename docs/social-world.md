@@ -93,7 +93,7 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
       waited).
 - [x] Nobody repeats themselves: what each said lately is in view, and
       near-duplicates are refused (14 days; photos 21 days).
-- [~] Routine prompt updated (19 Oct, 05:44 UTC); page published: see log.
+- [x] Routine prompt updated (19 Oct, 05:44 UTC); page published as v38.
 
 ### 2. Natures
 - [ ] Per person: talkativeness, message length, initiative, photo habit,
@@ -149,3 +149,6 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
 
 - 19 Oct: branch created; code and live chats inspected; four decisions
   asked and answered; stage 1 started.
+- 19 Oct: stage 1 (pacing) done: 10 new tests (295 in all), smoke tests of
+  the messenger and the learner's abilities, a dry run on the live chats;
+  routine updated; published as v38. Next: stage 2 (natures).

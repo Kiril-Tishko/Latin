@@ -182,9 +182,19 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
 - [x] The library's seven photos of the friends made again from their looks.
 
 ### 8. Experience tests
-- [ ] Simulated multi-turn conversations, judged against the criteria
-      (distinct people, memory, privacy, relationships, group rhythm, pacing,
-      pictures, Latin level, length, real time).
+- [x] Single-turn checks on the live chats after stages 3, 4 and 5: a fresh
+      model played the people from their real prompts; the answers parsed
+      into messages, memories, levels, ties, goals, happenings and tells.
+      What they found was fixed (an ambiguous "levels", «sunt» offered before
+      its lesson, a group cap that would have cut a lively scene, unclear
+      wording about stretches of talk and last tries).
+- [~] A multi-turn test over three days (a harness drives the real engine;
+      a fresh model plays the people at each step; a judge reads the record
+      against the learner's criteria): the learner introduces himself in the
+      group, tells Iūlia a secret about Lūcius, they write on their own, he
+      praises Lūcius to his face, announces in the group that he comes to
+      Rome, and they write on their own again.
+- [ ] Tuning from the judge's findings.
 
 ## Notes and trade-offs
 

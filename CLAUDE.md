@@ -871,7 +871,9 @@ learner is there, also when something below grows (fonts, a card, Check's note).
 - Feels real: typing dots (from reading, while Claude writes, until each
   message), read ticks, "online" / "last seen", day separators, a "New" line,
   a notice for a message arriving elsewhere in the app, an unread count (Roman
-  numerals) on the tab. Tap a message for its English, a word for what it is
+  numerals) on the tab. With a mouse, a word under it shows a small card above
+  it (`WordTip`, `wordTip`: the word, its meaning, the form and of which word;
+  the browser's plain tooltip is taken off). Tap a message for its English, a word for what it is
   (with a speaker to hear it; a word not among the learner's words, or unknown,
   gets "+ Add"). Words the learner wrote that the site does not know (cor,
   timēs) show under their last message as "New words" chips (`strangeWords` in

@@ -470,6 +470,59 @@ function wordNoteText(a: Analysis, text: string, e: Entry, name: boolean): { tex
   return { text: `${text} — ${name ? "a name" : e.en}` };
 }
 
+/** A word of a message as the hover card shows it: the word, its meaning, and the form it is. */
+interface TipNote {
+  word: string;
+  en: string;
+  form?: string;
+  head?: string;
+  fresh?: boolean;
+}
+
+function wordTip(text: string, index: number, lex: ReturnType<typeof chatWords>["lex"], gloss?: Record<string, string>): TipNote | null {
+  const tok = annotate(showEmoji(text), lex).filter((x) => x.isWord)[index];
+  if (!tok) return null;
+  const a = tok.analysis ?? tok.readings?.[0];
+  if (!a) {
+    const meant = Object.entries(gloss ?? {}).find(([w]) => plain(w) === plain(tok.text))?.[1];
+    return meant ? { word: tok.text, en: meant, fresh: true } : { word: tok.text, en: "a word you have not learned yet", fresh: true };
+  }
+  const e = a.entry;
+  const name = e.tags.includes("name");
+  const head = headword(e);
+  if (e.kind === "noun" || e.kind === "adj") {
+    const [c, n] = a.key.split(".");
+    const form = c === "voc" ? "calling form" : `${CASE_NAMES[c as keyof typeof CASE_NAMES]} ${n === "pl" ? "plural" : "singular"}`;
+    return { word: tok.text, en: name ? "a name" : e.en, form, head };
+  }
+  if (e.kind === "verb") {
+    if (a.key === "inf") return { word: tok.text, en: `to ${e.env.base}`, form: "infinitive", head };
+    const pn = a.key.split(".")[1] as PN;
+    return { word: tok.text, en: e.env.base, form: `"${PN_NAMES[pn] ?? pn}" form`, head };
+  }
+  return { word: tok.text, en: name ? "a name" : e.en };
+}
+
+/** Hovering a word with a mouse: a small card above it with its meaning and form (a tap still opens the word card). */
+function WordTip({ tip }: { tip: { note: TipNote; x: number; y: number; below: boolean } }) {
+  const { note } = tip;
+  return (
+    <div class={`word-tip${tip.below ? " below" : ""}${note.fresh ? " fresh" : ""}`} style={{ left: `${tip.x}px`, top: `${tip.y}px` }} role="tooltip">
+      <span class="word-tip-la" lang="la">{note.word}</span>
+      <span class="word-tip-en">{note.en}</span>
+      {note.form && (
+        <span class="word-tip-form">
+          {note.form}
+          {note.head && plain(note.head) !== plain(note.word) && <> of <b lang="la">{note.head}</b></>}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Whether this device has a mouse to hover with. */
+const canHover = () => typeof matchMedia === "function" && matchMedia("(hover: hover) and (pointer: fine)").matches;
+
 /** The word tapped in a text (its index among the words), as a card says it. */
 function tappedWord(text: string, index: number, lex: ReturnType<typeof chatWords>["lex"], gloss?: Record<string, string>): { word: string; text: string; entry?: Entry; add?: string } | null {
   const tok = annotate(showEmoji(text), lex).filter((x) => x.isWord)[index];
@@ -576,9 +629,35 @@ function ChatView({ id, now }: { id: string; now: number }) {
   useEffect(() => {
     if (card) list.current?.querySelector(".word-card")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [card?.msg, card?.index]);
+  const [tip, setTip] = useState<{ note: TipNote; x: number; y: number; below: boolean } | null>(null);
+  const hovered = useRef<HTMLElement | null>(null);
   const onScroll = () => {
     const el = list.current;
     if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (tip) {
+      hovered.current = null;
+      setTip(null);
+    }
+  };
+  /** A word under the mouse: its card above it (instead of the browser's plain tooltip). */
+  const onHover = (e: MouseEvent) => {
+    if (!canHover()) return;
+    const w = (e.target as HTMLElement).closest<HTMLElement>(".bubble-text .w");
+    const row = w?.closest<HTMLElement>(".bubble-row");
+    const m = row && t.messages.find((x) => `msg-${x.id}` === row.id);
+    if (w && w === hovered.current) return;
+    hovered.current = w ?? null;
+    if (!w || !row || !m) return setTip(null);
+    if (w.title) {
+      w.dataset.title = w.title;
+      w.removeAttribute("title");
+    }
+    const index = [...row.querySelectorAll(".bubble-text .w")].indexOf(w);
+    const note = index >= 0 ? wordTip(m.la, index, lex, m.gloss) : null;
+    if (!note) return setTip(null);
+    const r = w.getBoundingClientRect();
+    const below = r.top < 110;
+    setTip({ note, x: Math.min(Math.max(r.left + r.width / 2, 140), window.innerWidth - 140), y: below ? r.bottom + 8 : r.top - 8, below });
   };
 
   // the find bar takes the typing at once
@@ -726,7 +805,8 @@ function ChatView({ id, now }: { id: string; now: number }) {
         </div>
       )}
 
-      <div class="chat-msgs" ref={list} onScroll={onScroll} data-ask="Messages">
+      <div class="chat-msgs" ref={list} onScroll={onScroll} onMouseOver={(e) => onHover(e as unknown as MouseEvent)} onMouseLeave={() => ((hovered.current = null), setTip(null))} data-ask="Messages">
+        {tip && <WordTip tip={tip} />}
         <div class="chat-flow" ref={flow}>
           {who && shown.length === 0 && <Intro who={who} />}
           {shown.map((m, i) => {
@@ -1464,7 +1544,7 @@ const ROMAN_REAL = [
 ];
 const EVERYDAY = [
   "😊", "😂", "🙂", "😉", "😍", "🥰", "😘", "😎", "🤔", "😴", "😩", "😢", "😭", "😡", "😱", "🤗",
-  "👍", "👋", "🙏", "💪", "❤️", "💔", "🔥", "✨", "⭐", "🌙", "🌧️", "🍞", "🧀", "🐐", "🐂", "🐈",
+  "👍", "👋", "🙏", "💪", "❤️", "💔", "🥀", "🔥", "✨", "⭐", "🌙", "🌧️", "🍞", "🧀", "🐐", "🐂", "🐈",
   "✍️", "📚", "🌹", "🎶", "🏇", "🙈", "🥲", "😅", "🤨", "😤", "🥳", "💤", "🎉", "👀", "💯", "🤝",
 ];
 

@@ -964,6 +964,13 @@ async function messenger() {
   if (!prompts.includes("HOW THE LEARNER'S LAST MESSAGE READS") || !prompts.includes("«Librum»: accusative singular")) errors.push("messenger: the reply prompt does not read the learner's message literally");
   if (!prompts.includes("PHOTOS THEY HAVE ON THEIR TABULA") || !prompts.includes('"voice": true') || !prompts.includes('"picture"')) errors.push("messenger: the reply prompt offers no photos, pictures or voice messages");
   if (!((await p.locator(".msgr-date").textContent()) ?? "").includes("Īd. Oct.")) errors.push("messenger: no Roman date over the chats");
+  // with a mouse, a word under it shows a small card above it (its meaning and form)
+  await p.locator(".bubble:not(.mine) .w").first().hover();
+  if (!(await p.locator(".word-tip", { hasText: "great" }).count())) errors.push("messenger: hovering a word shows no card with its meaning");
+  else {
+    await p.waitForTimeout(300);
+    await p.screenshot({ path: `${out}/messenger-word-tip.png` });
+  }
   // a tap on a word shows a card under the message (what the word is); a tap elsewhere on the message, its English
   await p.locator(".bubble:not(.mine) .w").first().click();
   if (!(await p.locator(".word-card", { hasText: "great" }).count())) errors.push("messenger: a tap on a word shows no word card");

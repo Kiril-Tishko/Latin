@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { english, generate, latinText, latinTokens, makesSense, seeded, TEMPLATE_NAMES } from "../src/latin/generate";
+import { english, generate, latinText, latinTokens, makesSense, seeded, sensibleObject, TEMPLATE_NAMES, untangle } from "../src/latin/generate";
+import { DECK_CARDS } from "../src/content/deck";
 import { normalizeEnglish } from "../src/latin/english";
 import { buildKnowledge } from "../src/trainer/knowledge";
 import { SKILL_BY_ID } from "../src/latin/skills";
@@ -116,6 +117,82 @@ describe("sensible sentences (from the learner's own questions)", () => {
       if (c) lines.push(`${latinText(latinTokens(c, rich)).padEnd(52)} ${english(c, rich).text}`);
     }
     console.log(lines.join("\n"));
+  });
+});
+
+describe("sensible 'of' phrases and odd pairs (found in the learner's rounds)", () => {
+  const sensible = buildKnowledge([1, 2, 3, 4], [], 0);
+  const aimed = (focus: string[], richness: number, n = 600) =>
+    Array.from({ length: n }, (_, i) => generate({ ...sensible, richness }, seeded(i + 1), focus)).filter((c): c is NonNullable<typeof c> => !!c);
+
+  it("keeps each genitive next to its own noun, one to a sentence («Amīcus deī discipulī dēsīderat magistram» once)", () => {
+    const bad: string[] = [];
+    for (const richness of [0, 0.5, 0.75, 0.95, 1]) {
+      for (const focus of [["n2.gen.sg"], ["n1.gen.sg"], ["s.gen"]]) {
+        for (const c of aimed(focus, richness, 300)) {
+          const t = latinTokens(c, { ...sensible, richness });
+          const poss = t.filter((x) => x.role.endsWith("-poss"));
+          if (poss.length > 1) bad.push(`two: ${latinText(t)}`);
+          t.forEach((tok, i) => {
+            if (!tok.role.endsWith("-poss")) return;
+            const own = tok.role.replace("-poss", "");
+            const near = [t[i - 1], t[i + 1]].some((x) => x && x.role.replace("-adj", "") === own);
+            if (!near) bad.push(`apart: ${latinText(t)}`);
+          });
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("moves the other noun after the verb with its own genitive", () => {
+    const tok = (text: string, role: string) => ({ text, role }) as Parameters<typeof untangle>[0][number];
+    const out = untangle([tok("amīcus", "subj"), tok("deī", "subj-poss"), tok("magistram", "obj"), tok("discipulī", "obj-poss"), tok("dēsīderat", "verb")], true);
+    expect(out.map((x) => x.text).join(" ")).toBe("amīcus deī dēsīderat magistram discipulī");
+  });
+
+  it("has no friend of the friend, no god's letter or water, and nobody has someone else's friend", () => {
+    const odd: string[] = [];
+    for (const c of [...aimed(["n2.gen.sg"], 0), ...aimed(["n1.gen.sg"], 0.5), ...aimed(["s.gen"], 1)]) {
+      const text = `${latinText(latinTokens(c, sensible))} ${english(c, sensible).text}`;
+      for (const np of [c.subj.kind === "np" ? c.subj.np : undefined, c.obj, c.pp?.np].filter(Boolean)) {
+        if (!np!.poss) continue;
+        if (np!.poss.noun.en === np!.noun.en) odd.push(text);
+        if (np!.poss.noun.tags.includes("divine") && np!.noun.tags.some((t) => t === "writing" || t === "drink")) odd.push(text);
+      }
+      if (c.verb.id === "habeo" && c.obj?.poss && c.obj.noun.tags.includes("person")) odd.push(text);
+    }
+    expect(odd).toEqual([]);
+  });
+
+  it("has no timid or new gods, no new island, no teacher learning to read, no 'can miss', and no 'the teacher is a girl'", () => {
+    const deck = buildKnowledge([1, 2, 3, 4], DECK_CARDS.filter((x) => ["novus", "luna", "donum"].includes(x.id)).map((x) => x.entry), 0);
+    const odd: string[] = [];
+    for (let i = 1; i <= 2500; i++) {
+      const c = generate({ ...deck, richness: i % 2 }, seeded(i), i % 3 ? ["adj.agree"] : []);
+      if (!c) continue;
+      const text = `${latinText(latinTokens(c, deck))} ${english(c, deck).text}`;
+      const nps = [c.subj.kind === "np" ? c.subj.np : undefined, ...(c.subj.kind === "coord" ? c.subj.nps : []), c.obj, c.pp?.np, c.inf?.obj].filter(Boolean);
+      for (const np of nps) {
+        if (np!.noun.tags.includes("divine") && ["timidus", "novus"].includes(np!.adj?.id ?? "")) odd.push(text);
+        if (np!.adj?.id === "novus" && np!.noun.tags.includes("nature")) odd.push(text);
+      }
+      if (c.pred?.adj && c.subj.kind === "np" && c.subj.np.noun.tags.includes("divine") && ["timidus", "novus"].includes(c.pred.adj.id)) odd.push(text);
+      if (c.verb.id === "disco" && c.inf && ["lego", "scribo"].includes(c.inf.verb.id) && c.subj.kind === "np" && ["magistra", "poeta"].includes(c.subj.np.noun.id)) odd.push(text);
+      if (c.verb.irregular === "possum" && c.inf?.verb.id === "desidero") odd.push(text);
+      if (c.pred?.np && c.subj.kind === "np" && c.pred.np.noun.id === "puella") odd.push(text);
+    }
+    expect(odd).toEqual([]);
+  });
+
+  it("lets one miss a place left behind: the school, Crete (not the earth)", () => {
+    const desidero = sensible.verbs.find((v) => v.id === "desidero")!;
+    const noun = (id: string) => sensible.nouns.find((n) => n.id === id)!;
+    expect(sensibleObject(sensible, desidero, noun("schola"))).toBe(true);
+    expect(sensibleObject(sensible, desidero, noun("creta"))).toBe(true);
+    expect(sensibleObject(sensible, desidero, noun("amicus"))).toBe(true);
+    expect(sensibleObject(sensible, desidero, noun("terra"))).toBe(false);
+    expect(sensibleObject(sensible, desidero, noun("gladius"))).toBe(false);
   });
 });
 

@@ -10,6 +10,7 @@ import { annotate, caseOf, Lexicon, numOf } from "../latin/analyze";
 import { Issue } from "../latin/check";
 import { checkAnswer } from "../latin/facts";
 import { generate, latinText, latinTokens, LToken, Rand, sensibleObject, shuffle } from "../latin/generate";
+import { en3s, withParticle } from "../latin/english";
 import { conjugate } from "../latin/morph";
 import { Case, full, NounEntry, VerbEntry } from "../latin/types";
 import { creditFrom, Ctx, Exercise, hintsFor, nextId, wordIds } from "./exercises";
@@ -104,7 +105,7 @@ export function judgeAnswer(answer: string, want: Want, ctx: Ctx): { verdict: "c
 function oddPair(v: LToken, obj: LToken): Issue {
   const verb = v.analysis!.entry as VerbEntry;
   const noun = obj.analysis!.entry as NounEntry;
-  return { kind: "tip", message: `Good Latin, but an odd pair: to ${verb.env.base} ${noun.en.startsWith("the ") ? noun.en : `the ${noun.en}`}? Think of something one really ${verb.env.base}s.` };
+  return { kind: "tip", message: `Good Latin, but an odd pair: to ${withParticle(verb.env, verb.env.base)} ${noun.en.startsWith("the ") ? noun.en : `the ${noun.en}`}? Think of something one really ${withParticle(verb.env, en3s(verb.env))}.` };
 }
 
 /** What the question asks for, given? (a thing with -m, a place, where to, who, to …, why) */

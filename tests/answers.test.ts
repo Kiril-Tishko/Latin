@@ -79,6 +79,10 @@ describe("questions about you", () => {
     const res = you("legis").check("Aquam legō.");
     expect(res.verdict).toBe("almost");
     expect(res.issues[0].message).toContain("odd pair");
+    expect(res.issues[0].message).toContain("one really reads.");
+    // "one really misss" once; and one may miss a place left behind
+    expect(you("desideras").check("Librum dēsīderō.").issues[0].message).toContain("one really misses.");
+    expect(you("desideras").check("Scholam dēsīderō.").verdict).toBe("correct");
   });
 });
 
@@ -95,6 +99,20 @@ describe("questions about a story", () => {
       }
     }
     expect(made).toBeGreaterThan(20);
+  });
+
+  it("take the object's genitive along with it («Quid poēta legit?», not «Quid poēta amīcae legit?», to the friend?)", () => {
+    const story = STORIES.find((s) => s.lines.some((l) => l.la.startsWith("Poēta epistulam amīcae")))!;
+    const qs = storyQuestions(story, lex, all);
+    const q = qs.find((x) => x.want.slot === "obj" && x.example.startsWith("Poēta epistulam amīcae"))!;
+    expect(q.la).toBe("Quid poēta legit?");
+    expect(storyExercise(ctx(), story, q).check("Epistulam amīcae.").verdict).toBe("correct");
+    // a question about the subject now that the genitive is the object's
+    expect(qs.some((x) => x.la === "Quis epistulam amīcae legit?")).toBe(true);
+    // in the line's words: the genitive goes with its noun
+    expect(readLine("Agricola epistulam discipulī legit.", lex)!.map((t) => t.role)).toEqual(["subj", "obj", "obj-poss", "verb"]);
+    expect(readLine("Discipula poētae dormit.", lex)!.map((t) => t.role)).toEqual(["subj", "subj-poss", "verb"]);
+    expect(readLine("Poētae epistulam legō.", lex)!.map((t) => t.role)).toEqual(["obj-poss", "obj", "verb"]);
   });
 
   it("do not accept another word than the story's", () => {

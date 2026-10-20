@@ -461,19 +461,20 @@ export function PartRecap({ part, onStart }: { part: Part; onStart: () => void }
   useEffect(() => start.current?.focus(), []);
   useLayoutEffect(() => fitToWindow(panel.current, false), [part.id]);
   useScreen("page", `${partName(part)}: a reminder`, () => `Before the exercises of ${partName(part)} ("${part.title}"), the rule once more:\n${part.explain.map(plain).join("\n")}\nThe learner presses Start exercises when ready.`);
+  // Start comes first, in sight on any phone: the learner once stopped at this page, its button below the fold
   return (
     <div class="trainer">
       <section class="panel frame rule-intro" ref={panel} data-ask={`${partName(part)}: reminder`}>
         <div class="stack rule-intro-head" style={{ gap: "4px" }}>
-          <span class="eyebrow">{partName(part)} · first, a reminder</span>
+          <span class="eyebrow">{partName(part)} · a quick reminder</span>
           <h2>{part.title}</h2>
         </div>
-        <Explanation part={part} compact />
         <div class="row recap-go">
           <button class="btn big" ref={start} onClick={onStart}>
             Start exercises <Icon.arrow />
           </button>
         </div>
+        <Explanation part={part} compact />
       </section>
     </div>
   );

@@ -3,7 +3,7 @@ import { seeded } from "../src/latin/generate";
 import { buildKnowledge, fullLexicon, lessonWords } from "../src/trainer/knowledge";
 import { englishMark, ExerciseKind, makeExercise, vocabExercise } from "../src/trainer/exercises";
 import { LToken } from "../src/latin/generate";
-import { applyResult, buildSession, nextExercise } from "../src/trainer/session";
+import { applyResult, buildSession, nextExercise, recallable } from "../src/trainer/session";
 import { mastery, newProgress } from "../src/trainer/progress";
 
 const k = buildKnowledge([1, 2, 3, 4]);
@@ -43,6 +43,53 @@ describe("exercises", () => {
       const latin = w.kind === "verb" ? w.pp[0] : (w as { lemma: string }).lemma;
       expect(b.check(latin).verdict, w.id).toBe("correct");
     }
+  });
+
+  it("vocab accepts a verb's meaning with its little word: look at, run away, long for, be able", () => {
+    const words = lessonWords([1, 2, 3, 4]);
+    const meaning = (id: string, answer: string) => vocabExercise({ k, lex, r: seeded(1) }, words.find((w) => w.id === id)!, "la2en").check(answer).verdict;
+    expect(meaning("specto", "look at")).toBe("correct");
+    expect(meaning("fugito", "run away")).toBe("correct");
+    expect(meaning("desidero", "long for")).toBe("correct");
+    expect(meaning("possum", "to be able")).toBe("correct");
+    expect(meaning("possum", "be")).toBe("wrong");
+    expect(meaning("specto", "look for")).toBe("wrong");
+  });
+
+  it("a word review gives each word once a round, and leaves out words spelled as in English (Olympus) and story-only ones", () => {
+    const vocab = lessonWords([1, 2, 3, 4]).filter(recallable);
+    expect(vocab.some((w) => w.id === "olympus" || w.id === "europa")).toBe(false);
+    // as on the Words page: Iuppiter and trānsfōrmō are only met in the stories
+    expect(vocab.some((w) => w.id === "iuppiter" || w.id === "transformo")).toBe(false);
+    expect(vocab.some((w) => w.id === "creta")).toBe(true);
+    // every word due, the most overdue first (as the learner's 57 were)
+    const p = newProgress();
+    vocab.forEach((w, i) => (p.words[w.id] = { ease: 2, interval: 0, due: i, reps: 1, lapses: 0, seen: 1, right: 1 }));
+    for (let seed = 1; seed <= 10; seed++) {
+      const s = buildSession(p, { k, lex, r: seeded(seed) }, { size: 12, kinds: ["vocab"], vocab });
+      expect(s.length).toBe(12);
+      expect(new Set(s.map((e) => e.words[0])).size, s.map((e) => e.ask).join(" · ")).toBe(12);
+    }
+  });
+
+  it("explains a wrong form in plain words (once: \"habet would be the the form for he / she / it\")", () => {
+    const bad: string[] = [];
+    let checked = 0;
+    for (let seed = 1; seed <= 150; seed++) {
+      for (const kind of ["ending", "identify", "form", "choose"] as const) {
+        const ex = makeExercise(kind, { k, lex, r: seeded(seed) }, kind === "form" ? ["v.3sg"] : ["v.1sg", "v.3sg"]);
+        if (!ex) continue;
+        const wrong = ex.answer === "choice" ? ex.choices!.filter((c) => c.id !== ex.correctChoice).map((c) => c.id) : ["t", "s", "ō", "et", "is", "legis", "discet"];
+        for (const answer of wrong) {
+          for (const issue of ex.check(answer).issues) {
+            checked++;
+            if (/\bthe the\b|\ba the\b/.test(issue.message) || /is (the form for [^.]+)\. Here (?:you need|it must be) \1/.test(issue.message)) bad.push(issue.message);
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(500);
+    expect(bad).toEqual([]);
   });
 
   it("builds full sessions", () => {
@@ -90,6 +137,8 @@ describe("the English above a gap marks the word the gap stands for", () => {
     expect(marked("I read the letter.", tok("legō", "lego", "verb"))).toBe("read");
     expect(marked("The poet reads the letter.", tok("legit", "lego", "verb"))).toBe("reads");
     expect(marked("The girls carry the water.", tok("puellae", "puella", "subj"))).toBe("girls");
+    // the story's "He longs for water." (dēsīderat)
+    expect(marked("He longs for water.", tok("dēsīderat", "desidero", "verb"))).toBe("longs");
   });
   it("picks the right one of two, by its role", () => {
     const en = "The friend (f) of the friend (m) has the beautiful book.";

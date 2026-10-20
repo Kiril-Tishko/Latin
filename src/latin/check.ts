@@ -249,11 +249,28 @@ export function checkLatin(answer: string, slots: Slot[], lex: Lexicon): CheckRe
   };
 }
 
+/** A form as said in a sentence: "the accusative", "the form for I", "a command". */
+export const whatForm = (a: Analysis) => {
+  const d = describe(a);
+  return /^(the|a|an) /.test(d) ? d : `the ${d}`;
+};
+
+/**
+ * A verb in the right person with another vowel (or read as another tense):
+ * «discet» for «discit». "discet is the form for he / she / it; here you need
+ * the form for he / she / it" said nothing, so it says what is wrong.
+ */
+export function vowelSlip(typed: string, mine: Analysis, want: Analysis, show: string): string | undefined {
+  if (want.entry.kind !== "verb" || mine.key === want.key || describe(mine) !== describe(want) || !want.key.startsWith("pres.")) return undefined;
+  const [first, inf] = want.entry.pp;
+  return `${hinted(typed)} has the right ending for ${PN_NAMES[want.key.split(".")[1] as PN]}, but the wrong vowel before it: ${hinted(`${first}, ${inf}`)} → ${hinted(show)}.`;
+}
+
 function formMessage(typed: string, mine: Analysis, slot: Slot): string {
   const want = slot.analysis!;
   const role = ROLE_TEXT[slot.role];
   if (want.entry.kind === "verb") {
-    return `${hinted(typed)} is ${describe(mine)}. Here you need ${describe(want)}: ${hinted(slot.show)}.`;
+    return vowelSlip(typed, mine, want, slot.show) ?? `${hinted(typed)} is ${whatForm(mine)}. Here you need ${whatForm(want)}: ${hinted(slot.show)}.`;
   }
   const sameCase = caseOf(mine) === caseOf(want);
   const numberNote = sameCase && numOf(mine) !== numOf(want) ? ` It should be ${numOf(want) === "pl" ? "plural" : "singular"}.` : "";

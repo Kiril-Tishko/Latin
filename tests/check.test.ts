@@ -30,6 +30,15 @@ describe("Latin answers", () => {
     expect(check(teach, "Docet magistra puellam").verdict).toBe("correct");
   });
 
+  it("says what is wrong with a verb in the right person but the wrong vowel (discet for discit)", () => {
+    const learns: Clause = { subj: { kind: "np", np: np("amica", "nom") }, person: 3, num: "sg", verb: V("disco"), neg: false, skills: [] };
+    const r = check(learns, "Amica discet");
+    expect(r.verdict).toBe("wrong");
+    expect(r.issues[0].message).toBe("«discet» has the right ending for he / she / it, but the wrong vowel before it: «discō, discere» → «discit».");
+    // another person still says which
+    expect(check(learns, "Amica disco").issues[0].message).toBe("«disco» is the form for I. Here you need the form for he / she / it: «discit».");
+  });
+
   it("explains a wrong case", () => {
     const r = check(teach, "Magistra puella docet");
     expect(r.verdict).toBe("wrong");

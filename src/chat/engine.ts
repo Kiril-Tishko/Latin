@@ -58,7 +58,9 @@ export function refreshLives(meta: Meta, ids: string[], now: number, r: Rand = M
   for (const id of ids) {
     const spec = specOf(id, meta);
     if (!spec) continue;
-    const { life, changed: c, started } = lifeNow(spec, meta.life[id], now, r, heavyOk(meta, id, now));
+    // (not what someone else is going through right now)
+    const taken = Object.entries(meta.life).flatMap(([who, l]) => (who !== id && l.event && (l.eventUntil ?? 0) > now ? [l.event] : []));
+    const { life, changed: c, started } = lifeNow(spec, meta.life[id], now, r, heavyOk(meta, id, now), taken);
     if (c) {
       meta.life[id] = life;
       changed = true;

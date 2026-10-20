@@ -171,6 +171,22 @@ describe("random lives", () => {
     expect(lifeNow(spec, life, life.moodUntil - 1, r).changed).toBe(false);
   });
 
+  it("do not give two people the same everyday happening at the same moment", () => {
+    // all but one of the everyday happenings are someone else's right now
+    const taken = COMMON_HAPPENINGS.slice(1).map((h) => h.en);
+    const r = seeded(9);
+    const lives = Array.from({ length: 300 }, (_, i) => lifeNow({ moods: [["calm", 1]], swing: 0.3, happenings: [] }, undefined, i, r, true, taken).life);
+    expect(lives.some((l) => l.event === COMMON_HAPPENINGS[0].en)).toBe(true);
+    expect(lives.filter((l) => l.event && taken.includes(l.event))).toEqual([]);
+    // as the page rolls them: Gāius does not lose something important while Claudia has
+    for (let i = 1; i <= 60; i++) {
+      const meta = newMeta();
+      meta.life.claudia = { mood: "worried", level: "", moodUntil: 5e6, event: COMMON_HAPPENINGS[0].en, eventUntil: 5e6, rolled: 0, recent: [] };
+      refreshLives(meta, ["gaius", "marcus", "lucius"], 1000, seeded(i));
+      for (const id of ["gaius", "marcus", "lucius"]) expect(meta.life[id].event).not.toBe(COMMON_HAPPENINGS[0].en);
+    }
+  });
+
   it("make strangers truly different: names, places, tempers, quirks and faces", () => {
     const r = seeded(5);
     const used = { names: [] as string[], portraits: [] as string[] };

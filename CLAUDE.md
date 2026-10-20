@@ -175,7 +175,8 @@ Runtime capabilities used:
   every answer is read back by `checkAnswer` (adjective agreement, subject and
   verb, in / ad with the right case, long marks in endings; Latin quoted as a
   wrong example or as the learner's own words is left alone; with sum / es a
-  noun is the complement: «Discipulus sum»). A finding shows
+  noun is the complement: «Discipulus sum»; an adjective's -ē form with no one
+  called beside it is the adverb: «vērē», «longē», «rēctē»). A finding shows
   as a "Grammar check" note under the answer, with "Fix this answer", which
   sends the findings back (a turn of `kind: "fix"`). The learner cannot judge
   answers themselves, so there is no "this is wrong" button.
@@ -196,7 +197,11 @@ Runtime capabilities used:
   `…/messenger/threads/acta` (kind "channel"; `meta.actaAt` marks a board being
   written, so two devices do not both write it). Pictures (the people's fresh
   ones and the learner's photos) are documents of their own,
-  `…/messenger/pics/<id>` (under the store's 256 KiB per document).
+  `…/messenger/pics/<id>` (under the store's 256 KiB per document). A write
+  replaces a whole document, so the page holds its writes until the account's
+  copy has come in and sends them merged (`held`, `flushHeld`; planning, the
+  Ācta and the pace tidy-up wait for `accountReady`): a device with an old copy
+  once wrote it over the account's (Iūlia's chat 128 → 114 messages).
 - `sample` with `images: true`: the learner's photos in the messenger are shown
   to Claude with the next answer.
 - `mcp` (the built-in "Claude Code Remote" connector, `fire_trigger` only): the
@@ -457,7 +462,13 @@ water", "the school is full") get hand-made card examples (`CURATED` in
 `src/trainer/discover.ts`). Mistakes (`mistakesSession`): unfixed mistakes on
 rules seen come back as fresh exercises of the same kind on the same rules and
 words, between a rule's exercises; a right answer marks one fixed
-(`Mistake.fixed`), a wrong one never duplicates it.
+(`Mistake.fixed`), a wrong one never duplicates it. A translation mistake keeps
+its sentence's rules (older ones are read again from their Latin:
+`mistakeSkills`). A round uses a fixed sentence once unless nothing else shows
+the rule (`Exercise.line`), and the words round asks each word once, leaving out
+story-only words and words spelled as in English (`recallable`). A verb in the
+right person with the wrong vowel is told so (`vowelSlip`: «discō, discere» →
+«discit»).
 
 ## Words the learner adds
 
@@ -875,7 +886,9 @@ learner is there, also when something below grows (fonts, a card, Check's note).
 - Feels real: typing dots (from reading, while Claude writes, until each
   message), read ticks, "online" / "last seen", day separators, a "New" line,
   a notice for a message arriving elsewhere in the app, an unread count (Roman
-  numerals) on the tab. With a mouse, a word under it shows a small card above
+  numerals) on the tab, a round ↓ back to the newest message when reading higher
+  up (with the count of what came since), voice messages whose waveform fills
+  as they play. With a mouse, a word under it shows a small card above
   it (`WordTip`, `wordTip`: the word, its meaning, the form and of which word;
   the browser's plain tooltip is taken off). Tap a message for its English, a word for what it is
   (with a speaker to hear it; a word not among the learner's words, or unknown,
@@ -900,7 +913,8 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   and rules (`actaPrompt` with `languageBlock(ctx, false)`; every title and line
   vetted with `vetAll`), earlier boards given so it does not repeat and may
   follow one up (`earlierBoards`). Each item is a post with the id of the day
-  (`acta-20261012-0`: two devices writing at once merge into one board), its
+  (`acta-20261012-0`: two devices writing at once keep the edition that came
+  out first, `firstEditions`), its
   lines one per line in `la` / `en`, `title` and `tag`. The scribe also says what
   the picture of the day shows (`picture`, one item's scene); the first post
   carries it (`pic`, `picEn`), and the page wants it made like the people's
@@ -909,6 +923,14 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   item's speaker reads it with the device's voice; the eye shows all the
   English; Ask Claude sees the board; Continue goes on with the day.
   A new board counts one on the tab and comes in Continue (`todayStep`'s "acta").
+  Against repeats (the bull was on five boards of six): the scribe sees the last
+  boards' kinds and Latin titles, every title of the last 14 days is "none of
+  these again" and an item that reuses one is dropped (`pastBoards`), a
+  follow-up must tell what happened next, and the friends' news is only what
+  began since the last board (`publicNow(…, since)`). No board within 6 hours of
+  the last (`BOARD_GAP`, `boardDue`: two once came 44 minutes apart, either side
+  of Rome's midnight). What a board says of the friends, they know
+  (`boardMemories`: news in their minds).
   `tests/acta.test.ts`; the smoke test reads one on two devices.
 - The Sibyl's leaves (src/chat/sibyl.ts, src/ui/sibyl.tsx), a surprise the
   learner asked for without being told what it is ("something I stumble upon"):
@@ -1090,6 +1112,9 @@ once).
   look-alike (trap), as in the deck.
 - Each case owns one color (see `src/styles.css`); nothing else in the UI uses
   those hues.
+- Rule and lesson titles go through `joinEndings` (components.tsx): an ending
+  such as "-ī" never breaks from its hyphen on a phone. On a computer a dialog
+  (`Modal`) takes the focus and gives it back when closed.
 - Roman touches, in gold and brown only: the hedera (ivy-leaf mark, `Hedera`),
   diamond interpuncts, tabula ansata plaques (`.ansata`) for verdicts and
   notices, tesserae (`Mosaic`, the session strip), the laurel wreath, Roman

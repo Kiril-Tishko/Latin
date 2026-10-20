@@ -23,7 +23,8 @@ import { coachOpts, tierName } from "./models";
 import { derived, getProgress, useProgress } from "./store";
 import { knownWord, openAddWord } from "./addword";
 import { CHAT_WORD_LIST } from "../chat/words";
-import { bareWord, cardWord, newWordsIn } from "./answer-words";
+import { bareWord, cardWord, latinToSend, newWordsIn } from "./answer-words";
+import { useRoute } from "./nav";
 import { NO_CORRECTION } from "./keyboard";
 
 export interface AskContext {
@@ -122,7 +123,8 @@ How to answer:
 - Short by default, about 30-90 words, but shaped by the question, not by a template. Choose what reads best each time: one or two plain sentences for a simple question; the key point in **bold** followed by 2-4 short bullets when there really are several points (a rule, why it applies here, an example); a short paragraph for a story, a comparison or a word's history; a few lines of forms when forms are compared. Do not start every answer the same way and do not force bullets onto something one sentence says well. No greeting, no preamble, no closing summary, no offers of more help.
 - A yes/no or one-word question gets one or two lines.
 - Give a longer, more open answer only when the learner asks for one ("tell me more", "explain in detail", "tell me about…") or wants to chat generally (history, culture, how a word came into English). Keep even that in short paragraphs or bullets, under about 250 words.
-- Stay inside what the learner knows (lessons, words and skills below). If you must use a word or form they have not learned, mark it "(new)" and keep it to a minimum.
+- Stay inside what the learner knows (lessons, words and skills below). If you must use a word or form they have not learned, mark it "(new)" the first time it appears in the conversation (not again), and keep such words to a minimum.
+- "How do I say …?" asks for that very thing in Latin, to write to someone (often a friend in the site's messenger): give it first, in bold «», then a line on how it is built. Answer it directly, even when an exercise or a chat is on screen: the screen is not the question.
 - Write every Latin word, form or sentence inside «guillemets», for example «puellam». For a form that could be read two ways, add #case.number inside the guillemets: «puellae#gen.sg», «discipulī#nom.pl». The page colors the endings. Use «» for Latin only: quote English, Russian and Ukrainian words with "double quotes".
 - Use **bold** only for the key point (and for the labels of a word card). No tables and no headings.
 - If the question is about a mistake, first name the wrong ending and the right one, then the rule that decides it.
@@ -724,6 +726,7 @@ export function AskDrawer() {
                   <GrammarCheck text={t.content} canFix={i === turns.length - 1 && !busy} onFix={(found) => void fix(found)} />
                 )}
                 {t.role === "assistant" && <AddFromAnswer question={turns[i - 1]?.role === "user" ? turns[i - 1].content : ""} answer={t.content} />}
+                {t.role === "assistant" && <PutInMessage question={turns[i - 1]?.role === "user" ? turns[i - 1].content : ""} answer={t.content} onDone={close} />}
                 {t.role === "assistant" && t.tier && <div class="msg-meta">{tierName(t.tier)}</div>}
                 {t.role === "user" && t.screen && <div class="msg-meta" title="What was on your screen when you asked">on {t.screen.label}</div>}
                 {t.role === "user" && t.noScreen && <div class="msg-meta" title="Asked with screen sharing switched off">screen not shared</div>}
@@ -868,6 +871,31 @@ export function GrammarCheck({ text, canFix, onFix }: { text: string; canFix: bo
  * one tap from their dictionary. A word card offers its own word; any other
  * answer the words it marks as new (the Latin for "how do I say…").
  */
+/**
+ * Over a chat in the messenger: the answer's Latin, one tap into the message
+ * being written there (the learner asks "how do I say…" and then types it).
+ */
+function PutInMessage({ question, answer, onDone }: { question: string; answer: string; onDone: () => void }) {
+  const route = useRoute();
+  const chat = route.page === "messenger" ? route.thread : undefined;
+  const latin = latinToSend(answer);
+  // for a question about saying or writing something, or an answer with its Latin in bold
+  const asked = /\b(say|write|tell|reply|answer|respond)\b|in latin|скаж|напис|відпов|ответ/i.test(question) || /\*\*[^*]*«/.test(answer);
+  if (!chat || chat === "acta" || chat === "sibylla" || !latin || !asked) return null;
+  return (
+    <button
+      class="btn small put-in-message"
+      onClick={() => {
+        window.dispatchEvent(new CustomEvent("tabula:compose", { detail: { chat, text: latin } }));
+        onDone();
+      }}
+      title="Put it in the message you are writing"
+    >
+      <Icon.letter /> Put «{latin.length > 40 ? `${latin.slice(0, 38)}…` : latin}» in my message
+    </button>
+  );
+}
+
 function AddFromAnswer({ question, answer }: { question: string; answer: string }) {
   useProgress();
   if (bareWord(question)) {

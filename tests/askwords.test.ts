@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bareWord, cardWord, newWordsIn } from "../src/ui/answer-words";
+import { bareWord, cardWord, latinToSend, newWordsIn } from "../src/ui/answer-words";
 
 describe("Ask Claude: words in questions and answers", () => {
   it("knows a word sent alone", () => {
@@ -15,5 +15,13 @@ describe("Ask Claude: words in questions and answers", () => {
     expect(newWordsIn("Say «timeō, timēre» (new): to fear. Also «cor» (new word) = heart.")).toEqual(["timeō", "cor"]);
     expect(newWordsIn("«Amīcī#voc.pl» (new), and «ita» = yes")).toEqual(["Amīcī"]);
     expect(newWordsIn("«puella» = girl")).toEqual([]);
+  });
+
+  it("takes the Latin to put in a message: in bold first, else a sentence, else a word", () => {
+    expect(latinToSend("**«Ignōsce! Labōrō.»** · Sorry! I'm working.\n- «ignōsce» (new) = forgive")).toBe("Ignōsce! Labōrō.");
+    expect(latinToSend("Say «ita» for yes, or repeat the verb: «Ita, legō.»")).toBe("Ita, legō.");
+    expect(latinToSend("Just «ita»: it means yes.")).toBe("ita");
+    expect(latinToSend("**Yes:** «puellae#gen.sg» is the genitive.")).toBe("puellae");
+    expect(latinToSend("No Latin here.")).toBeNull();
   });
 });

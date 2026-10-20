@@ -16,7 +16,7 @@ import { Pace, paceOf } from "./pace";
 import { natureOf } from "./nature";
 import { memoryLines, Mind, recall } from "./mind";
 import { standingLine, tiesLine } from "./bond";
-import { goalsLine, timelineBlock } from "./lives";
+import { goalsLine, timelineBlock, withFates } from "./lives";
 
 export interface Brief {
   v: 1;
@@ -98,7 +98,8 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
   const lives: Brief["lives"] = {};
   for (const id of ids) {
     const spec = specOf(id, meta);
-    if (spec) lives[id] = rollAhead(spec, meta.life[id], ctx.now, 48, r);
+    // what the Sibyl foretold for them is their life at its hour (chat/sibyl.ts)
+    if (spec) lives[id] = withFates(rollAhead(spec, meta.life[id], ctx.now, 48, r), id, meta, ctx.now, 48);
   }
   // the next days in Rome, and the names they bring (allowed while they are near)
   const days = [0, 1, 2].map((n) => ctx.now + n * 86400000);

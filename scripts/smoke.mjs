@@ -834,6 +834,12 @@ async function messenger() {
           ],
         };
       }
+      // the Sibyl's leaf, only where the test asks for one (a leaf must not fly over the other tests)
+      if (prompt.includes("Sibyl of Cumae")) {
+        return window.__sibyl
+          ? { who: "gaius", lines: [{ la: "Agricola dormit…", en: "The farmer sleeps…" }, { la: "taurus magnus vīnum bibit!", en: "a big bull drinks the wine!" }], fate: "A neighbour's bull breaks into Gaius's cellar and drinks a jar of new wine.", mood: "furious", after: 10, hours: 20, public: true, signs: ["taurus"] }
+          : {};
+      }
       if (prompt.includes("Invent a real person")) return { about: "A loud baker who sings while kneading.", secret: "Cannot read.", happenings: [{ en: "the oven broke", mood: "furious", hours: [4, 12] }], first: [{ la: "Salvē! Quis es?", en: "Hi! Who are you?", gap: 1 }] };
       if (prompt.includes("ON THEIR OWN")) return { messages: [] };
       if (prompt.includes("kind Latin coach")) return { verdict: "almost", better: "Librum legō.", note: "The object takes -m: «librum»." };
@@ -1113,6 +1119,76 @@ async function messenger() {
   await other.p.screenshot({ path: `${out}/messenger-phone-list.png` });
   await other.ctx.close();
   await ctx.close();
+
+  // The Sibyl's leaf: after a while on the page a leaf blows past; caught, it is read and kept in her book in the
+  // chat list, and when a friend tells of what it foretold, the message has a leaf and the book says it came true.
+  shared.clear();
+  const sib = await device("sibyl", { width: 1280, height: 800 }, "2026-10-20T08:00:00Z");
+  await sib.p.evaluate(() => (window.__sibyl = true));
+  await sib.p.click("#me-name").catch(() => undefined);
+  if (await sib.p.locator("#me-start").count()) {
+    await sib.p.fill("#me-name", "Kiril");
+    await sib.p.click("#me-m");
+    await sib.p.click("#me-start");
+  }
+  await sib.p.click("body", { position: { x: 5, y: 5 } });
+  // (runFor, not fastForward: the wind counts the time on the page in steps of five seconds)
+  await sib.ctx.clock.runFor(60_000);
+  await sib.p.waitForTimeout(400);
+  await sib.ctx.clock.runFor(6000);
+  await sib.p.waitForTimeout(300);
+  await sib.ctx.clock.runFor(6000);
+  const leaf = sib.p.locator(".sibyl-leaf");
+  if (!(await leaf.count())) errors.push("sibyl: no leaf blew across the page");
+  else {
+    await sib.ctx.clock.runFor(3000);
+    await sib.p.screenshot({ path: `${out}/sibyl-wind.png` });
+    await leaf.dispatchEvent("click");
+    await sib.ctx.clock.runFor(4000);
+    await sib.p.waitForTimeout(300);
+    if (!(await sib.p.locator(".sibyl-veil .sibyl-line.on").count())) errors.push("sibyl: the caught leaf shows no lines");
+    await sib.p.click(".sibyl-veil .sibyl-line >> nth=1");
+    await sib.p.waitForTimeout(200);
+    if (!(await sib.p.locator(".sibyl-veil .sibyl-en").count())) errors.push("sibyl: a tap on a line does not show its English");
+    await sib.p.screenshot({ path: `${out}/sibyl-leaf.png` });
+    await sib.p.click(".sibyl-keep");
+    await sib.p.waitForTimeout(300);
+    if (!(await sib.p.locator("#chat-sibylla").count())) errors.push("sibyl: the book is not in the chat list");
+    await sib.p.click("#chat-sibylla");
+    await sib.p.waitForTimeout(300);
+    if (!/Fātum manet/.test((await sib.p.locator(".sibyl-book").textContent()) ?? "")) errors.push("sibyl: the book does not say the fate is still to come");
+    await sib.p.screenshot({ path: `${out}/sibyl-book.png` });
+    // the fate comes; Gāius tells of it in his chat (a message the phone routine might have written)
+    const fates = (shared.get("data/users/u1/messenger") ?? {}).world?.fates ?? [];
+    if (fates.length !== 1 || fates[0].who !== "gaius") errors.push(`sibyl: the fate is not in the world (${JSON.stringify(fates)})`);
+    else {
+      const at = fates[0].at + 3600_000;
+      await sib.ctx.clock.fastForward(at - (await sib.p.evaluate(() => Date.now())) + 5000);
+      const path = "data/users/u1/messenger/threads/gaius";
+      const t = shared.get(path) ?? { id: "gaius", kind: "dm", messages: [], readAt: 0, memory: [], updatedAt: 0 };
+      shared.set(path, { ...t, messages: [...t.messages, { id: "rtaurus1", from: "gaius", la: "Heu! Taurus vīnum meum bibit! 😡", en: "Alas! A bull drank my wine! 😡", at, src: "routine" }], updatedAt: at });
+      await sib.p.waitForTimeout(700);
+      await sib.p.click(".chat-back").catch(() => undefined);
+      await sib.p.click("#chat-sibylla");
+      await sib.p.waitForTimeout(300);
+      if (!/Implētum est/.test((await sib.p.locator(".sibyl-book").textContent()) ?? "")) errors.push("sibyl: the book does not say the leaf came true");
+      if (await sib.p.locator("#chat-sibylla .unread-badge").count()) errors.push("sibyl: what came true still shows as new in the open book");
+      await sib.p.screenshot({ path: `${out}/sibyl-done.png` });
+      await sib.p.click(".sibyl-told");
+      await sib.p.waitForTimeout(700);
+      if (!(await sib.p.locator("#msg-rtaurus1 .leaf-mark").count())) errors.push("sibyl: the message that tells of it has no leaf");
+      // opening the chat rolls their lives on: the fate is Gāius's life now
+      const meta = shared.get("data/users/u1/messenger") ?? {};
+      if (!meta.world?.fates?.[0]?.done || meta.life?.gaius?.event !== fates[0].en) errors.push("sibyl: the fate did not become Gāius's life");
+      await sib.p.screenshot({ path: `${out}/sibyl-message.png` });
+      // on a phone: the book, and a leaf caught there
+      await sib.p.setViewportSize({ width: 390, height: 844 });
+      await sib.p.click(".leaf-mark");
+      await sib.p.waitForTimeout(500);
+      await sib.p.screenshot({ path: `${out}/sibyl-book-phone.png` });
+    }
+  }
+  await sib.ctx.close();
 }
 
 // What the learner can do in the messenger besides writing: a fresh picture someone sends

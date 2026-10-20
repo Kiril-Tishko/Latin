@@ -134,7 +134,11 @@ Runtime capabilities used:
   offers the words it marks «…» (new) as "New words here" chips (`newWordsIn`;
   these helpers live in src/ui/answer-words.ts, where the tests reach them).
   The profile lists the chat words, so "how do I say yes?" gets «ita», the
-  site's word, not «sīc». A failed answer shows plain advice, Try again,
+  site's word, not «sīc». "How do I say…" is answered directly even over an
+  exercise (the learner asks it to write to a friend), and over a messenger chat
+  the answer's Latin goes into the message with one tap ("Put «…» in my
+  message", `PutInMessage`, `latinToSend`). A word Claude marks "(new)" shows as
+  a small tag (`Inline` in markup.tsx), once per conversation. A failed answer shows plain advice, Try again,
   and the error code under "Details" (ask the learner for it when debugging).
   Keep the sample function in state as `setSample(() => fn)`: Preact calls a
   function given to a state setter, which once broke every question.
@@ -906,6 +910,26 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   English; Ask Claude sees the board; Continue goes on with the day.
   A new board counts one on the tab and comes in Continue (`todayStep`'s "acta").
   `tests/acta.test.ts`; the smoke test reads one on two devices.
+- The Sibyl's leaves (src/chat/sibyl.ts, src/ui/sibyl.tsx), a surprise the
+  learner asked for without being told what it is ("something I stumble upon"):
+  don't announce it to them. On a leaf's day (`leafDay`: the first one at once,
+  then about two days in five, never while two fates wait) after a while on any
+  page (`SibylWind`: active time, not while typing or in a dialog; twice at
+  most if missed) a leaf blows across the screen. Claude writes it just before
+  it flies (`writeLeaf`, the chat model, vetted like the Ācta: 2-3 cryptic lines
+  in the learner's words that name the thing, never the person). Caught, it
+  opens (`LeafReveal`) and is kept as a page of the Liber Sibyllīnus, the thread
+  «sibylla» (kept `gone`, so no list, count or routine takes it for a chat;
+  pinned under the Ācta: `SibylRow`, `SibylBook`, with the story of the
+  Sibylline Books and hidden links). Its fate (`World.fates`: who, what, when,
+  `signs`) comes true 6-36 h later: `applyFates` (lives.ts, first thing in
+  `refreshLives`) makes it their life at its hour, as a happening, on the
+  timeline; the brief rolls it into their lives ahead (`withFates`), so the
+  phone routine lives it too. The first message from that person after it with
+  one of its `signs` (any form) gets a small leaf (`LeafMark`, `toldIn`) and the
+  book says «Implētum est» with that message; nobody telling of it after a day
+  and a half, the neighbours do (`leafState`). `tests/sibyl.test.ts`; the smoke
+  test's messenger part catches one and sees it come true.
 - Phone notifications: a Claude Code routine (trigger "Nūntiī: Roman friends
   write", trig_01QU7TocqJanmp7LVdamvvdJ, a fresh session per run, push
   notifications, CRON_TZ=Europe/Kyiv every hour from 7:51 to 23:51, as the learner asked for much more texting) follows scripts/messenger-routine.md (with

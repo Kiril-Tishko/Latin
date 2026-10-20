@@ -29,6 +29,8 @@ import { audioReady, Speak } from "../speak";
 import { Inline, Markup } from "../markup";
 import { fixRequest, GrammarCheck, openAsk } from "../ask";
 import { ACTA_ID, ACTA_KINDS, ActaKind, linesOf, newestBoard } from "../../chat/acta";
+import { SIBYL_ID } from "../../chat/sibyl";
+import { bookMatches, bookText, LeafMark, SibylBook, SibylRow } from "../sibyl";
 import { go } from "../nav";
 import { useScreen } from "../screen";
 import {
@@ -52,6 +54,7 @@ import {
   forget,
   getMeta,
   getThread,
+  leafStates,
   leaveGroup,
   markRead,
   opened,
@@ -67,6 +70,7 @@ import {
   setBlocked,
   setMuted,
   storyPerson,
+  takeJump,
   todaysBoard,
   touchLives,
   typingIn,
@@ -201,11 +205,13 @@ export function Messenger({ thread }: { thread?: string }) {
   }, [!!me]);
   const t = thread ? getThread(thread) : null;
   const acta = thread === ACTA_ID;
-  const known = t && (acta || chatExists(thread!)) && !t.gone;
+  // the Sibyl's book (ui/sibyl.tsx): open once a leaf is in it
+  const book = thread === SIBYL_ID && !!t?.messages.length;
+  const known = t && (acta || book || chatExists(thread!)) && (book || !t.gone);
   useScreen(
     "page",
-    acta ? "Messenger: the Ācta Diurna (Rome's daily board of news)" : known ? `Messenger: chat with ${t!.kind === "group" ? `the group ${groupName(getMeta(), thread!)}` : nameOf(thread!)}` : "Messenger",
-    () => (acta ? boardText(t!, now) : known ? screenText(t!, now) : "The list of chats in the messenger."),
+    acta ? "Messenger: the Ācta Diurna (Rome's daily board of news)" : book ? "Messenger: the Liber Sibyllīnus (the Sibyl's leaves the learner caught)" : known ? `Messenger: chat with ${t!.kind === "group" ? `the group ${groupName(getMeta(), thread!)}` : nameOf(thread!)}` : "Messenger",
+    () => (acta ? boardText(t!, now) : book ? bookText(now) : known ? screenText(t!, now) : "The list of chats in the messenger."),
   );
   return (
     <>
@@ -215,7 +221,7 @@ export function Messenger({ thread }: { thread?: string }) {
       ) : (
         <div class={`msgr${known ? " in-chat" : ""}`}>
           <ChatList active={known ? thread! : null} now={now} />
-          {acta ? <ActaView now={now} /> : known ? <ChatView key={thread} id={thread!} now={now} /> : <EmptyChat />}
+          {acta ? <ActaView now={now} /> : book ? <SibylBook now={now} /> : known ? <ChatView key={thread} id={thread!} now={now} /> : <EmptyChat />}
         </div>
       )}
     </>
@@ -335,6 +341,7 @@ function ChatList({ active, now }: { active: string | null; now: number }) {
       {error && <p class="small well list-note">{error}</p>}
       <div class="chat-rows" role="list">
         {(!q || actaMatches(q, now)) && <ActaRow active={active === ACTA_ID} now={now} />}
+        {(!q || bookMatches(q, plain)) && <SibylRow active={active === SIBYL_ID} now={now} />}
         {rows.map(({ t, last, who }) => {
           const unread = unreadCount(t, now);
           const typing = typingIn(t, now);
@@ -690,6 +697,13 @@ function ChatView({ id, now }: { id: string; now: number }) {
     setFlash(msg);
     setTimeout(() => setFlash((f) => (f === msg ? null : f)), 1600);
   };
+  // a message asked for from elsewhere (the Sibyl's book): into view once the chat is open
+  useEffect(() => {
+    const j = takeJump(id);
+    if (j) setTimeout(() => jumpTo(j), 350);
+  }, [id]);
+  // the messages where a leaf of the Sibyl came true
+  const leafMarks = leafStates(now).marks;
 
   const status = who ? statusAt(who.day, who.tz, now) : null;
   const sub = who ? presence(who, t, now, status!) : typingWho ? `${nameOf(typingWho)} is typing…` : [...members.map((w) => w.name), "you"].join(", ");
@@ -873,6 +887,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     {(allEn || openEn.includes(m.id)) && m.en && <span class="bubble-en">{showEmoji(m.en)}</span>}
                     {m.newWords && (allEn || openEn.includes(m.id)) && <span class="bubble-en small">New to you: {m.newWords.join(", ")}</span>}
                     <span class="bubble-meta">
+                      {leafMarks.get(m.id) && <LeafMark leaf={leafMarks.get(m.id)!} />}
                       {clock(m.at)}
                       {mine && t.kind !== "group" && <Ticks m={m} now={now} />}
                     </span>
@@ -1640,6 +1655,18 @@ function Composer({ id, replyTo, onReplied }: { id: string; replyTo: Msg | null;
     setText(v);
     storage.set(DRAFT_KEY(id), v);
   };
+  // Latin from Ask Claude ("Put … in my message"): after what is written, ready to send
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ chat: string; text: string }>).detail;
+      if (d?.chat !== id || !d.text) return;
+      const cur = box.current?.value ?? "";
+      change(cur.trim() ? `${cur.trimEnd()} ${d.text}` : d.text);
+      setTimeout(() => box.current?.focus(), 50);
+    };
+    window.addEventListener("tabula:compose", on);
+    return () => window.removeEventListener("tabula:compose", on);
+  }, [id]);
   /** Puts something in at the cursor (an emoji; a phrase, spaced from the words around it), or after what is written (a word). */
   const put = (s: string, atCursor: boolean, spaced = false) => {
     const el = box.current;

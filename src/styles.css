@@ -1837,6 +1837,11 @@ main.page.msgr-page { padding-block: 14px; }
 .word-preview { gap: 8px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel-2); }
 .word-preview p.labelled, .stack > p.labelled { margin: 0; }
 .add-from-answer { margin-top: 8px; }
+/* Ask Claude over a chat: the answer's Latin into the message being written */
+.put-in-message { margin-top: 8px; max-width: 100%; white-space: normal; text-align: left; }
+.put-in-message svg { width: 16px; height: 16px; flex: none; }
+/* a word Claude marks as not learned yet */
+.new-tag { display: inline-block; margin: 0 2px; padding: 0 5px; font-family: var(--f-ui); font-size: 0.68em; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.5; color: var(--gold); border: 1px solid var(--gold-soft); border-radius: 3px; vertical-align: 0.15em; }
 .word-card-add { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 3px 10px; border-radius: 12px; background: var(--gold); color: var(--panel); font-family: var(--f-ui); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
 .word-card-add svg { width: 13px; height: 13px; }
 @media (max-width: 760px) {
@@ -2048,3 +2053,77 @@ label.check input { flex: none; width: 18px; height: 18px; margin: 0.2em 0 0; ac
   /* in a round, "into view" also clears the sticky Why? / Next bar above the tab bar */
   html:has(.ex-next) { scroll-padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* The Sibyl's leaves (ui/sibyl.tsx): a leaf blowing across the page, the leaf caught and read, and her book in Nūntiī */
+.leaf-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.sibyl-leaf { position: fixed; top: 0; left: 0; z-index: 58; width: 64px; height: 100px; margin: -50px 0 0 -32px; padding: 6px 14px; border: 0; background: none; cursor: pointer; filter: drop-shadow(0 7px 6px rgba(40, 25, 10, 0.35)); animation: leaf-blow 17s linear forwards; -webkit-tap-highlight-color: transparent; }
+.sibyl-leaf-turn { display: block; width: 100%; height: 100%; transform-origin: 50% 20%; animation: leaf-turn 2.4s ease-in-out infinite alternate; }
+@keyframes leaf-blow {
+  0% { transform: translate(var(--x0), -12vh) rotate(0deg); opacity: 0; }
+  5% { opacity: 1; }
+  28% { transform: translate(var(--x1), 22vh) rotate(calc(var(--spin) * 70deg)); }
+  52% { transform: translate(var(--x2), 50vh) rotate(calc(var(--spin) * -20deg)); }
+  76% { transform: translate(var(--x3), 78vh) rotate(calc(var(--spin) * 90deg)); }
+  100% { transform: translate(var(--x4), 112vh) rotate(calc(var(--spin) * 160deg)); opacity: 1; }
+}
+@keyframes leaf-turn { from { transform: rotate(-26deg) scaleX(1); } to { transform: rotate(22deg) scaleX(0.45); } }
+@media (max-width: 760px) { .sibyl-leaf { animation-duration: 14s; } }
+@media (prefers-reduced-motion: reduce) {
+  .sibyl-leaf { animation: leaf-rest 14s ease-in-out forwards; }
+  .sibyl-leaf-turn { animation: none; transform: rotate(-18deg); }
+}
+@keyframes leaf-rest { 0% { transform: translate(var(--x2), 40vh); opacity: 0; } 15%, 85% { opacity: 1; } 100% { transform: translate(var(--x2), 46vh); opacity: 0; } }
+
+/* the leaf caught: a golden leaf to read, opening where it was caught */
+.sibyl-veil { position: fixed; inset: 0; z-index: 75; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(34, 24, 10, 0.55), rgba(10, 7, 3, 0.82)); animation: veil-in 0.4s ease-out; }
+@keyframes veil-in { from { opacity: 0; } }
+.sibyl-card {
+  /* a leaf is a leaf in the dark too: its own ink and the case colors of the light page */
+  --ink: #2b1d0e; --ink-2: #5a3d17; --c-nom: #2456a6; --c-acc: #b32e1b; --c-gen: #7b3a9b; --c-dat: #256b40; --c-abl: #955300; --c-voc: #a8356f; --c-verb: #0b6f6a;
+  position: relative; width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow: auto; padding: 22px 26px 20px; color: var(--ink);
+  background: linear-gradient(90deg, transparent calc(50% - 1px), rgba(107, 69, 25, 0.13) 50%, transparent calc(50% + 1px)), repeating-linear-gradient(118deg, rgba(110, 70, 20, 0.06) 0 2px, transparent 2px 28px), linear-gradient(160deg, #f5e3ae, #e8c97f 55%, #d8ae5f);
+  border: 1px solid #b0863c; border-radius: 34px 6px 34px 6px; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.75), inset 0 0 44px rgba(120, 80, 20, 0.25);
+  animation: leaf-open 0.75s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes leaf-open { from { transform: translate(var(--fx), var(--fy)) scale(0.12) rotate(-30deg); opacity: 0.5; } }
+.sibyl-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.sibyl-card-leaf { width: 24px; height: 56px; flex: none; transform: rotate(18deg); }
+.sibyl-kicker { font-family: var(--f-display); font-size: 0.92rem; letter-spacing: 0.22em; text-transform: uppercase; color: #6b4519; }
+.sibyl-date { font-family: var(--f-ui); font-size: 0.86rem; color: #7d5a2c; }
+.sibyl-card-tools { margin-left: auto; }
+.sibyl-lines { display: grid; gap: 4px; margin: 4px 0 14px; }
+.sibyl-card .sibyl-line { font-family: var(--f-text); font-size: 1.38rem; line-height: 1.4; text-align: center; margin: 0; cursor: pointer; opacity: 0; filter: blur(6px); transform: translateY(5px); transition: opacity 1.1s ease, filter 1.1s ease, transform 1.1s ease; }
+.sibyl-card .sibyl-line.on { opacity: 1; filter: none; transform: none; }
+.sibyl-en { font-family: var(--f-ui); font-size: 0.95rem; font-style: italic; text-align: center; color: var(--ink-2); margin: -2px 0 4px; }
+.sibyl-note, .sibyl-motto { text-align: center; color: var(--ink-2); opacity: 0; transition: opacity 1s ease 0.4s; }
+.sibyl-note.on, .sibyl-motto.on { opacity: 1; }
+.sibyl-note { margin: 0 0 6px; }
+.sibyl-motto { display: grid; gap: 1px; font-family: var(--f-display); letter-spacing: 0.05em; margin: 4px 0 16px; }
+.sibyl-motto .muted { font-family: var(--f-ui); font-size: 0.9rem; letter-spacing: 0; color: #7d5a2c; }
+.sibyl-keep { display: block; margin: 0 auto; }
+
+/* the book, under the Ācta in the chat list */
+.sibyl-avatar { display: grid; place-items: center; background: radial-gradient(circle at 35% 30%, #5b7a40, #22331a); width: var(--av, var(--av-size, 44px)); height: var(--av, var(--av-size, 44px)); }
+.sibyl-avatar .leaf-svg { width: 30%; height: 66%; transform: rotate(24deg); }
+.sibyl-row .chat-row-name { letter-spacing: 0.04em; }
+.sibyl-row.unread .chat-row-preview b { color: var(--gold); font-family: var(--f-display); letter-spacing: 0.04em; }
+.sibyl-page { border-left: 3px solid #c08a35; transition: box-shadow 0.3s ease; }
+.sibyl-page.hit { box-shadow: 0 0 0 2px var(--gold-soft); }
+.kind-leaf { display: inline-block; width: 8px; height: 18px; margin-right: 3px; vertical-align: -4px; transform: rotate(20deg); }
+.sibyl-state { font-family: var(--f-ui); margin: 10px 0 0; padding-top: 8px; border-top: 1px dashed var(--m-line); }
+.sibyl-state p { margin: 0; }
+.sibyl-state [lang="la"]:first-child, .sibyl-state b[lang="la"] { font-family: var(--f-display); letter-spacing: 0.04em; color: var(--gold); }
+.sibyl-state.done b[lang="la"] { color: var(--good); }
+.sibyl-told { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 8px; padding: 8px 10px; text-align: left; font: inherit; color: var(--ink); background: var(--m-line-soft); border: 1px solid var(--m-line); border-radius: 12px; cursor: pointer; }
+.sibyl-told > svg { width: 18px; height: 18px; flex: none; color: var(--gold); }
+.sibyl-told .avatar-wrap, .sibyl-told .avatar { flex: none; }
+.sibyl-told-text { flex: 1; min-width: 0; }
+.sibyl-told-text b { margin-right: 4px; }
+.sibyl-lore summary { cursor: pointer; font-family: var(--f-ui); }
+.sibyl-lore summary [lang="la"] { font-family: var(--f-display); color: var(--gold); letter-spacing: 0.04em; margin-right: 4px; }
+.sibyl-lore p { font-size: 0.98rem; line-height: 1.55; margin: 8px 0 0; }
+.sibyl-links { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 0.98rem; line-height: 1.5; }
+
+/* on the message where a leaf came true */
+.leaf-mark { display: inline-block; width: 23px; height: 22px; padding: 1px 7px; margin: -2px 1px -2px -6px; border: 0; background: none; vertical-align: -6px; cursor: pointer; animation: leaf-glint 2.4s ease-in-out 3; }
+@keyframes leaf-glint { 50% { filter: drop-shadow(0 0 4px #f0c060); } }

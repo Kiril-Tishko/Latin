@@ -20,6 +20,7 @@ import { setSpeechPrefs } from "../audio/speech";
 import { useScreen } from "./screen";
 import { ArrivalNotice, Messenger } from "./pages/messenger";
 import { connectMessenger, ensureActa, unreadTotal, useMessenger } from "./messenger";
+import { SibylWind } from "./sibyl";
 
 // Four sections, named in Latin (the English shows as a tooltip): today's next step,
 // everything to read and learn, the learner's words, and the messenger.
@@ -150,6 +151,7 @@ export function App() {
       <AddWordHost />
       <Toaster />
       {p.settings.me && <ArrivalNotice current={route.page === "messenger" ? route.thread ?? null : null} />}
+      {p.settings.me && <SibylWind />}
       {settings && <Settings onClose={() => setSettings(false)} />}
     </div>
   );

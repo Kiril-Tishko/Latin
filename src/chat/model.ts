@@ -4,7 +4,7 @@
 import type { Day } from "../content/people";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../content/people";
 import type { Gain, Levels, Tie } from "./bond";
-import type { Goal, WorldEvent } from "./lives";
+import type { Fate, Goal, WorldEvent } from "./lives";
 import type { Life } from "./life";
 import type { Stranger } from "./strangers";
 
@@ -82,6 +82,8 @@ export interface World {
   dramas?: Drama[];
   /** What happened in their world, and who knows it (chat/lives.ts). */
   timeline?: WorldEvent[];
+  /** What the Sibyl's leaves foretold, to come true at its hour (chat/sibyl.ts). */
+  fates?: Fate[];
   updatedAt: number;
 }
 
@@ -115,7 +117,7 @@ export const awayNow = (meta: Meta, id: string, now: number) => {
   return a && a.until > now ? a : undefined;
 };
 
-/** Two copies of the world together: the newer one, with the storylines of both by id (the newer of each). */
+/** Two copies of the world together: the newer one, with the storylines of both by id (the newer of each), every event and every fate. */
 export function mergeWorld(a: World | undefined, b: World | undefined): World | undefined {
   if (!a || !b) return a ?? b;
   const [older, newer] = a.updatedAt > b.updatedAt ? [b, a] : [a, b];
@@ -126,7 +128,16 @@ export function mergeWorld(a: World | undefined, b: World | undefined): World | 
   for (const [id, g] of Object.entries(newer.groups ?? {})) if (!groups[id] || g.updatedAt >= groups[id].updatedAt) groups[id] = g;
   // the timeline: every event from either side, once
   const timeline = new Map([...(older.timeline ?? []), ...(newer.timeline ?? [])].map((e) => [e.id, e]));
-  return { ...newer, dramas: [...dramas.values()], groups, ...(timeline.size ? { timeline: [...timeline.values()].sort((a, b) => a.at - b.at).slice(-60) } : {}) };
+  // the fates: every one from either side, the copy that made it real winning
+  const fates = new Map<string, Fate>();
+  for (const f of [...(older.fates ?? []), ...(newer.fates ?? [])]) if (!fates.has(f.id) || (f.done ?? 0) >= (fates.get(f.id)!.done ?? 0)) fates.set(f.id, f);
+  return {
+    ...newer,
+    dramas: [...dramas.values()],
+    groups,
+    ...(timeline.size ? { timeline: [...timeline.values()].sort((a, b) => a.at - b.at).slice(-60) } : {}),
+    ...(fates.size ? { fates: [...fates.values()].sort((a, b) => a.at - b.at).slice(-24) } : {}),
+  };
 }
 
 /** The emoji anyone may react with: the learner's bar, and what the people may choose. */

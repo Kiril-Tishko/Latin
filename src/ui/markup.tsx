@@ -4,7 +4,7 @@
 import { ComponentChildren, Fragment } from "preact";
 import { LatinText } from "./latin";
 
-const INLINE = /(«[^»]+»|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|`[^`]+`)/g;
+const INLINE = /(«[^»]+»|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|`[^`]+`|\(new\))/g;
 
 export function Inline({ text }: { text: string }) {
   const parts = text.split(INLINE).filter((p) => p !== "");
@@ -14,6 +14,8 @@ export function Inline({ text }: { text: string }) {
         if (p.startsWith("«")) return <LatinText key={i} text={p.slice(1, -1)} />;
         if (p.startsWith("**")) return <strong key={i}><Inline text={p.slice(2, -2)} /></strong>;
         if (p.startsWith("`")) return <code key={i}>{p.slice(1, -1)}</code>;
+        // a word the learner has not learned, as Claude marks it: a small tag, not the raw "(new)"
+        if (p === "(new)") return <span key={i} class="new-tag" title="Not one of your words yet">new</span>;
         if (p.startsWith("*") && p.length > 2) return <em key={i}><Inline text={p.slice(1, -1)} /></em>;
         return <Fragment key={i}>{p}</Fragment>;
       })}

@@ -27,6 +27,7 @@ import { PHOTO_BY_ID } from "../content/photos";
 import { relativesFact } from "../content/english";
 import { withoutEmoji } from "../chat/emoji";
 import { withRecordings } from "../chat/voices";
+import { keepLeaf, Leaf, leafDay, leafState, LeafState, leavesOf, SIBYL_ID, writeLeaf } from "../chat/sibyl";
 import { Lexicon } from "../latin/analyze";
 import { engineFacts } from "../latin/facts";
 import { Entry } from "../latin/types";
@@ -86,7 +87,7 @@ function emit() {
 export const getMeta = () => meta;
 export const getThread = (id: string): T => threads[id] ?? newThread(id, kindOf(id));
 const kindOf = (id: string): Thread["kind"] =>
-  id === GROUP.id || id.startsWith("g-") ? "group" : id === ACTA_ID ? "channel" : PEOPLE.some((p) => p.id === id) ? "dm" : "stranger";
+  id === GROUP.id || id.startsWith("g-") ? "group" : id === ACTA_ID || id === SIBYL_ID ? "channel" : PEOPLE.some((p) => p.id === id) ? "dm" : "stranger";
 
 /**
  * Every conversation: the five friends and the groups the learner is in
@@ -106,7 +107,8 @@ export const errorOf = (id: string) => errors.get(id);
 
 export function unreadTotal(now = Date.now()): number {
   // a new board of the Ācta Diurna counts as one; a muted chat does not count
-  return allThreads().reduce((n, t) => n + (isMuted(meta, t.id) ? 0 : unreadCount(t, now)), 0) + (actaUnread(now) ? 1 : 0);
+  // and a leaf of the Sibyl come true, once (chat/sibyl.ts)
+  return allThreads().reduce((n, t) => n + (isMuted(meta, t.id) ? 0 : unreadCount(t, now)), 0) + (actaUnread(now) ? 1 : 0) + (bookNews(now) ? 1 : 0);
 }
 
 /** Re-renders on every change and whenever a planned message arrives or someone starts typing. */
@@ -795,6 +797,98 @@ async function writeTodaysBoard(force: boolean): Promise<void> {
     actaWriting = false;
     emit();
   }
+}
+
+// ------------------------------------------------------ the Sibyl's leaves
+
+/** The leaves the learner caught, oldest first: the Liber Sibyllīnus (chat/sibyl.ts). */
+export const leaves = () => leavesOf(getThread(SIBYL_ID));
+
+/** What a leaf foretold. */
+export const fateOf = (id: string) => meta.world?.fates?.find((f) => f.id === id);
+
+/** May a leaf blow now: the learner's chats are in, and it is a leaf's day (chat/sibyl.ts, leafDay). */
+export const leafToday = (now = Date.now()) => gotChats && leafDay(now, leaves(), meta);
+
+/** Writes a leaf for the wind (Claude, the chat model): kept only once it is caught. */
+export async function prepareLeaf(): Promise<Leaf | { error: string }> {
+  const now = Date.now();
+  const ctx = promptCtx(now);
+  if (!ctx) return { error: "No one to foretell for yet." };
+  const d = await deps();
+  if ("error" in d) return d;
+  // their lives as they are now, so that the leaf fits them
+  if (rollLives(PEOPLE.map((p) => p.id), now)) saveMeta();
+  try {
+    return (await writeLeaf(meta, ctx, d)) ?? { error: "The Sibyl was silent." };
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+}
+
+/** A leaf caught: kept in the book, and its fate in their world (the brief carries it to the phone routine at once). */
+export function catchLeaf(leaf: Leaf, now = Date.now()): Msg {
+  const { msg, fate } = keepLeaf(leaf, now);
+  const t = getThread(SIBYL_ID);
+  // a book, not a chat: kept gone, and read, so nothing counts it as a conversation
+  saveThread(merge(t, { ...t, gone: true, readAt: now, messages: [...t.messages, msg] }));
+  meta = { ...meta, world: { ...(meta.world ?? { updatedAt: 0 }), fates: [...(meta.world?.fates ?? []).filter((f) => f.id !== fate.id), fate], updatedAt: now } };
+  saveMeta();
+  void writeBrief(true);
+  return msg;
+}
+
+/** The book opened: what came true is seen. */
+export function readBook(now = Date.now()) {
+  const t = getThread(SIBYL_ID);
+  if (t.messages.length && now - t.readAt > 5000) saveThread({ ...t, readAt: now });
+}
+
+/** Something in the book the learner has not seen: a leaf come true since they last opened it. */
+export function bookNews(now = Date.now()): boolean {
+  const t = getThread(SIBYL_ID);
+  return [...leafStates(now).states.entries()].some(([id, st]) => {
+    const f = fateOf(id);
+    const at = st.state === "told" ? st.msg.at : st.state === "known" && f ? f.at + 36 * 3600_000 : 0;
+    return at > t.readAt && at <= now;
+  });
+}
+
+/** A message to bring into view when its chat opens (from the book), and the leaf to bring into view when the book opens. */
+let jump: { chat: string; msg: string } | null = null;
+let leafFocus: string | null = null;
+export function showMessage(chat: string, msg: string) {
+  jump = { chat, msg };
+}
+export function takeJump(chat: string): string | null {
+  const j = jump?.chat === chat ? jump.msg : null;
+  if (j) jump = null;
+  return j;
+}
+export const focusLeaf = (id: string) => void (leafFocus = id);
+export function takeLeafFocus(): string | null {
+  const f = leafFocus;
+  leafFocus = null;
+  return f;
+}
+
+let leafCache: { key: string; states: Map<string, LeafState>; marks: Map<string, string> } | null = null;
+/** Where each leaf stands (chat/sibyl.ts, leafState), and the messages that tell of a fate (their leaf's id), for the marks in the chats. */
+export function leafStates(now = Date.now()): { states: Map<string, LeafState>; marks: Map<string, string> } {
+  const all = leaves();
+  const chats = allThreads(true);
+  const key = `${all.length}:${chats.reduce((n, t) => n + t.messages.length, 0)}:${(meta.world?.fates ?? []).map((f) => f.done ?? 0).join(",")}:${Math.floor(now / 60_000)}`;
+  if (leafCache?.key === key) return leafCache;
+  const states = new Map<string, LeafState>();
+  const marks = new Map<string, string>();
+  const lex = chatWords().lex;
+  for (const m of all) {
+    const st = leafState(fateOf(m.id), chats, lex, now, m.at);
+    states.set(m.id, st);
+    if (st.state === "told") marks.set(st.msg.id, m.id);
+  }
+  leafCache = { key, states, marks };
+  return leafCache;
 }
 
 /** Rolls on their lives where it is time; what begins in them is remembered (chat/lives.ts). True if anything changed. */

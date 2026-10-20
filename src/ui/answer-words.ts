@@ -20,3 +20,14 @@ export function newWordsIn(answer: string): string[] {
   const words = [...answer.matchAll(/«([^»]+)»\s*\(new\b/g)].map((m) => m[1].replace(/#[\w.]+/g, "").split(/[,\s]+/)[0].replace(/[^\p{L}\p{M}]/gu, ""));
   return [...new Set(words.filter((w) => w.length > 1))];
 }
+
+/**
+ * The Latin of an answer to put in a message (Ask Claude asked from a chat): the
+ * first Latin in bold, else the first of more than one word, else the first.
+ */
+export function latinToSend(answer: string): string | null {
+  const strip = (x: string) => x.replace(/#[\w.]+/g, "").trim();
+  const bold = [...answer.matchAll(/\*\*[^*]*?«([^»]+)»[^*]*?\*\*/g)].map((m) => strip(m[1]));
+  const all = [...answer.matchAll(/«([^»]+)»/g)].map((m) => strip(m[1]));
+  return bold[0] || all.find((x) => /\s/.test(x)) || all[0] || null;
+}

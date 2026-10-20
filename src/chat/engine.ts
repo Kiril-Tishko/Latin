@@ -15,7 +15,7 @@ import { allowOwn, OWN_MAX, paceOf } from "./pace";
 import { natureOf } from "./nature";
 import { MemoryDraft, memoriesOf, Tell, tellsOf } from "./mind";
 import { applyBondChanges, applyTieChanges, BondChange, bondChangesOf, TieChange, tieChangesOf } from "./bond";
-import { applyGoalChanges, applyHappen, GoalChange, goalChangesOf, Happen, happensOf, heavyOk, noteHappening } from "./lives";
+import { applyFates, applyGoalChanges, applyHappen, GoalChange, goalChangesOf, Happen, happensOf, heavyOk, noteHappening } from "./lives";
 import { groupCaps, sceneBlock, sceneOf } from "./group";
 import { photoHabits, withLooks } from "./pictures";
 import { allPeople, Deeds, deedsOf, noDeeds } from "./world";
@@ -54,7 +54,12 @@ export function specOf(id: string, meta: Meta): LifeSpec | null {
  * for the minds). True if anything changed.
  */
 export function refreshLives(meta: Meta, ids: string[], now: number, r: Rand = Math.random, out?: MemoryDraft[]): boolean {
-  let changed = false;
+  // what the Sibyl foretold comes first, at its hour (chat/sibyl.ts)
+  let changed = (meta.world?.fates ?? []).some((f) => !f.done && f.at <= now);
+  if (changed) {
+    const fated = applyFates(meta, now);
+    out?.push(...fated);
+  }
   for (const id of ids) {
     const spec = specOf(id, meta);
     if (!spec) continue;

@@ -10,6 +10,7 @@ import { Happening, PEOPLE, PERSON_BY_ID } from "../content/people";
 import { clip } from "./model";
 import type { Meta, Who } from "./model";
 import type { MemoryDraft } from "./mind";
+import type { Life } from "./life";
 
 /** Something someone wants from life, in their own words. */
 export interface Goal {
@@ -237,4 +238,83 @@ export function publicNow(meta: Meta, now: number, ids: string[] = PEOPLE.map((p
     const l = meta.life[id];
     return l?.event && l.public && (l.eventUntil ?? 0) > now ? [`${nameOf(id, meta)}: ${l.event}`] : [];
   });
+}
+
+// ------------------------------------------------------------ fates
+// What a leaf of the Sibyl foretold (chat/sibyl.ts) comes true at its hour: their life then.
+
+/** What a leaf of the Sibyl foretells: what will happen to whom, and when. */
+export interface Fate {
+  /** The leaf's id ("folium-20261020"). */
+  id: string;
+  /** One of the five friends. */
+  who: string;
+  /** What happens to them, in English, as it will be in their life. */
+  en: string;
+  /** Their mood when it happens. */
+  mood?: string;
+  /** When it happens, and for how many hours it goes on. */
+  at: number;
+  hours: number;
+  /** The neighbours will know of it. */
+  public?: boolean;
+  /** The words of the prophecy that name it (entry ids): the message that tells of it has one of them. */
+  signs: string[];
+  /** When the page made it their life (or, past already, their history). */
+  done?: number;
+}
+
+/** Their life once the fate comes: it is what goes on for them, with its mood. */
+export function fateLife(prev: Life | undefined, f: Fate): Life {
+  return {
+    mood: f.mood ?? prev?.mood ?? "astonished",
+    level: "",
+    moodUntil: f.at + Math.min(f.hours, 9) * HOUR,
+    event: f.en,
+    eventUntil: f.at + f.hours * HOUR,
+    eventAt: f.at,
+    ...(f.mood ? { eventMood: f.mood } : {}),
+    ...(f.public ? { public: true } : {}),
+    recent: [f.en, ...(prev?.recent ?? [])].slice(0, 4),
+    rolled: f.at,
+  };
+}
+
+/**
+ * Makes the fates that have come real: going on still, it is their life now
+ * (and a memory, the timeline when it matters); over already (the page was
+ * closed), it is their history: on the timeline, remembered. Changes meta in
+ * place; returns the memories it leaves.
+ */
+export function applyFates(meta: Meta, now: number): MemoryDraft[] {
+  const fates = meta.world?.fates;
+  if (!fates?.some((f) => !f.done && f.at <= now)) return [];
+  const out: MemoryDraft[] = [];
+  // (the timeline changes on the way: the world is put together after)
+  const next = fates.map((f) => {
+    if (f.done || f.at > now) return f;
+    // on the timeline always (a thing foretold is a thing that matters), known to them or, when public, to everyone
+    addEvent(meta, { at: f.at, en: `${nameOf(f.who, meta)}: ${f.en}`, who: [f.who], ...(f.public ? { public: true } : {}) });
+    if (f.at + f.hours * HOUR > now) {
+      meta.life[f.who] = fateLife(meta.life[f.who], f);
+      out.push(...noteHappening(meta, f.who, { en: f.en, hours: [f.hours, f.hours], public: f.public }, f.at));
+    } else out.push({ who: f.who, text: f.en, kind: "news", weight: 2, about: [f.who] });
+    return { ...f, done: now };
+  });
+  meta.world = { ...meta.world!, fates: next, updatedAt: Math.max(meta.world?.updatedAt ?? 0, now) };
+  return out;
+}
+
+/** Rolled-ahead lives with the fates in them: from its hour, a fate is their life (for the phone routine's brief). */
+export function withFates(lives: (Life & { from: number })[], who: string, meta: Meta, now: number, hours: number): (Life & { from: number })[] {
+  const due = (meta.world?.fates ?? []).filter((f) => !f.done && f.who === who && f.at > now && f.at <= now + hours * HOUR);
+  let out = lives;
+  for (const f of due) {
+    const before = out.filter((l) => l.from < f.at);
+    const life = fateLife(before.at(-1), f);
+    // what was rolled for after it gives way, until the fate is over
+    const after = out.filter((l) => l.from >= life.eventUntil!);
+    out = [...before, { ...life, from: f.at }, ...after];
+  }
+  return out;
 }

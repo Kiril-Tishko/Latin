@@ -757,6 +757,7 @@ function Runner({ s }: { s: Session }) {
                 onAsk={askWhy}
                 onDispute={res.verdict !== "correct" && ex.answer !== "choice" && ex.kind !== "answer" && answer.trim() && answer !== "—" ? dispute : undefined}
                 judging={judging}
+                focus={roundPart?.skills}
               />
             )}
             <div class="spread ex-next">
@@ -1103,15 +1104,16 @@ function Feedback({ ex, res, answer, children }: { ex: Exercise; res: Result; an
 }
 
 /** Why?: what was written, every slip, the rule behind the exercise, and Claude for more. */
-function WhyBox(props: { ex: Exercise; res: Result; answer: string; judgement: string | null; judging: boolean; onAsk: () => void; onDispute?: () => void }) {
+function WhyBox(props: { ex: Exercise; res: Result; answer: string; judgement: string | null; judging: boolean; onAsk: () => void; onDispute?: () => void; focus?: string[] }) {
   const { ex, res, answer } = props;
   const latinAnswer = (ex.answer === "la" || ex.answer === "tiles") && res.tokens && res.verdict !== "correct" && answer !== "—";
   const all = res.issues.filter((i) => i.message);
   const shown = all[0] && !(res.expected && all[0].message.includes(res.expected));
   const more = shown ? all.slice(1) : all;
-  // the rules behind it: those the slips were about, or, when right, the exercise's own
+  // the rules behind it: those the slips were about, or, when right (or the answer shown), the exercise's own, the round's rule first
   const blamed = [...new Set(res.issues.filter((i) => i.kind !== "tip" && i.kind !== "typo").map((i) => i.skill).filter(Boolean) as string[])];
-  const rules = (res.verdict === "correct" || !blamed.length ? ex.skills : blamed).map((id) => SKILL_BY_ID.get(id)?.hint).filter(Boolean).slice(0, 2) as string[];
+  const own = [...ex.skills].sort((a, b) => Number(!!props.focus?.includes(b)) - Number(!!props.focus?.includes(a)));
+  const rules = (res.verdict === "correct" || !blamed.length ? own : blamed).map((id) => SKILL_BY_ID.get(id)?.hint).filter(Boolean).slice(0, 2) as string[];
   return (
     <div class="well stack why-box">
       {latinAnswer && (

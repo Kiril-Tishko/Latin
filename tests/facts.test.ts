@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { checkAnswer, engineFacts } from "../src/latin/facts";
+import { checkAnswer, engineFacts, literalReading } from "../src/latin/facts";
+import { DECK_CARDS } from "../src/content/deck";
 import { fullLexicon, skillsUpTo } from "../src/trainer/knowledge";
 
 const lex = fullLexicon();
@@ -73,6 +74,19 @@ describe("checking Claude's answers with the grammar engine", () => {
   it("notes long marks missing from an ending, not from a stem", () => {
     expect(checkAnswer("«Tū dormis.»", lex).map((f) => f.message)).toEqual(["Long marks: «dormīs»."]);
     expect(checkAnswer("«Europa ambulat.»", lex)).toEqual([]);
+  });
+
+  it("reads an -ē adverb as an adverb, not as an adjective calling someone (vērē, longē, rēctē)", () => {
+    const all = fullLexicon(DECK_CARDS.map((c) => c.entry));
+    // from the learner's chats: these were told "the adjective is «vēra»" and "Long marks: «vēre»"
+    expect(checkAnswer("«Vērē dictum! Iūlia vērē pulchra est!»", all)).toEqual([]);
+    expect(checkAnswer("«Eurōpa longē ambulat.»", all)).toEqual([]);
+    expect(checkAnswer("«Rēctē dīcis.»", all)).toEqual([]);
+    expect(literalReading("Eurōpa vērē pulchra est.", all)).toContain("«vērē»: the adverb vērē, from vērus (true)");
+    // still caught: an adjective that must agree, calling someone, or one whose adverb is not in -ē
+    expect(checkAnswer("«Amīce vēra, salvē!»", all).map((f) => f.kind)).toContain("agreement");
+    expect(checkAnswer("«Puella magne ambulat.»", all).map((f) => f.kind)).toEqual(["agreement"]);
+    expect(checkAnswer("«Puella longus ambulat.»", all).map((f) => f.kind)).toEqual(["agreement"]);
   });
 });
 

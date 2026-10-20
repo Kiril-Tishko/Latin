@@ -29,6 +29,25 @@ const LOOKALIKES = new Set(
 
 const show = (f?: Form) => (f ? full(f) : "");
 
+/** Adjectives whose adverb is not in -ē (bene, magnopere, parum, multum). */
+const NO_E_ADVERB = new Set(["bonus", "magnus", "parvus", "multus", "meus"]);
+
+/**
+ * The adverb in -ē a word is (vērē, longē, rēctē: truly, far, rightly) when
+ * the engine reads it only as an adjective calling someone (vēre) and no one
+ * is called beside it; else undefined. «Iūlia vērē pulchra est» once got
+ * "the adjective is «vēra»" and "Long marks: «vēre»".
+ */
+function adverbOf(words: Token[], i: number): string | undefined {
+  const rs = words[i].readings ?? [];
+  const adj = rs.find((r) => r.entry.kind === "adj" && r.key === "voc.sg" && r.gender === "m");
+  if (!adj || NO_E_ADVERB.has(adj.entry.id) || !rs.every((r) => r.entry.kind === "adj" && caseOf(r) === "voc")) return undefined;
+  // someone called beside it (amīce, Marce: only a vocative) makes it the adjective
+  const called = [words[i - 1], words[i + 1]].some((w) => !!w?.readings?.length && w.readings.every((r) => r.entry.kind === "noun" && caseOf(r) === "voc"));
+  const adverb = `${(adj.entry as AdjEntry).stem}ē`;
+  return !called && plain(adverb) === plain(words[i].text) ? adverb : undefined;
+}
+
 /** Whether the learner has met a reading's ending (or it comes later). */
 function taught(a: Analysis, known: Set<string>): boolean {
   const e = a.entry;
@@ -171,8 +190,10 @@ export function checkAnswer(text: string, lex: Lexicon): Finding[] {
     const hasSum = words.some((t) => t.readings?.some((r) => r.entry.kind === "verb" && r.entry.irregular === "sum"));
 
     // long marks in an ending (the -īs of dormīs, the -ā of in silvā): written without them, or wrongly
-    for (const t of words) {
+    for (const [i, t] of words.entries()) {
       if (!t.readings?.length || t.readings.some((r) => full(r.form).toLowerCase() === t.text.toLowerCase())) continue;
+      // an adverb in -ē has its long mark: «rēctē», not «rēcte»
+      if (adverbOf(words, i)) continue;
       const r = t.readings[0];
       // the ending and the vowel before it (the long ī of dormīs is part of the rule)
       const tail = r.form.ending.length + 1;
@@ -182,7 +203,7 @@ export function checkAnswer(text: string, lex: Lexicon): Finding[] {
     // an adjective takes its noun's gender, case and number
     words.forEach((t, i) => {
       const adjs = t.readings?.filter((r) => r.entry.kind === "adj") ?? [];
-      if (!adjs.length || adjs.length !== t.readings!.length) return;
+      if (!adjs.length || adjs.length !== t.readings!.length || adverbOf(words, i)) return;
       // any noun of the phrase will do (Latin may put them apart); the nearest one names the fix
       const nouns = words.filter(isNoun);
       if (!nouns.length) return;
@@ -280,7 +301,12 @@ const EVERY_RULE = { has: () => true } as unknown as Set<string>;
 export function literalReading(text: string, lex: Lexicon): string {
   const words = annotate(text, lex).filter((t) => t.isWord);
   if (!words.length) return "";
-  const lines = words.map((t) => {
+  const lines = words.map((t, i) => {
+    const adverb = adverbOf(words, i);
+    if (adverb) {
+      const adj = t.readings![0].entry as AdjEntry;
+      return `- «${t.text}»: the adverb ${adverb}, from ${adj.lemma} (${adj.en}): says how something is done or is`;
+    }
     // only the present and the infinitive (all the people write); calling someone only for a name
     const all = t.readings ?? [];
     const rs = all.filter((r) => {

@@ -505,10 +505,10 @@ function wordTip(text: string, index: number, lex: ReturnType<typeof chatWords>[
 }
 
 /** Hovering a word with a mouse: a small card above it with its meaning and form (a tap still opens the word card). */
-function WordTip({ tip }: { tip: { note: TipNote; x: number; y: number; below: boolean } }) {
+function WordTip({ tip }: { tip: { note: TipNote; x: number; y: number; below: boolean; dx: number } }) {
   const { note } = tip;
   return (
-    <div class={`word-tip${tip.below ? " below" : ""}${note.fresh ? " fresh" : ""}`} style={{ left: `${tip.x}px`, top: `${tip.y}px` }} role="tooltip">
+    <div class={`word-tip${tip.below ? " below" : ""}${note.fresh ? " fresh" : ""}`} style={{ left: `${tip.x}px`, top: `${tip.y}px`, "--dx": `${tip.dx}px` }} role="tooltip">
       <span class="word-tip-la" lang="la">{note.word}</span>
       <span class="word-tip-en">{note.en}</span>
       {note.form && (
@@ -627,7 +627,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
   useEffect(() => {
     if (card) list.current?.querySelector(".word-card")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [card?.msg, card?.index]);
-  const [tip, setTip] = useState<{ note: TipNote; x: number; y: number; below: boolean } | null>(null);
+  const [tip, setTip] = useState<{ note: TipNote; x: number; y: number; below: boolean; dx: number } | null>(null);
   const hovered = useRef<HTMLElement | null>(null);
   // reading further up: the messages there were then (the ↓ button counts what has come since), or null at the newest message
   const [away, setAway] = useState<Set<string> | null>(null);
@@ -668,7 +668,10 @@ function ChatView({ id, now }: { id: string; now: number }) {
     const r = w.getBoundingClientRect();
     // near the top of the messages there is no room above it: the card goes below the word
     const below = r.top - (list.current?.getBoundingClientRect().top ?? 0) < 100;
-    setTip({ note, x: Math.min(Math.max(r.left + r.width / 2, 140), window.innerWidth - 140), y: below ? r.bottom + 8 : r.top - 8, below });
+    // kept inside the window; its point still at the word
+    const cx = r.left + r.width / 2;
+    const x = Math.min(Math.max(cx, 140), window.innerWidth - 140);
+    setTip({ note, x, y: below ? r.bottom + 8 : r.top - 8, below, dx: cx - x });
   };
 
   // the find bar takes the typing at once

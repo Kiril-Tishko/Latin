@@ -1979,7 +1979,7 @@ main.page.msgr-page { padding-block: 14px; }
 /* A word under the mouse in a chat: a small card above it, with what it means and what form it is */
 .word-tip { position: fixed; z-index: 60; transform: translate(-50%, -100%); display: grid; gap: 1px; min-width: 120px; max-width: 260px; padding: 7px 12px 8px; background: var(--m-panel, var(--panel)); color: var(--ink); border: 1px solid var(--gold-soft); border-radius: 6px; box-shadow: 0 10px 24px -14px rgba(40, 25, 10, 0.6); text-align: center; pointer-events: none; animation: tip-in 0.12s ease-out; }
 .word-tip.below { transform: translate(-50%, 0); }
-.word-tip::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; background: inherit; border: 1px solid var(--gold-soft); border-top: 0; border-left: 0; transform: translateX(-50%) rotate(45deg); }
+.word-tip::after { content: ""; position: absolute; left: calc(50% + var(--dx, 0px)); bottom: -6px; width: 10px; height: 10px; background: inherit; border: 1px solid var(--gold-soft); border-top: 0; border-left: 0; transform: translateX(-50%) rotate(45deg); }
 .word-tip.below::after { bottom: auto; top: -6px; transform: translateX(-50%) rotate(225deg); }
 .word-tip-la { font-family: var(--f-display); font-size: 1.05rem; letter-spacing: 0.04em; color: var(--gold); }
 .word-tip-en { font-family: var(--f-ui); font-size: 0.95rem; font-weight: 600; }

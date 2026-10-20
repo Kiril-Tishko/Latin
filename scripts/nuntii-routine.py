@@ -651,15 +651,23 @@ def make_picture(prompt, tries=2):
     return None
 
 
+def new_pic_id():
+    """a fresh picture's id, as the page makes them ("p" + the time in base 36 + three letters): never one already used"""
+    return "p" + b36(int(time.time() * 1000)) + "".join(random.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(3))
+
+
 def picture(pid, by, prompt, out, d=None):
-    """A fresh picture someone sends now: the whole messenger/pics document, written to OUT (with DIR, the people in it as they look)."""
+    """A fresh picture someone sends now: the whole messenger/pics document, written to OUT (with DIR, the people in it as they look).
+    PID "new": the helper picks the id, and prints it."""
+    if pid in ("new", "auto", ""):
+        pid = new_pic_id()
     res = make_picture(with_looks(prompt, by, docs(d)[1]) if d else prompt)
     doc = {"id": pid, "by": by, "en": prompt, "prompt": prompt, "at": int(time.time() * 1000), "status": "done" if res else "failed"}
     if res:
         doc["type"], doc["b64"] = res
     with open(out, "w") as f:
         json.dump(doc, f)
-    print("OK" if res else "FAILED: send the message without a picture (or a photo from the list)")
+    print(f"OK {pid}" if res else "FAILED: send the message without a picture (or a photo from the list)")
 
 
 def pictures(wanted_path, outdir):

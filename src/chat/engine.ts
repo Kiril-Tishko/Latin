@@ -176,8 +176,9 @@ export async function vetAll<T extends Draft>(drafts: T[], ctx: PromptCtx, deps:
     }
   }
   for (const d of out) {
-    const v = vetMessage(d.la, deps.lex, ctx.seen);
-    if (v.unknown.length) d.newWords = v.unknown;
+    // each new word once («Ignosce, ignosce»), and not one the learner has just written themselves
+    const fresh = [...new Map(vetMessage(d.la, deps.lex, ctx.seen).unknown.filter((w) => !echoed(w)).map((w) => [plainWord(w), w])).values()];
+    if (fresh.length) d.newWords = fresh;
   }
   return out;
 }

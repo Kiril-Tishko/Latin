@@ -136,6 +136,15 @@ describe("echoing the learner", () => {
     expect(prompt).toContain("a word it does not know may well be correct Latin the learner learned elsewhere");
     expect(prompt).toContain("A word the learner wrote themselves may be written back to them in the same form");
   });
+
+  it("does not mark the learner's own word as new to them, nor a new word twice", async () => {
+    const ask = async <T,>(): Promise<T> => ({ messages: [{ from: "iulia", la: "Ignosce, ignosce… 🙄", en: "Sorry, sorry… 🙄" }, { from: "iulia", la: "Basium? Basium!", en: "A kiss? A kiss!", gloss: { basium: "a kiss" } }] }) as T;
+    const t: Thread = { ...newThread("iulia", "dm"), messages: [{ id: "a", from: "me", la: "ignosce, ignosce. Laboro, laboro.", at: T }] };
+    const reply = await writeReply(t, meta, ctxAt(T), { ask, opts: {}, lex, r: seeded(1) }, timingFor([who("iulia")], T, seeded(1)));
+    expect(reply.messages[0].la).toBe("Ignosce, ignosce… 🙄");
+    expect(reply.messages[0].newWords).toBeUndefined();
+    expect(reply.messages[1].newWords).toEqual(["Basium"]);
+  });
 });
 
 describe("not everyone looks at the same minute", () => {

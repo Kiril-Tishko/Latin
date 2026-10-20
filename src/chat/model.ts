@@ -366,6 +366,9 @@ export function clip(s: string, n: number): string {
 
 export const msgId = () => `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
+/** A message arriving `ms` later: one taken back seconds after it is sent is taken back that much later too. */
+export const delayed = (m: Msg, ms: number): Msg => (ms ? { ...m, at: m.at + ms, ...(m.deletedAt ? { deletedAt: m.deletedAt + ms } : {}) } : m);
+
 /** Messages that have arrived by now. */
 export const arrived = (t: Thread, now: number) => t.messages.filter((m) => m.at <= now);
 

@@ -9,7 +9,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
-import { ACTA_ID, actaKey, actaPicture, boardOf, earlierBoards, writeActa } from "../chat/acta";
+import { ACTA_ID, actaKey, actaPicture, boardDue, boardMemories, boardOf, firstEditions, pastBoards, writeActa } from "../chat/acta";
 import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, picId, refreshLives, routineMinds, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
@@ -19,7 +19,7 @@ import { natureOf } from "../chat/nature";
 import { mergeTies } from "../chat/bond";
 import { mergeGoals } from "../chat/lives";
 import { deviceZone, hashRand } from "../chat/life";
-import { CoachTurn, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
+import { CoachTurn, delayed, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
 import { allowedWords, calendarEntry, chatEntries, chatLexicon, nameEntry } from "../chat/words";
 import { calendarBlock, calendarWords, romeDay } from "../chat/calendar";
@@ -171,7 +171,8 @@ function merge(a: T | undefined, b: T): T {
   if (!a) return b;
   const dropped = [...new Set([...(a.dropped ?? []), ...(b.dropped ?? [])])].slice(-200);
   const byId = new Map<string, Msg>();
-  for (const m of [...a.messages, ...b.messages]) {
+  // (one day's board written twice, on two devices at once: the edition that came out first stays, whole)
+  for (const m of b.id === ACTA_ID ? firstEditions([...a.messages, ...b.messages]) : [...a.messages, ...b.messages]) {
     const had = byId.get(m.id);
     // the copy with more news wins (a read time, a check)
     // deleted: the earlier moment of the two (none when neither copy was deleted)
@@ -214,29 +215,38 @@ function queueWrite(key: string, write: () => Promise<void>) {
   })();
 }
 
+/**
+ * Writes made before the account's copy has come in (this browser's copy may
+ * be days old, and a write replaces the whole document): they wait, and go up
+ * merged with the account's once it is in ("t:<chat>", "k:<mind>", "meta").
+ */
+const held = new Set<string>();
+
 function saveThread(t: T) {
   t.updatedAt = Date.now();
   threads[t.id] = t;
   saveLocal();
   emit();
-  if (store) {
-    const s = store;
-    queueWrite(`t:${t.id}`, () => s.threads.doc(t.id).set(toBody({ ...threads[t.id], messages: threads[t.id].messages.slice(-MAX_MESSAGES) })));
-  }
+  if (!store) return;
+  if (!gotChats) return void held.add(`t:${t.id}`);
+  const s = store;
+  queueWrite(`t:${t.id}`, () => s.threads.doc(t.id).set(toBody({ ...threads[t.id], messages: threads[t.id].messages.slice(-MAX_MESSAGES) })));
 }
 
 function saveMind(m: Mind) {
   minds[m.id] = m;
   saveLocal();
-  if (store) {
-    const s = store;
-    queueWrite(`k:${m.id}`, () => s.minds.doc(m.id).set(toBody(minds[m.id])));
-  }
+  if (!store) return;
+  if (!gotMinds) return void held.add(`k:${m.id}`);
+  const s = store;
+  queueWrite(`k:${m.id}`, () => s.minds.doc(m.id).set(toBody(minds[m.id])));
 }
 
-/** Messages that never reached the learner: what came with them is forgotten. */
-function unsaid(ids: string[], now = Date.now()) {
-  if (ids.length) for (const m of forgetWith(minds, ids, now)) saveMind(m);
+/** Messages that never reached the learner: what came with them is forgotten, and their pictures and recordings not made yet are not made. */
+function unsaid(msgs: Msg[], now = Date.now()) {
+  if (!msgs.length) return;
+  for (const m of forgetWith(minds, msgs.map((x) => x.id), now)) saveMind(m);
+  for (const id of msgs.flatMap((m) => (m.from === "me" ? [] : [m.pic, m.rec]))) if (id) void unwant(id);
 }
 
 /** Keeps what a conversation or a stretch of their lives did to the people's minds. */
@@ -247,14 +257,27 @@ function remember(change: Parameters<typeof applyMinds>[1], now: number) {
 function saveMeta() {
   saveLocal();
   emit();
-  if (store) {
-    const s = store;
-    queueWrite("meta", () => s.meta.set(toBody(meta)));
+  if (!store) return;
+  if (!gotMetaIn) return void held.add("meta");
+  const s = store;
+  queueWrite("meta", () => s.meta.set(toBody(meta)));
+}
+
+/** The writes that waited for the account's copy, now that it is in (merged with it). */
+function flushHeld() {
+  for (const key of [...held]) {
+    const id = key.slice(2);
+    if (key === "meta" ? !gotMetaIn : key.startsWith("t:") ? !gotChats : !gotMinds) continue;
+    held.delete(key);
+    if (key === "meta") saveMeta();
+    else if (key.startsWith("t:") && threads[id]) saveThread(threads[id]);
+    else if (key.startsWith("k:") && minds[id]) saveMind(minds[id]);
   }
 }
 
 let connected = false;
 let gotChats = false;
+let gotMetaIn = false;
 let gotMinds = false;
 let movedIn = false;
 /** Once the account's chats and minds are in: the old facts and moments move into the minds (once; ids are steady, so two devices make one memory). */
@@ -267,20 +290,25 @@ function moveIn() {
 /** Chats tidied of what was written beyond the people's pace, this page load. */
 const tidied = new Set<string>();
 let gotThreads: () => void = () => undefined;
-/** Resolves once the account's chats have come in (or there is no account to wait for). */
-const threadsReady = new Promise<void>((resolve) => (gotThreads = resolve));
+let gotMetaDoc: () => void = () => undefined;
+/** Resolves once the account's chats and its meta have come in (or there is no account to wait for). */
+const accountReady = Promise.all([new Promise<void>((resolve) => (gotThreads = resolve)), new Promise<void>((resolve) => (gotMetaDoc = resolve))]);
 
 /** Connects to the account store (once per page load) and follows the messenger live. */
 export async function connectMessenger() {
   if (connected) return;
   connected = true;
   const s = await messengerStore();
-  if (!s) return gotThreads();
+  if (!s) return void (gotThreads(), gotMetaDoc());
   store = s;
   try {
     follow(s);
   } catch {
-    // a store that cannot follow live: this browser's copy still works
+    // a store that cannot follow live: this browser's copy still works (and is written as it is)
+    gotChats = gotMetaIn = gotMinds = true;
+    gotThreads();
+    gotMetaDoc();
+    flushHeld();
   }
   // the phone routine's brief, once the account is reachable
   void writeBrief();
@@ -289,9 +317,13 @@ export async function connectMessenger() {
 function follow(s: NonNullable<typeof store>) {
   s.meta.onSnapshot(
     (snap) => {
+      gotMetaDoc();
       const remote = snap.exists ? (snap.data() as Partial<Meta>) : null;
+      gotMetaIn = true;
       if (!remote) {
+        held.delete("meta");
         if (meta.seenAt || Object.keys(meta.strangers).length) saveMeta();
+        tidy();
         return;
       }
       meta = {
@@ -309,15 +341,19 @@ function follow(s: NonNullable<typeof store>) {
         // what they want from life: each goal the newer
         goals: mergeGoals(meta.goals, remote.goals),
       };
+      // what changed here before it came in goes up now, merged
+      flushHeld();
+      tidy();
       saveLocal();
       emit();
     },
-    () => undefined,
+    () => ((gotMetaIn = true), gotMetaDoc(), flushHeld(), tidy()),
   );
   let first = true;
   s.threads.onSnapshot(
     (snap) => {
       gotThreads();
+      gotChats = true;
       const seen = new Set<string>();
       for (const d of snap.docs) {
         const body = d.data() as T | undefined;
@@ -331,20 +367,13 @@ function follow(s: NonNullable<typeof store>) {
       }
       if (first) for (const t of Object.values(threads)) if (!seen.has(t.id) && t.messages.length) saveThread(t);
       first = false;
-      gotChats = true;
+      flushHeld();
       moveIn();
-      // once per page: what the people wrote beyond their pace, not seen yet, goes (like real people, they would have waited)
-      for (const t of Object.values(threads)) {
-        if (tidied.has(t.id) || t.kind === "channel") continue;
-        tidied.add(t.id);
-        const drop = overPace(t, meta, isGroupId(t.id, meta), (id) => natureOf(id, meta)?.burst ?? 4);
-        if (drop.length) saveThread({ ...t, messages: t.messages.filter((m) => !drop.includes(m.id)), dropped: [...(t.dropped ?? []), ...drop].slice(-400) });
-        unsaid(drop);
-      }
+      tidy();
       saveLocal();
       emit();
     },
-    () => undefined,
+    () => ((gotChats = true), gotThreads(), flushHeld()),
   );
   // each person's mind, followed live (every device and the phone routine's brief see the same memories)
   s.minds.onSnapshot(
@@ -355,12 +384,14 @@ function follow(s: NonNullable<typeof store>) {
         minds[d.id] = mergeMinds(minds[d.id], { ...body, id: d.id })!;
       }
       gotMinds = true;
+      flushHeld();
       saveLocal();
       emit();
       moveIn();
     },
     () => {
       gotMinds = true;
+      flushHeld();
       moveIn();
     },
   );
@@ -375,6 +406,24 @@ function follow(s: NonNullable<typeof store>) {
     },
     () => undefined,
   );
+}
+
+/**
+ * Once per page, for each chat: what the people wrote beyond their pace, not
+ * seen yet, goes (like real people, they would have waited). Only once the
+ * account's chats and meta are both in: with this browser's old copy of the
+ * meta (a stranger not met here yet, a group not known, feelings that make
+ * someone write more), their pace would be judged wrong.
+ */
+function tidy() {
+  if (!gotChats || !gotMetaIn) return;
+  for (const t of Object.values(threads)) {
+    if (tidied.has(t.id) || t.kind === "channel") continue;
+    tidied.add(t.id);
+    const drop = overPace(t, meta, isGroupId(t.id, meta), (id) => natureOf(id, meta)?.burst ?? 4);
+    if (drop.length) saveThread({ ...t, messages: t.messages.filter((m) => !drop.includes(m.id)), dropped: [...(t.dropped ?? []), ...drop].slice(-400) });
+    unsaid(t.messages.filter((m) => drop.includes(m.id)));
+  }
 }
 
 function takeFromInbox(d: DocSnap) {
@@ -492,7 +541,7 @@ export function send(id: string, text: string, re?: string, extra: Partial<Pick<
     dropped: [...(t.dropped ?? []), ...waiting].slice(-200),
     readAt: now,
   });
-  unsaid(waiting, now);
+  unsaid(t.messages.filter((m) => waiting.includes(m.id)), now);
   clearTimeout(pending.get(id));
   pending.set(id, setTimeout(() => void answer(id), 2500));
   // the phone routine leaves the learner alone while they are chatting
@@ -549,7 +598,8 @@ export async function answer(id: string) {
     // Claude took a while: nothing arrives before it is written, and the first one is typed in front of the learner
     const first = reply.messages[0];
     const shift = first ? Math.max(0, now + 400 - (first.at - typingMs(first))) : 0;
-    const messages = recorded(reply.messages.map((m) => ({ ...m, at: m.at + shift })));
+    // (one they take back is taken back as long after it arrives as they meant)
+    const messages = recorded(reply.messages.map((m) => delayed(m, shift)));
     // their reactions to the learner's last message, each a moment after they read it
     const reacted = t.messages.map((m) => {
       const mine = reply.reactions.filter((x) => x.msg === m.id);
@@ -624,6 +674,8 @@ export async function opened() {
   }
   void writeBrief();
   void ensureActa();
+  // the account's chats and meta first (another device may have let them write a moment ago)
+  await accountReady;
   if (now - meta.plannedAt < PLAN_EVERY) return;
   const ctx = promptCtx(now);
   if (!ctx) return;
@@ -755,10 +807,12 @@ export function ensureActa(force = false): Promise<void> {
 }
 
 async function writeTodaysBoard(force: boolean): Promise<void> {
-  await Promise.race([threadsReady, new Promise((r) => setTimeout(r, 6000))]);
+  // the account's chats and meta first: a board another device wrote, or is writing, is not written again
+  await accountReady;
   const now = Date.now();
   const today = actaKey(now);
-  if (boardOf(getThread(ACTA_ID), today).length) return;
+  // one a day, and not soon after the last one (a board late in the evening is not followed by the next day's at once)
+  if (!boardDue(getThread(ACTA_ID), now)) return;
   // asked for a moment ago (another device, or before a reload): wait for it, but let the learner ask again
   if (!force && meta.actaAt && now - meta.actaAt < 15 * 60_000) {
     actaError = "The scribe started on today's board a moment ago.";
@@ -780,7 +834,7 @@ async function writeTodaysBoard(force: boolean): Promise<void> {
   saveMeta();
   emit();
   try {
-    const written = await writeActa(meta, ctx, d, earlierBoards(getThread(ACTA_ID), now));
+    const written = await writeActa(meta, ctx, d, pastBoards(getThread(ACTA_ID), now));
     if (!written.length) throw new Error("empty");
     // another device's board came in meanwhile: the first one stays
     if (boardOf(getThread(ACTA_ID), today).length) return;
@@ -790,7 +844,9 @@ async function writeTodaysBoard(force: boolean): Promise<void> {
     const t = getThread(ACTA_ID);
     saveThread(merge(t, { ...t, messages: [...t.messages, ...posts] }));
     // the picture of the day, made like the people's pictures
-    makePictures(posts.map((m) => actaPicture(m, at)).filter((p): p is Pic => !!p));
+    makePictures(posts.map((m) => actaPicture(m, at, meta)).filter((p): p is Pic => !!p));
+    // what it told of the friends, they hear in the neighbourhood
+    remember({ memories: boardMemories(posts, meta) }, at);
   } catch (e) {
     actaError = (e as Error)?.message === "empty" ? "The scribe wrote nothing today." : errorText(e);
   } finally {
@@ -957,6 +1013,11 @@ function madeToday(now: number): number {
 const picCache = new Map<string, Pic>();
 const picFollow = new Map<string, () => void>();
 const picLoading = new Set<string>();
+/** Pictures whose document could not be read, and when (tried again a minute later, not on every redraw). */
+const picFailed = new Map<string, number>();
+/** A picture still wanted after a day is given up on: the routine that should have made it never did. */
+const GIVE_UP = 86400_000;
+export const picGivenUp = (p: Pic | undefined, now = Date.now()) => p?.status === "wanted" && now - p.at > GIVE_UP;
 /** The learner's photos sent from this browser, as files (for Claude to look at). */
 const blobs = new Map<string, Blob>();
 
@@ -968,15 +1029,16 @@ export function picOf(id: string): Pic | undefined {
 
 /** Loads a picture's document; one still being made is followed until it is done. */
 async function loadPic(id: string) {
-  if (picCache.get(id)?.status === "done" || picLoading.has(id) || picFollow.has(id) || !store) return;
+  if (picCache.get(id)?.status === "done" || picLoading.has(id) || picFollow.has(id) || !store || Date.now() - (picFailed.get(id) ?? 0) < 60_000) return;
   picLoading.add(id);
   const ref = store.pics.doc(id);
   try {
     const snap = await ref.get?.();
     const p = snap?.exists ? (snap.data() as unknown as Pic) : undefined;
     if (p) picCache.set(id, { ...p, id });
-    // still waiting after a quarter of an hour: the run that should have made it did not; ask again
-    if (p?.status === "wanted" && Date.now() - p.at > 15 * 60_000) void firePictures([id]);
+    // still waiting after a quarter of an hour: the run that should have made it did not; ask again (not for one given up on)
+    if (p?.status === "wanted" && Date.now() - p.at > 15 * 60_000 && !picGivenUp(p)) void firePictures([id]);
+    if (!p && !ref.onSnapshot) picFailed.set(id, Date.now());
     if ((!p || p.status === "wanted") && ref.onSnapshot) {
       picFollow.set(
         id,
@@ -996,7 +1058,8 @@ async function loadPic(id: string) {
       );
     }
   } catch {
-    /* it shows as a picture that did not load */
+    // it shows as a picture that did not load (for a minute: then it is tried again)
+    picFailed.set(id, Date.now());
   } finally {
     picLoading.delete(id);
     emit();
@@ -1018,6 +1081,16 @@ function savePic(p: Pic) {
 function updatePic(id: string, patch: Partial<Pic>) {
   const p = picCache.get(id);
   if (p) savePic({ ...p, ...patch });
+}
+
+/** A picture or recording no longer wanted (its message never arrives): if it is not made yet, it is not made. */
+async function unwant(id: string) {
+  const got = async () => {
+    const snap = await store?.pics.doc(id).get?.();
+    return snap?.exists ? { ...(snap.data() as unknown as Pic), id } : undefined;
+  };
+  const p = picCache.get(id) ?? (await got().catch(() => undefined));
+  if (p?.status === "wanted") savePic({ ...p, status: "failed" });
 }
 
 /**

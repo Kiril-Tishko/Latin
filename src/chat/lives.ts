@@ -232,11 +232,11 @@ export function applyHappen(meta: Meta, hs: Happen[], now: number): MemoryDraft[
   return out;
 }
 
-/** What the neighbours know of the people's lives now: their public happenings (for the others, and the Ācta). */
-export function publicNow(meta: Meta, now: number, ids: string[] = PEOPLE.map((p) => p.id)): string[] {
+/** What the neighbours know of the people's lives now: their public happenings (for the others, and the Ācta: `since`, only those begun after it). */
+export function publicNow(meta: Meta, now: number, ids: string[] = PEOPLE.map((p) => p.id), since = 0): string[] {
   return ids.flatMap((id) => {
     const l = meta.life[id];
-    return l?.event && l.public && (l.eventUntil ?? 0) > now ? [`${nameOf(id, meta)}: ${l.event}`] : [];
+    return l?.event && l.public && (l.eventUntil ?? 0) > now && (!since || (l.eventAt ?? 0) > since) ? [`${nameOf(id, meta)}: ${l.event}`] : [];
   });
 }
 

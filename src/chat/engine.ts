@@ -63,7 +63,9 @@ export function refreshLives(meta: Meta, ids: string[], now: number, r: Rand = M
   for (const id of ids) {
     const spec = specOf(id, meta);
     if (!spec) continue;
-    const { life, changed: c, started } = lifeNow(spec, meta.life[id], now, r, heavyOk(meta, id, now));
+    // (not what someone else is going through right now)
+    const taken = Object.entries(meta.life).flatMap(([who, l]) => (who !== id && l.event && (l.eventUntil ?? 0) > now ? [l.event] : []));
+    const { life, changed: c, started } = lifeNow(spec, meta.life[id], now, r, heavyOk(meta, id, now), taken);
     if (c) {
       meta.life[id] = life;
       changed = true;
@@ -181,8 +183,9 @@ export async function vetAll<T extends Draft>(drafts: T[], ctx: PromptCtx, deps:
     }
   }
   for (const d of out) {
-    const v = vetMessage(d.la, deps.lex, ctx.seen);
-    if (v.unknown.length) d.newWords = v.unknown;
+    // each new word once («Ignosce, ignosce»), and not one the learner has just written themselves
+    const fresh = [...new Map(vetMessage(d.la, deps.lex, ctx.seen).unknown.filter((w) => !echoed(w)).map((w) => [plainWord(w), w])).values()];
+    if (fresh.length) d.newWords = fresh;
   }
   return out;
 }

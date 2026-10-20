@@ -91,7 +91,9 @@ export function playRecorded(latin: string, rate = 1): Promise<boolean | null> {
   return Promise.all([loadPack(clip[0], ac), ok]).then(([buf, on]) => play(ac, buf, on, mine, Math.max(0, clip[1] / 1000 - 0.03), clip[2] / 1000 + 0.08, speed), () => null);
 }
 
+/** Voice messages decoded, the last few played (decoded audio takes a few hundred kilobytes a message). */
 const own = new Map<string, Promise<AudioBuffer>>();
+const OWN_KEPT = 8;
 
 /**
  * Plays a recording given as base64 (a person's voice message), as
@@ -105,11 +107,14 @@ export function playData(key: string, b64: string): Promise<boolean | null> {
   stopRecorded();
   const mine = generation;
   let buf = own.get(key);
+  // the newest played last; the oldest goes when there are too many
+  own.delete(key);
   if (!buf) {
     buf = decode(b64, ac);
-    own.set(key, buf);
     buf.catch(() => own.delete(key));
   }
+  own.set(key, buf);
+  for (const old of own.keys()) if (own.size > OWN_KEPT) own.delete(old);
   return Promise.all([buf, ok]).then(([b, on]) => play(ac, b, on, mine, 0, b.duration + 0.05, 1), () => null);
 }
 

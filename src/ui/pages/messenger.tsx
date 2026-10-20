@@ -58,6 +58,7 @@ import {
   leaveGroup,
   markRead,
   opened,
+  picGivenUp,
   picOf,
   picSrc,
   presence,
@@ -80,7 +81,7 @@ import { derived, getProgress, update, useProgress } from "../store";
 import { storage } from "../platform";
 import { WordModal } from "./words";
 import { knownWord, openAddWord } from "../addword";
-import { NO_CORRECTION } from "../keyboard";
+import { NO_CORRECTION, touchScreen } from "../keyboard";
 import { continueLearning } from "./train";
 
 // ---------------------------------------------------------------- pieces
@@ -511,10 +512,10 @@ function wordTip(text: string, index: number, lex: ReturnType<typeof chatWords>[
 }
 
 /** Hovering a word with a mouse: a small card above it with its meaning and form (a tap still opens the word card). */
-function WordTip({ tip }: { tip: { note: TipNote; x: number; y: number; below: boolean } }) {
+function WordTip({ tip }: { tip: { note: TipNote; x: number; y: number; below: boolean; dx: number } }) {
   const { note } = tip;
   return (
-    <div class={`word-tip${tip.below ? " below" : ""}${note.fresh ? " fresh" : ""}`} style={{ left: `${tip.x}px`, top: `${tip.y}px` }} role="tooltip">
+    <div class={`word-tip${tip.below ? " below" : ""}${note.fresh ? " fresh" : ""}`} style={{ left: `${tip.x}px`, top: `${tip.y}px`, "--dx": `${tip.dx}px` }} role="tooltip">
       <span class="word-tip-la" lang="la">{note.word}</span>
       <span class="word-tip-en">{note.en}</span>
       {note.form && (
@@ -526,9 +527,6 @@ function WordTip({ tip }: { tip: { note: TipNote; x: number; y: number; below: b
     </div>
   );
 }
-
-/** Whether this device has a mouse to hover with. */
-const canHover = () => typeof matchMedia === "function" && matchMedia("(hover: hover) and (pointer: fine)").matches;
 
 /** The word tapped in a text (its index among the words), as a card says it. */
 function tappedWord(text: string, index: number, lex: ReturnType<typeof chatWords>["lex"], gloss?: Record<string, string>): { word: string; text: string; entry?: Entry; add?: string } | null {
@@ -636,19 +634,31 @@ function ChatView({ id, now }: { id: string; now: number }) {
   useEffect(() => {
     if (card) list.current?.querySelector(".word-card")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [card?.msg, card?.index]);
-  const [tip, setTip] = useState<{ note: TipNote; x: number; y: number; below: boolean } | null>(null);
+  const [tip, setTip] = useState<{ note: TipNote; x: number; y: number; below: boolean; dx: number } | null>(null);
   const hovered = useRef<HTMLElement | null>(null);
+  // reading further up: the messages there were then (the ↓ button counts what has come since), or null at the newest message
+  const [away, setAway] = useState<Set<string> | null>(null);
   const onScroll = () => {
     const el = list.current;
-    if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (el) {
+      const below = el.scrollHeight - el.scrollTop - el.clientHeight;
+      atBottom.current = below < 80;
+      setAway((a) => (below > 300 ? a ?? new Set(shown.map((m) => m.id)) : below < 80 ? null : a));
+    }
     if (tip) {
       hovered.current = null;
       setTip(null);
     }
   };
-  /** A word under the mouse: its card above it (instead of the browser's plain tooltip). */
-  const onHover = (e: MouseEvent) => {
-    if (!canHover()) return;
+  /** Back to the newest message (the ↓ button). */
+  const toNewest = () => {
+    const el = list.current;
+    el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  };
+  const arrivedSince = away === null ? 0 : shown.filter((m) => m.from !== "me" && m.from !== SYS && !away.has(m.id)).length;
+  /** A word under the mouse: its card above it (instead of the browser's plain tooltip); not for a finger. */
+  const onHover = (e: PointerEvent) => {
+    if (e.pointerType !== "mouse") return;
     const w = (e.target as HTMLElement).closest<HTMLElement>(".bubble-text .w");
     const row = w?.closest<HTMLElement>(".bubble-row");
     const m = row && t.messages.find((x) => `msg-${x.id}` === row.id);
@@ -663,8 +673,12 @@ function ChatView({ id, now }: { id: string; now: number }) {
     const note = index >= 0 ? wordTip(m.la, index, lex, m.gloss) : null;
     if (!note) return setTip(null);
     const r = w.getBoundingClientRect();
-    const below = r.top < 110;
-    setTip({ note, x: Math.min(Math.max(r.left + r.width / 2, 140), window.innerWidth - 140), y: below ? r.bottom + 8 : r.top - 8, below });
+    // near the top of the messages there is no room above it: the card goes below the word
+    const below = r.top - (list.current?.getBoundingClientRect().top ?? 0) < 100;
+    // kept inside the window; its point still at the word
+    const cx = r.left + r.width / 2;
+    const x = Math.min(Math.max(cx, 140), window.innerWidth - 140);
+    setTip({ note, x, y: below ? r.bottom + 8 : r.top - 8, below, dx: cx - x });
   };
 
   // the find bar takes the typing at once
@@ -680,6 +694,9 @@ function ChatView({ id, now }: { id: string; now: number }) {
     if (top + 200 > el.scrollHeight - el.clientHeight) return;
     el.scrollTop = Math.max(0, top - 80);
     atBottom.current = false;
+    // the ↓ button counts the new messages below
+    const first = shown.findIndex((m) => m.id === firstUnread.current);
+    if (first >= 0) setAway(new Set(shown.slice(0, first).map((m) => m.id)));
   }, [id]);
   // find in this chat: the messages that match, the current one in view
   const q = plain((search ?? "").trim());
@@ -713,6 +730,8 @@ function ChatView({ id, now }: { id: string; now: number }) {
 
   /** A tap on a word shows what it is under the message; elsewhere on the message, its English. */
   const onBubble = (m: Msg, e: MouseEvent) => {
+    // (the small card under the mouse gives way to what the tap opens)
+    setTip(null);
     const w = (e.target as HTMLElement).closest<HTMLElement>(".w");
     const bubble = (e.currentTarget as HTMLElement) ?? null;
     if (w && bubble) {
@@ -819,7 +838,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
         </div>
       )}
 
-      <div class="chat-msgs" ref={list} onScroll={onScroll} onMouseOver={(e) => onHover(e as unknown as MouseEvent)} onMouseLeave={() => ((hovered.current = null), setTip(null))} data-ask="Messages">
+      <div class="chat-msgs" ref={list} onScroll={onScroll} onPointerOver={(e) => onHover(e as unknown as PointerEvent)} onPointerLeave={() => ((hovered.current = null), setTip(null))} data-ask="Messages">
         {tip && <WordTip tip={tip} />}
         <div class="chat-flow" ref={flow}>
           {who && shown.length === 0 && <Intro who={who} />}
@@ -879,7 +898,7 @@ function ChatView({ id, now }: { id: string; now: number }) {
                     {m.voice && (
                       <VoiceNote m={m} who={mine ? null : sender} open={voiceText.includes(m.id)} onText={() => setVoiceText(voiceText.includes(m.id) ? voiceText.filter((x) => x !== m.id) : [...voiceText, m.id])} />
                     )}
-                    {m.la && (!m.voice || voiceText.includes(m.id) || !audioReady()) && (
+                    {m.la && (!m.voice || voiceText.includes(m.id) || !playable(m)) && (
                       <span class="bubble-text">
                         <LatinText text={showEmoji(m.la)} lex={lex} />
                       </span>
@@ -959,6 +978,15 @@ function ChatView({ id, now }: { id: string; now: number }) {
             </div>
           )}
         </div>
+        {/* reading further up: ↓ back to the newest message, with what has come in since */}
+        {away !== null && (
+          <div class="chat-down-wrap">
+            <button class="chat-down" id="chat-down" onClick={toNewest} aria-label={arrivedSince ? `${arrivedSince} new: to the newest message` : "To the newest message"}>
+              <Icon.chevron />
+              {arrivedSince > 0 && <span class="unread-badge">{roman(arrivedSince)}</span>}
+            </button>
+          </div>
+        )}
       </div>
 
       {blockedByMe ? (
@@ -1188,24 +1216,42 @@ function waveform(id: string, n: number): number[] {
 
 /** How long a voice message lasts, about (seconds). */
 const voiceSeconds = (la: string, rate: number) => Math.max(1, Math.round((la.split(/\s+/).length * 0.55 + 0.6) / rate));
+/** "0:07", "1:12". */
+const minSec = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+/** A voice message's recording in the sender's own voice, once it is made. */
+function recordingOf(m: Msg) {
+  const rec = m.rec ? picOf(m.rec) : undefined;
+  return rec?.status === "done" && rec.b64 ? rec : undefined;
+}
+
+/** Can this voice message be played here: its recording, or the device's Latin voice? (If not, its words show at once.) */
+const playable = (m: Msg) => !!recordingOf(m) || audioReady();
 
 /**
  * A voice message: ▶ plays its recording in the sender's own voice
  * (chat/voices.ts), or, until that comes, the device's Latin voice in their
  * pitch and pace; Aa shows its words (tap them as in any message). With neither,
- * the words show at once.
+ * the words show at once. While it plays, the waveform fills and the time counts.
  */
 function VoiceNote({ m, who, open, onText }: { m: Msg; who: Who | null; open: boolean; onText: () => void }) {
   useVoices();
   const speaking = useSpeaking();
   const id = `voice-${m.id}`;
   const on = speaking === id;
-  const rec = m.rec ? picOf(m.rec) : undefined;
-  const recorded = rec?.status === "done" && rec.b64 ? rec.b64 : undefined;
-  const ready = !!recorded || audioReady();
+  const rec = recordingOf(m);
+  const ready = playable(m);
   const v = who ? voiceOf(who) : myVoice();
   const bars = useMemo(() => waveform(m.id, 26), [m.id]);
-  const secs = recorded && rec?.secs ? Math.max(1, Math.round(rec.secs)) : voiceSeconds(m.la, v.rate);
+  const secs = rec?.secs ? Math.max(1, Math.round(rec.secs)) : voiceSeconds(m.la, v.rate);
+  // the seconds played so far, while it plays
+  const [played, setPlayed] = useState(0);
+  useEffect(() => {
+    if (!on) return setPlayed(0);
+    const start = Date.now();
+    const timer = setInterval(() => setPlayed(Math.min(secs, (Date.now() - start) / 1000)), 250);
+    return () => clearInterval(timer);
+  }, [on]);
   return (
     <span class={`voice-note${on ? " playing" : ""}`}>
       {ready ? (
@@ -1215,7 +1261,7 @@ function VoiceNote({ m, who, open, onText }: { m: Msg; who: Who | null; open: bo
           onClick={(e) => {
             e.stopPropagation();
             if (on) stopSpeaking();
-            else if (recorded) void speakRecording(m.rec!, recorded, m.la, { id, g: v.g, pitch: v.pitch, rate: v.rate });
+            else if (rec) void speakRecording(m.rec!, rec.b64!, m.la, { id, g: v.g, pitch: v.pitch, rate: v.rate });
             else void speak(m.la, { id, g: v.g, pitch: v.pitch, rate: v.rate });
           }}
         >
@@ -1225,9 +1271,10 @@ function VoiceNote({ m, who, open, onText }: { m: Msg; who: Who | null; open: bo
         <span class="voice-play off" title="This device has no Spanish or Italian voice to play it: here are its words"><Icon.speaker /></span>
       )}
       <span class="voice-wave" aria-hidden="true">
-        {bars.map((h, i) => <i key={i} style={{ height: `${h}%`, animationDelay: `${(i % 7) * 0.09}s` }} />)}
+        {/* while it plays, each bar lights up when its moment comes */}
+        {bars.map((h, i) => <i key={i} style={{ height: `${h}%`, animationDelay: on ? `${(i % 7) * 0.09}s, ${((i / bars.length) * secs).toFixed(2)}s` : undefined }} />)}
       </span>
-      <span class="voice-time">0:{String(secs).padStart(2, "0")}</span>
+      <span class="voice-time">{minSec(on ? played : secs)}</span>
       {ready && (
         <button class="voice-text" aria-pressed={open} title={open ? "Hide the words" : "Show the words"} onClick={(e) => { e.stopPropagation(); onText(); }}>
           Aa
@@ -1274,8 +1321,8 @@ function PicInBubble({ m, onOpen }: { m: Msg; onOpen: () => void }) {
         <img src={src} alt={m.picEn ?? "a photo"} />
       </button>
     );
-  // still being made, or it never came: what it shows, in words
-  const failed = p?.status === "failed";
+  // still being made, or it never came (failed, or still not made after a day): what it shows, in words
+  const failed = p?.status === "failed" || picGivenUp(p);
   return (
     <span class={`bubble-photo pic-wait${failed ? " failed" : ""}`} role="img" aria-label={failed ? "A photo that did not come through" : "A photo, still coming"}>
       <span class="pic-wait-icon" aria-hidden="true">📷</span>
@@ -1290,7 +1337,7 @@ function ActaPicture({ m }: { m: Msg }) {
   const [big, setBig] = useState(false);
   const p = picOf(m.pic!);
   const src = picSrc(p);
-  if (p?.status === "failed") return null;
+  if (p?.status === "failed" || picGivenUp(p)) return null;
   return (
     <figure class="acta-pic">
       {src ? (
@@ -1680,7 +1727,8 @@ function Composer({ id, replyTo, onReplied }: { id: string; replyTo: Msg | null;
       }
       change(cur.slice(0, a) + s + cur.slice(b));
       requestAnimationFrame(() => {
-        el.focus();
+        // on a phone the keyboard stays down while the ＋ is open: a tap on an emoji does not bring it back up
+        if (!touchScreen()) el.focus();
         el.setSelectionRange(a + s.length, a + s.length);
       });
     } else change(`${cur.trimEnd()}${cur.trim() ? " " : ""}${s}`);

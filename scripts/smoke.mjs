@@ -872,6 +872,8 @@ async function messenger() {
     const follow = (path, n = 1000) => (next) => {
       let last = "";
       const tick = async () => {
+        // a slow account (window.__slowChats): the chats come in late
+        if (path.endsWith("/messenger/threads") && Date.now() < (window.__slowChats ?? 0)) return;
         const docs = await window.__dbList(path);
         const sig = JSON.stringify(docs);
         if (sig === last) return;
@@ -890,12 +892,13 @@ async function messenger() {
     const db = { doc: docRef, collection: colRef };
     window.claude = { use: async (n) => (n === "sample" ? sample : n === "db" ? db : n === "user" ? { id: async () => "u1" } : null) };
   };
-  const device = async (name, viewport, time = "2026-10-12T10:30:00Z") => {
+  const device = async (name, viewport, time = "2026-10-12T10:30:00Z", before) => {
     // a phone is a touch screen (Enter makes a new line there)
     const ctx = await browser.newContext({ viewport, ...(viewport.width < 500 ? { isMobile: true, hasTouch: true } : {}) });
     await ctx.clock.install({ time: new Date(time) });
     await seed(ctx);
     await ctx.addInitScript(runtime);
+    if (before) await ctx.addInitScript(before.fn, before.arg);
     const p = await ctx.newPage();
     p.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
     p.on("console", (m) => m.type() === "error" && !/fonts\.g/.test(m.text()) && errors.push(`${name} console: ${m.text()}`));
@@ -1118,10 +1121,35 @@ async function messenger() {
   await other.p.locator("#composer").blur();
   await other.p.waitForTimeout(150);
   await other.p.screenshot({ path: `${out}/messenger-phone-chat.png` });
+  // on a phone an emoji from the ＋ goes in without bringing the keyboard back up
+  await other.p.click(".plus-btn");
+  await other.p.locator(".emoji-pop .emoji-btn").first().click();
+  await other.p.waitForTimeout(100);
+  if ((await other.p.evaluate(() => document.activeElement?.id)) === "composer") errors.push("messenger: on a phone an emoji from the ＋ brings the keyboard back up");
+  if (!(await other.p.inputValue("#composer"))) errors.push("messenger: on a phone the ＋ does not add an emoji");
+  await other.p.click(".plus-btn");
+  await other.p.fill("#composer", "");
+  await other.p.locator("#composer").blur();
   await other.p.click(".chat-back");
   await other.p.screenshot({ path: `${out}/messenger-phone-list.png` });
   await other.ctx.close();
   await ctx.close();
+  // a device whose copy of Iūlia's chat is old, whose chats come in late, while a message of the phone
+  // routine waits in the inbox: what the account had is not overwritten (the write waits, then goes up merged)
+  const chat = shared.get("data/users/u1/messenger/threads/iulia");
+  const old = { meta: shared.get("data/users/u1/messenger"), threads: { iulia: { ...chat, messages: chat.messages.slice(0, 1) } } };
+  shared.set("data/users/u1/messenger/inbox/r9", { chat: "iulia", from: "iulia", la: "Ubi es?", en: "Where are you?", at: Date.parse("2026-10-12T11:50:00Z") });
+  const late = await device("messenger-late", { width: 1280, height: 860 }, "2026-10-12T12:00:00Z", {
+    fn: (data) => {
+      window.__slowChats = Date.now() + 2000;
+      if (!localStorage.getItem("tabula-latina-messenger-v1")) localStorage.setItem("tabula-latina-messenger-v1", data);
+    },
+    arg: JSON.stringify(old),
+  });
+  await late.p.waitForTimeout(3500);
+  const kept = shared.get("data/users/u1/messenger/threads/iulia").messages.map((m) => m.id);
+  if (chat.messages.some((m) => !kept.includes(m.id)) || !kept.includes("r9")) errors.push(`messenger: a device with an old copy overwrote the account's chat (${chat.messages.length} messages, now ${kept.length})`);
+  await late.ctx.close();
 
   // The Sibyl's leaf: after a while on the page a leaf blows past; caught, it is read and kept in her book in the
   // chat list, and when a friend tells of what it foretold, the message has a leaf and the book says it came true.

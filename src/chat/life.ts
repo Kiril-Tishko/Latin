@@ -299,10 +299,11 @@ function rollLevel(r: Rand, swing: number): Life["level"] {
  * within it); when nothing is going on, something new may start, or not. What
  * comes after a heavy happening always comes (its consequences); a heavy one
  * starts only when `heavyOk` (the world has been calm: chat/lives.ts), and
- * their own heavy ones come seldom even then. `started`: a happening that has
- * just begun.
+ * their own heavy ones come seldom even then. `taken`: what others are going
+ * through right now (two friends do not lose something important at the same
+ * moment). `started`: a happening that has just begun.
  */
-export function lifeNow(spec: LifeSpec, prev: Life | undefined, now: number, r: Rand = Math.random, heavyOk = true): { life: Life; changed: boolean; started?: Happening } {
+export function lifeNow(spec: LifeSpec, prev: Life | undefined, now: number, r: Rand = Math.random, heavyOk = true, taken: string[] = []): { life: Life; changed: boolean; started?: Happening } {
   const eventGoes = !!prev?.event && (prev.eventUntil ?? 0) > now;
   if (prev && prev.moodUntil > now && (eventGoes || !prev.event)) return { life: prev, changed: false };
   const recent = prev?.recent ?? [];
@@ -314,8 +315,9 @@ export function lifeNow(spec: LifeSpec, prev: Life | undefined, now: number, r: 
     let pool = x < 0.66 && spec.happenings.length ? spec.happenings : x < 0.84 ? COMMON_HAPPENINGS : x < 0.97 ? ODD_HAPPENINGS : HEAVY_HAPPENINGS;
     const light = pool.filter((p) => !p.heavy);
     if (!heavyOk || (pool === spec.happenings && r() > 0.12)) pool = light.length ? light : COMMON_HAPPENINGS;
-    const fresh = pool.filter((p) => !recent.includes(p.en));
-    h = pick(r, fresh.length ? fresh : pool);
+    const free = pool.filter((p) => !taken.includes(p.en));
+    const fresh = free.filter((p) => !recent.includes(p.en));
+    h = pick(r, fresh.length ? fresh : free.length ? free : pool);
   }
   const going = eventGoes ? prev! : undefined;
   // a happening's mood: when it begins, and most of the time while it lasts (a late ship keeps her anxious)

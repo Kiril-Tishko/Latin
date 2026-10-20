@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { makeBrief } from "../src/chat/brief";
 import { applyFeelings, meetFromStory, meetStranger, refreshLives, writeOwn, writeReply } from "../src/chat/engine";
 import { COMMON_HAPPENINGS, lifeNow, localTime, replyTiming, statusAt } from "../src/chat/life";
-import { deletedNow, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Msg, newMeta, newThread, preview, reactionsOf, silentNow, SYS, Thread, voiceOf } from "../src/chat/model";
+import { delayed, deletedNow, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Msg, newMeta, newThread, preview, reactionsOf, silentNow, SYS, Thread, voiceOf } from "../src/chat/model";
 import { applyDeeds, deedsOf, welcome } from "../src/chat/world";
 import { applyMinds } from "../src/chat/mind";
 import { adYear, birthdaysNear, calendarBlock, calendarWords, festivalsNear, romanDate, todayLine } from "../src/chat/calendar";
@@ -169,6 +169,22 @@ describe("random lives", () => {
     }
     // nothing changes before it is time
     expect(lifeNow(spec, life, life.moodUntil - 1, r).changed).toBe(false);
+  });
+
+  it("do not give two people the same everyday happening at the same moment", () => {
+    // all but one of the everyday happenings are someone else's right now
+    const taken = COMMON_HAPPENINGS.slice(1).map((h) => h.en);
+    const r = seeded(9);
+    const lives = Array.from({ length: 300 }, (_, i) => lifeNow({ moods: [["calm", 1]], swing: 0.3, happenings: [] }, undefined, i, r, true, taken).life);
+    expect(lives.some((l) => l.event === COMMON_HAPPENINGS[0].en)).toBe(true);
+    expect(lives.filter((l) => l.event && taken.includes(l.event))).toEqual([]);
+    // as the page rolls them: Gāius does not lose something important while Claudia has
+    for (let i = 1; i <= 60; i++) {
+      const meta = newMeta();
+      meta.life.claudia = { mood: "worried", level: "", moodUntil: 5e6, event: COMMON_HAPPENINGS[0].en, eventUntil: 5e6, rolled: 0, recent: [] };
+      refreshLives(meta, ["gaius", "marcus", "lucius"], 1000, seeded(i));
+      for (const id of ["gaius", "marcus", "lucius"]) expect(meta.life[id].event).not.toBe(COMMON_HAPPENINGS[0].en);
+    }
   });
 
   it("make strangers truly different: names, places, tempers, quirks and faces", () => {
@@ -709,6 +725,12 @@ describe("people with freedom: what they do besides writing", () => {
     expect(r2.messages[0].newWords).toEqual(["Basium"]);
     expect(r2.messages[1].deletedAt).toBe(r2.messages[1].at + 5000);
     expect(preview(r2.messages[1], r2.messages[1].at + 6000)).toBe("🚫 Message deleted");
+    // Claude took a while, so the answer comes later than planned: it is still taken back five seconds after it arrives
+    const late = delayed(r2.messages[1], 40_000);
+    expect(late.at).toBe(r2.messages[1].at + 40_000);
+    expect(late.deletedAt).toBe(late.at + 5000);
+    expect(deletedNow(late, late.at + 1000)).toBe(false);
+    expect(delayed(r2.messages[0], 40_000).deletedAt).toBeUndefined();
     // blocked: whoever blocked the learner writes nothing to them in private, unless they unblock them now
     applyDeeds(meta, threads(), { acts: [{ who: "marcus", do: "block" }], dramas: [], newPeople: [], tells: [] }, at, GROUP.id);
     const own = async <T,>(): Promise<T> => ({ messages: [{ chat: "marcus", from: "marcus", la: "Salvē.", en: "Hi.", in: 1 }] }) as T;

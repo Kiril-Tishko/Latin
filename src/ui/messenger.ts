@@ -19,7 +19,7 @@ import { natureOf } from "../chat/nature";
 import { mergeTies } from "../chat/bond";
 import { mergeGoals } from "../chat/lives";
 import { deviceZone, hashRand } from "../chat/life";
-import { CoachTurn, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
+import { CoachTurn, delayed, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, isMuted, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Meta, Mine, Msg, msgId, newMeta, newThread, Pic, SYS, Thread, unreadCount, whoOf } from "../chat/model";
 import { coachPrompt, PromptCtx } from "../chat/prompts";
 import { allowedWords, calendarEntry, chatEntries, chatLexicon, nameEntry } from "../chat/words";
 import { calendarBlock, calendarWords, romeDay } from "../chat/calendar";
@@ -547,7 +547,8 @@ export async function answer(id: string) {
     // Claude took a while: nothing arrives before it is written, and the first one is typed in front of the learner
     const first = reply.messages[0];
     const shift = first ? Math.max(0, now + 400 - (first.at - typingMs(first))) : 0;
-    const messages = recorded(reply.messages.map((m) => ({ ...m, at: m.at + shift })));
+    // (one they take back is taken back as long after it arrives as they meant)
+    const messages = recorded(reply.messages.map((m) => delayed(m, shift)));
     // their reactions to the learner's last message, each a moment after they read it
     const reacted = t.messages.map((m) => {
       const mine = reply.reactions.filter((x) => x.msg === m.id);

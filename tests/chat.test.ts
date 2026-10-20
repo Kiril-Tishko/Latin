@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { makeBrief } from "../src/chat/brief";
 import { applyFeelings, meetFromStory, meetStranger, refreshLives, writeOwn, writeReply } from "../src/chat/engine";
 import { COMMON_HAPPENINGS, lifeNow, localTime, replyTiming, statusAt } from "../src/chat/life";
-import { deletedNow, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Msg, newMeta, newThread, preview, reactionsOf, silentNow, SYS, Thread, voiceOf } from "../src/chat/model";
+import { delayed, deletedNow, groupIds, groupMembers, groupName, iBlocked, isBlocked, isGroupId, membersOf, mergeBonds, mergeMine, mergeReactions, mergeWorld, Msg, newMeta, newThread, preview, reactionsOf, silentNow, SYS, Thread, voiceOf } from "../src/chat/model";
 import { applyDeeds, deedsOf, welcome } from "../src/chat/world";
 import { applyMinds } from "../src/chat/mind";
 import { adYear, birthdaysNear, calendarBlock, calendarWords, festivalsNear, romanDate, todayLine } from "../src/chat/calendar";
@@ -709,6 +709,12 @@ describe("people with freedom: what they do besides writing", () => {
     expect(r2.messages[0].newWords).toEqual(["Basium"]);
     expect(r2.messages[1].deletedAt).toBe(r2.messages[1].at + 5000);
     expect(preview(r2.messages[1], r2.messages[1].at + 6000)).toBe("🚫 Message deleted");
+    // Claude took a while, so the answer comes later than planned: it is still taken back five seconds after it arrives
+    const late = delayed(r2.messages[1], 40_000);
+    expect(late.at).toBe(r2.messages[1].at + 40_000);
+    expect(late.deletedAt).toBe(late.at + 5000);
+    expect(deletedNow(late, late.at + 1000)).toBe(false);
+    expect(delayed(r2.messages[0], 40_000).deletedAt).toBeUndefined();
     // blocked: whoever blocked the learner writes nothing to them in private, unless they unblock them now
     applyDeeds(meta, threads(), { acts: [{ who: "marcus", do: "block" }], dramas: [], newPeople: [], tells: [] }, at, GROUP.id);
     const own = async <T,>(): Promise<T> => ({ messages: [{ chat: "marcus", from: "marcus", la: "Salvē.", en: "Hi.", in: 1 }] }) as T;

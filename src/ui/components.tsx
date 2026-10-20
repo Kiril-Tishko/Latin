@@ -220,6 +220,13 @@ export function useSwipeAway(onGone: () => void, onTap?: () => void) {
 /** On a phone (a touch screen, no hover) Enter makes a new line and the button sends; with a keyboard, Enter sends. */
 export const enterSends = () => !touchScreen();
 
+/**
+ * A title with its endings kept whole: a line never breaks after the hyphen of
+ * "-us" ("-ī: of, for -" / "us words" on a phone). A word joiner holds the
+ * hyphen to its letters; screen.ts leaves it out of what Claude reads.
+ */
+export const joinEndings = (text: string) => text.replace(/(^|[\s(/])-(?=\p{L})/gu, "$1-\u2060");
+
 let showToastFn: ((t: string) => void) | null = null;
 export const toast = (t: string) => showToastFn?.(t);
 

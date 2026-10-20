@@ -6,7 +6,7 @@ import { roman } from "../../latin/text";
 import { PART_GOAL, partRight } from "../../trainer/path";
 import { Progress, streak, todayDone } from "../../trainer/progress";
 import { todayStep, TodayStep } from "../../trainer/today";
-import { Icon, Laurel, Mosaic } from "../components";
+import { Icon, joinEndings, Laurel, Mosaic } from "../components";
 import { LatinText } from "../latin";
 import { NextLesson } from "../next-lesson";
 import { actaUnread, todaysBoard, useMessenger } from "../messenger";
@@ -100,7 +100,7 @@ function RoundCard({ label, done, total }: { label: string; done: number; total:
   return (
     <>
       <span class="home-step ui">Your round · {done + 1} / {total}</span>
-      <h1 class="home-title">{label}</h1>
+      <h1 class="home-title">{joinEndings(label)}</h1>
       <p class="muted">Continue where you left off.</p>
     </>
   );
@@ -118,7 +118,7 @@ function StepCard({ step }: { step: TodayStep }) {
             Lesson {roman(step.part.lesson)} · {partName(step.part)}
             {step.kind === "learn" && <span class="chip home-new">new</span>}
           </span>
-          <h1 class="home-title">{step.part.title}</h1>
+          <h1 class="home-title">{joinEndings(step.part.title)}</h1>
           {step.kind === "practise" ? (
             <div class="row home-dots">
               <PartDots part={step.part} big />

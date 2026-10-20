@@ -1016,6 +1016,8 @@ html, .drawer-body, .modal > .panel, .table-wrap { scrollbar-width: thin; scroll
 .task-glyph { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--wax); color: var(--wax-ink); flex: none; }
 .task-glyph svg { width: 19px; height: 19px; }
 .task-line .task-text { font-family: var(--f-ui); font-weight: 700; font-size: clamp(1.02rem, 1.8vw, 1.22rem); letter-spacing: 0; text-transform: none; color: var(--ink); }
+/* a long task wraps beside its sign, never under it with the sign alone on its line */
+.task-line .task-text { max-width: calc(100% - 44px); }
 .task-dir { font-family: var(--f-ui); font-size: 0.8rem; font-weight: 600; color: var(--gold); border: 1px solid var(--gold-soft); border-radius: 999px; padding: 1px 10px; white-space: nowrap; }
 .task-line .ex-source { flex-basis: 100%; padding-left: 44px; font-family: var(--f-ui); font-size: 0.85rem; font-weight: 500; letter-spacing: 0; color: var(--ink-2); }
 .exercise.answered .task-line .task-text { font-size: 1rem; }
@@ -1880,6 +1882,8 @@ main.page.msgr-page { padding-block: 14px; }
 .lesson-block[open] > .lesson-head::after { transform: rotate(90deg); }
 .lesson-head .numeral { font-size: 1.5rem; min-width: 1.8em; }
 .lesson-head-title { font-family: var(--f-display); font-size: clamp(1.1rem, 2.2vw, 1.35rem); letter-spacing: 0.03em; flex: 1 1 auto; min-width: 0; }
+/* a long title wraps beside its numeral (as the short ones sit), not on a line of its own */
+.lesson-head-title { max-width: calc(100% - 2.7rem - 14px); }
 .lesson-head-state { color: var(--ink-2); }
 .lesson-head:hover .lesson-head-title { text-decoration: underline; text-decoration-color: var(--gold-soft); text-underline-offset: 4px; }
 .lesson-page-link { align-self: flex-end; color: var(--ink-2); }

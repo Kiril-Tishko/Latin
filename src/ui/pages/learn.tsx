@@ -10,7 +10,7 @@ import { roman } from "../../latin/text";
 import { currentPart, markSeen, meetsKeys, PART_GOAL, PART_PHASES, partProgress, partRight, partState } from "../../trainer/path";
 import { Progress } from "../../trainer/progress";
 import { checkUnderstanding, openAsk } from "../ask";
-import { Hedera, Icon, Laurel } from "../components";
+import { Hedera, Icon, joinEndings, Laurel } from "../components";
 import { fitToWindow } from "../fit";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
@@ -92,7 +92,7 @@ export function RuleList({ lesson }: { lesson: number }) {
           <button key={part.id} id={`rule-row-${part.id}`} role="listitem" class={`rule-row ${state}${here ? " current" : ""}`} onClick={() => go({ page: "learn", id: part.id })}>
             <span class="rule-row-id">{part.id}</span>
             <span class="rule-row-title">
-              {part.title}
+              {joinEndings(part.title)}
               {here && <span class="rule-row-now">{state === "new" ? "next to learn" : "you are here"}</span>}
             </span>
             <span class="rule-row-state">
@@ -311,7 +311,8 @@ function Question({ part, q, n, onNext, last, autoFocus }: { part: Part; q: Part
           </div>
           <div class="spread">
             {result.verdict === "partly" || result.verdict === "wrong" ? (
-              <button class="linkish" onClick={() => { setResult(null); setCompare(null); box.current?.focus(); }}>Try again</button>
+              // (the box is still disabled now: it takes the focus once it is open again)
+              <button class="linkish" onClick={() => { setResult(null); setCompare(null); setTimeout(() => box.current?.focus(), 0); }}>Try again</button>
             ) : (
               <span />
             )}
@@ -373,7 +374,7 @@ export function LearnPage({ id }: { id: string }) {
         <span class="eyebrow">
           Lectiō {roman(part.lesson)} · rule {part.id.split(".")[1]} of {partsOf(part.lesson).length}
         </span>
-        <h1 class="learn-title">{part.title}</h1>
+        <h1 class="learn-title">{joinEndings(part.title)}</h1>
         <div class="row learn-status">
           <PartsStrip lesson={part.lesson} here={part.id} />
           {state === "learned" && (
@@ -442,12 +443,12 @@ export function LearnPage({ id }: { id: string }) {
 
       <nav class="spread learn-nav" aria-label="Other rules">
         {prev ? (
-          <button class="linkish" onClick={() => go({ page: "learn", id: prev.id })}>← {partName(prev)}: {prev.title}</button>
+          <button class="linkish" onClick={() => go({ page: "learn", id: prev.id })}>← {partName(prev)}: {joinEndings(prev.title)}</button>
         ) : (
           <span />
         )}
         {next && (
-          <button class="linkish" onClick={() => go({ page: "learn", id: next.id })}>{partName(next)}: {next.title} →</button>
+          <button class="linkish" onClick={() => go({ page: "learn", id: next.id })}>{partName(next)}: {joinEndings(next.title)} →</button>
         )}
       </nav>
     </div>
@@ -467,7 +468,7 @@ export function PartRecap({ part, onStart }: { part: Part; onStart: () => void }
       <section class="panel frame rule-intro" ref={panel} data-ask={`${partName(part)}: reminder`}>
         <div class="stack rule-intro-head" style={{ gap: "4px" }}>
           <span class="eyebrow">{partName(part)} · a quick reminder</span>
-          <h2>{part.title}</h2>
+          <h2>{joinEndings(part.title)}</h2>
         </div>
         <div class="row recap-go">
           <button class="btn big" ref={start} onClick={onStart}>

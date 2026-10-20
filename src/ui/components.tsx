@@ -88,11 +88,24 @@ export function Modal({ onClose, children, label, wide, className = "", screen }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+  // with a keyboard, Tab and Enter work in the dialog, not behind it: the focus moves in (unless a
+  // field in it takes it) and goes back to where it was on close (a phone has no focus to keep)
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || touchScreen()) return;
+    const before = document.activeElement as HTMLElement | null;
+    if (!el.contains(before)) el.focus({ preventScroll: true });
+    return () => {
+      const now = document.activeElement;
+      if (before?.isConnected && (!now || now === document.body || el.contains(now))) before.focus({ preventScroll: true });
+    };
+  }, []);
   return (
     <>
       <div class="scrim" onClick={onClose} />
       <div class={`modal${wide ? " wide" : ""} ${className}`} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.target === e.currentTarget && onClose()}>
-        <div class="panel frame" data-ask={screen ?? label}>
+        <div class="panel frame" data-ask={screen ?? label} ref={box} tabIndex={-1}>
           {children}
         </div>
       </div>
@@ -219,6 +232,13 @@ export function useSwipeAway(onGone: () => void, onTap?: () => void) {
 
 /** On a phone (a touch screen, no hover) Enter makes a new line and the button sends; with a keyboard, Enter sends. */
 export const enterSends = () => !touchScreen();
+
+/**
+ * A title with its endings kept whole: a line never breaks after the hyphen of
+ * "-us" ("-ī: of, for -" / "us words" on a phone). A word joiner holds the
+ * hyphen to its letters; screen.ts leaves it out of what Claude reads.
+ */
+export const joinEndings = (text: string) => text.replace(/(^|[\s(/])-(?=\p{L})/gu, "$1-\u2060");
 
 let showToastFn: ((t: string) => void) | null = null;
 export const toast = (t: string) => showToastFn?.(t);

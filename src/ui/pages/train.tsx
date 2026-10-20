@@ -20,7 +20,7 @@ import { closingQuestion, openExercise } from "../../trainer/answers";
 import { freshQuestions, judgeOpen, withJudgement } from "../coach";
 import { linesSession } from "../../trainer/video";
 import { openAsk, judge } from "../ask";
-import { CaseChip, Icon, Laurel, toast } from "../components";
+import { CaseChip, Icon, joinEndings, Laurel, toast } from "../components";
 import { LatinText, LatinTokens } from "../latin";
 import { Inline, Markup } from "../markup";
 import { go } from "../nav";
@@ -620,7 +620,7 @@ function Runner({ s }: { s: Session }) {
   return (
     <div class="trainer">
       <div class="trainer-top">
-        <span class="eyebrow trainer-label">{modeLabel(s.mode)}</span>
+        <span class="eyebrow trainer-label">{joinEndings(modeLabel(s.mode))}</span>
         <span class="counter" title={`Exercise ${s.index + 1} of ${total}`}>
           <strong>{s.index + 1}</strong> / {total}
         </span>
@@ -1163,10 +1163,10 @@ function PartProgress({ s }: { s: Session }) {
       <div class="panel stack part-done" style={{ gap: "10px" }}>
         <div class="row">
           <Laurel cls="laurel-mini" />
-          <h3>{learned.map((x) => `${partName(x)} holds: ${x.title}`).join(" · ")}</h3>
+          <h3>{joinEndings(learned.map((x) => `${partName(x)} holds: ${x.title}`).join(" · "))}</h3>
         </div>
         <span class="small muted">It stays in your practice from now on, mixed with the next rules.</span>
-        {upcoming && <span class="small">Next: {partName(upcoming).toLowerCase()} · {upcoming.title}. Continue opens it.</span>}
+        {upcoming && <span class="small">Next: {partName(upcoming).toLowerCase()} · {joinEndings(upcoming.title)}. Continue opens it.</span>}
       </div>
     );
   }
@@ -1175,7 +1175,7 @@ function PartProgress({ s }: { s: Session }) {
   return (
     <div class="panel stack" style={{ gap: "8px" }}>
       <div class="spread">
-        <h3>{partName(part!)}: {part!.title}</h3>
+        <h3>{partName(part!)}: {joinEndings(part!.title)}</h3>
         <strong class="ui">{now} / {PART_GOAL}</strong>
       </div>
       <PartDots part={part!} big />
@@ -1237,7 +1237,7 @@ function Summary({ s }: { s: Session }) {
           {touched.slice(-6).map((x) => (
             <div key={x.id} class="spread">
               <button class="linkish part-row-title" onClick={() => { setSession(null); go({ page: "learn", id: x.id }); }}>
-                <span class="part-row-id">{x.id}</span> {x.title}
+                <span class="part-row-id">{x.id}</span> {joinEndings(x.title)}
               </button>
               {partState(p, x) === "learned" ? <span class="story-read">learned</span> : <span class="row small ui" style={{ gap: "6px" }}><PartDots part={x} /> {partRight(p, x)}/{PART_GOAL}</span>}
             </div>

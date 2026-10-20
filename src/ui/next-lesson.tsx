@@ -3,7 +3,7 @@
 import { LESSONS, videoUrl } from "../content/lessons";
 import { roman } from "../latin/text";
 import { updatePath } from "../trainer/path";
-import { Icon } from "./components";
+import { Icon, joinEndings } from "./components";
 import { update, useProgress } from "./store";
 
 /** Ticks a lesson as watched (as Settings does). */
@@ -22,7 +22,7 @@ export function NextLesson({ note }: { note?: string }) {
     <div class="panel next-lesson stack" id="next-lesson">
       <span class="eyebrow">Next video</span>
       <h2>
-        Lesson {roman(next.n)}: {next.title}
+        Lesson {roman(next.n)}: {joinEndings(next.title)}
       </h2>
       <p class="muted small">{note ?? "Watch it, then tick it here: its rules join your path one at a time, and its stories and words come with them."}</p>
       <div class="row">

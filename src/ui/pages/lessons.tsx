@@ -8,7 +8,7 @@ import { partState, seenSkills } from "../../trainer/path";
 import { todayStep } from "../../trainer/today";
 import { storyOpen } from "../../trainer/stories";
 import { partsOf } from "../../content/parts";
-import { CaseChip, Icon } from "../components";
+import { CaseChip, Icon, joinEndings } from "../components";
 import { LatinText } from "../latin";
 import { Inline } from "../markup";
 import { backToLessons, go, takeBackTo } from "../nav";
@@ -75,7 +75,7 @@ export function Lessons({ focus }: { focus?: "stories" }) {
           <details key={l.n} id={`lesson-block-${l.n}`} class="lesson-block" open={learned < parts.length} data-ask={`Lesson ${roman(l.n)}: its rules and stories`}>
             <summary class="lesson-head">
               <span class="numeral">{roman(l.n)}</span>
-              <span class="lesson-head-title">{l.title}</span>
+              <span class="lesson-head-title">{joinEndings(l.title)}</span>
               <span class="lesson-head-state small ui">
                 {learned === parts.length ? <span class="story-read"><Icon.check /> all learned</span> : `${learned} of ${parts.length} learned`}
               </span>
@@ -180,7 +180,7 @@ export function LessonPage({ n }: { n: number }) {
       <div class="stack" style={{ gap: "8px" }} data-ask={`Lesson ${roman(l.n)}: introduction`}>
         <button class="linkish" style={{ alignSelf: "flex-start" }} onClick={() => backToLessons(l.n)}>← Lectiōnēs</button>
         <span class="eyebrow">Lectiō {roman(l.n)}</span>
-        <h1>{l.title}</h1>
+        <h1>{joinEndings(l.title)}</h1>
         <p class="muted prose dropcap">{l.summary}</p>
         <div class="row small ui">
           <a href={videoUrl(l.videoId)} target="_blank" rel="noopener">▶ Watch the video</a>

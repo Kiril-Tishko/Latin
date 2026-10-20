@@ -3,6 +3,7 @@
 // words as on the page where it was learned.
 import { Part, PARTS } from "../content/parts";
 import { SKILL_BY_ID } from "../latin/skills";
+import { joinEndings } from "./components";
 import { LatinText } from "./latin";
 import { Inline } from "./markup";
 
@@ -24,7 +25,7 @@ export function RuleBox({ skills, part }: { skills: string[]; part?: string }) {
         const ex = x.examples[0];
         return (
           <div key={x.id} class="rule-mini">
-            <h3>Rule {x.id} · {x.title}</h3>
+            <h3>Rule {x.id} · {joinEndings(x.title)}</h3>
             {x.explain.map((line, i) => (
               <p key={i}><Inline text={line} /></p>
             ))}

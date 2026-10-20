@@ -66,7 +66,8 @@ export function sharedByDefault(): boolean {
 export function textOf(el: HTMLElement, max: number): string {
   const text = (el.innerText ?? el.textContent ?? "")
     .split("\n")
-    .map((l) => l.replace(/\t+/g, " | ").replace(/[  ]+/g, " ").trim())
+    // (the word joiners that keep a title's endings whole, joinEndings, are not text)
+    .map((l) => l.replace(/\u2060/g, "").replace(/\t+/g, " | ").replace(/[  ]+/g, " ").trim())
     .filter((l) => l && l !== "|")
     .join("\n");
   return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;

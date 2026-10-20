@@ -163,6 +163,8 @@ function AddWord({ start }: { start: string }) {
           <h2>Add a word</h2>
           <button class="btn ghost small" onClick={close} aria-label="Close"><Icon.close /></button>
         </div>
+        {/* what to type, in full (a placeholder this long is cut off on a phone) */}
+        {!found && <p class="muted small">A Latin word in any form, or an English, Russian or Ukrainian one.</p>}
         <form
           class="row add-word-ask"
           onSubmit={(e) => {
@@ -175,7 +177,7 @@ function AddWord({ start }: { start: string }) {
             id="add-word-input"
             class="input"
             value={text}
-            placeholder="A Latin word, or an English, Russian, Ukrainian one"
+            placeholder="lucerna, lamp, лампа…"
             {...NO_CORRECTION}
             autocapitalize="off"
             onInput={(e) => setText((e.target as HTMLInputElement).value)}

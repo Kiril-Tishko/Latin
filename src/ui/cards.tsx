@@ -53,7 +53,8 @@ export const plainDict = (c: Card) => dictionaryForm(c.entry).replace(/, (m|f|n)
 export function CardView({ card, n, onDone, onNext, onClose }: { card: Card; n?: number; onDone?: () => void; onNext?: () => void; onClose?: () => void }) {
   const p = useProgress();
   const added = p.added.includes(card.id);
-  const examples = useMemo(() => cardExamples(card, derived().knowledge, seeded(card.id.length * 7919 + p.added.length), 2), [card.id, p.added.length]);
+  // made once per card: adding it must not change the examples under the learner's eyes
+  const examples = useMemo(() => cardExamples(card, derived().knowledge, seeded(card.id.length * 7919 + p.added.length), 2), [card.id]);
   useEffect(() => {
     if (!getProgress().revealed.includes(card.id)) update((x) => void x.revealed.push(card.id));
   }, [card.id]);
@@ -107,7 +108,7 @@ export function CardView({ card, n, onDone, onNext, onClose }: { card: Card; n?:
               class="btn gold"
               onClick={() => {
                 update((x) => void x.added.push(card.id));
-                toast(`${e.en} added: it will appear in your exercises.`);
+                toast(`«${latinHeadword(e)}» is in your words now: it will appear in your exercises.`);
                 onDone?.();
               }}
             >

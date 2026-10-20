@@ -318,7 +318,7 @@ export function Words() {
           onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
         />
         <button id="add-word" class="btn gold" onClick={() => openAddWord(q && !count ? q : "", "words")} title="Add any Latin word to your dictionary: Claude fills in its card">
-          <Icon.plus /> Add<span class="wide-only"> a word</span>
+          <Icon.plus /> <span>Add<span class="wide-only"> a word</span></span>
         </button>
       </div>
       {!q && <CardStrip />}

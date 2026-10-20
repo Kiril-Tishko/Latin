@@ -9,7 +9,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
-import { ACTA_ID, actaKey, actaPicture, boardOf, earlierBoards, writeActa } from "../chat/acta";
+import { ACTA_ID, actaKey, actaPicture, boardDue, boardMemories, boardOf, firstEditions, pastBoards, writeActa } from "../chat/acta";
 import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, picId, refreshLives, routineMinds, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
 import { applyDeeds, Deeds, welcome } from "../chat/world";
 import { typingTime } from "../chat/life";
@@ -169,7 +169,8 @@ function merge(a: T | undefined, b: T): T {
   if (!a) return b;
   const dropped = [...new Set([...(a.dropped ?? []), ...(b.dropped ?? [])])].slice(-200);
   const byId = new Map<string, Msg>();
-  for (const m of [...a.messages, ...b.messages]) {
+  // (one day's board written twice, on two devices at once: the edition that came out first stays, whole)
+  for (const m of b.id === ACTA_ID ? firstEditions([...a.messages, ...b.messages]) : [...a.messages, ...b.messages]) {
     const had = byId.get(m.id);
     // the copy with more news wins (a read time, a check)
     // deleted: the earlier moment of the two (none when neither copy was deleted)
@@ -232,9 +233,11 @@ function saveMind(m: Mind) {
   }
 }
 
-/** Messages that never reached the learner: what came with them is forgotten. */
-function unsaid(ids: string[], now = Date.now()) {
-  if (ids.length) for (const m of forgetWith(minds, ids, now)) saveMind(m);
+/** Messages that never reached the learner: what came with them is forgotten, and their pictures and recordings not made yet are not made. */
+function unsaid(msgs: Msg[], now = Date.now()) {
+  if (!msgs.length) return;
+  for (const m of forgetWith(minds, msgs.map((x) => x.id), now)) saveMind(m);
+  for (const id of msgs.flatMap((m) => (m.from === "me" ? [] : [m.pic, m.rec]))) if (id) void unwant(id);
 }
 
 /** Keeps what a conversation or a stretch of their lives did to the people's minds. */
@@ -265,20 +268,23 @@ function moveIn() {
 /** Chats tidied of what was written beyond the people's pace, this page load. */
 const tidied = new Set<string>();
 let gotThreads: () => void = () => undefined;
-/** Resolves once the account's chats have come in (or there is no account to wait for). */
-const threadsReady = new Promise<void>((resolve) => (gotThreads = resolve));
+let gotMetaDoc: () => void = () => undefined;
+/** Resolves once the account's chats and its meta have come in (or there is no account to wait for). */
+const accountReady = Promise.all([new Promise<void>((resolve) => (gotThreads = resolve)), new Promise<void>((resolve) => (gotMetaDoc = resolve))]);
 
 /** Connects to the account store (once per page load) and follows the messenger live. */
 export async function connectMessenger() {
   if (connected) return;
   connected = true;
   const s = await messengerStore();
-  if (!s) return gotThreads();
+  if (!s) return void (gotThreads(), gotMetaDoc());
   store = s;
   try {
     follow(s);
   } catch {
     // a store that cannot follow live: this browser's copy still works
+    gotThreads();
+    gotMetaDoc();
   }
   // the phone routine's brief, once the account is reachable
   void writeBrief();
@@ -287,6 +293,7 @@ export async function connectMessenger() {
 function follow(s: NonNullable<typeof store>) {
   s.meta.onSnapshot(
     (snap) => {
+      gotMetaDoc();
       const remote = snap.exists ? (snap.data() as Partial<Meta>) : null;
       if (!remote) {
         if (meta.seenAt || Object.keys(meta.strangers).length) saveMeta();
@@ -310,7 +317,7 @@ function follow(s: NonNullable<typeof store>) {
       saveLocal();
       emit();
     },
-    () => undefined,
+    () => gotMetaDoc(),
   );
   let first = true;
   s.threads.onSnapshot(
@@ -337,12 +344,12 @@ function follow(s: NonNullable<typeof store>) {
         tidied.add(t.id);
         const drop = overPace(t, meta, isGroupId(t.id, meta), (id) => natureOf(id, meta)?.burst ?? 4);
         if (drop.length) saveThread({ ...t, messages: t.messages.filter((m) => !drop.includes(m.id)), dropped: [...(t.dropped ?? []), ...drop].slice(-400) });
-        unsaid(drop);
+        unsaid(t.messages.filter((m) => drop.includes(m.id)));
       }
       saveLocal();
       emit();
     },
-    () => undefined,
+    () => gotThreads(),
   );
   // each person's mind, followed live (every device and the phone routine's brief see the same memories)
   s.minds.onSnapshot(
@@ -490,7 +497,7 @@ export function send(id: string, text: string, re?: string, extra: Partial<Pick<
     dropped: [...(t.dropped ?? []), ...waiting].slice(-200),
     readAt: now,
   });
-  unsaid(waiting, now);
+  unsaid(t.messages.filter((m) => waiting.includes(m.id)), now);
   clearTimeout(pending.get(id));
   pending.set(id, setTimeout(() => void answer(id), 2500));
   // the phone routine leaves the learner alone while they are chatting
@@ -754,10 +761,12 @@ export function ensureActa(force = false): Promise<void> {
 }
 
 async function writeTodaysBoard(force: boolean): Promise<void> {
-  await Promise.race([threadsReady, new Promise((r) => setTimeout(r, 6000))]);
+  // the account's chats and meta first: a board another device wrote, or is writing, is not written again
+  await accountReady;
   const now = Date.now();
   const today = actaKey(now);
-  if (boardOf(getThread(ACTA_ID), today).length) return;
+  // one a day, and not soon after the last one (a board late in the evening is not followed by the next day's at once)
+  if (!boardDue(getThread(ACTA_ID), now)) return;
   // asked for a moment ago (another device, or before a reload): wait for it, but let the learner ask again
   if (!force && meta.actaAt && now - meta.actaAt < 15 * 60_000) {
     actaError = "The scribe started on today's board a moment ago.";
@@ -779,7 +788,7 @@ async function writeTodaysBoard(force: boolean): Promise<void> {
   saveMeta();
   emit();
   try {
-    const written = await writeActa(meta, ctx, d, earlierBoards(getThread(ACTA_ID), now));
+    const written = await writeActa(meta, ctx, d, pastBoards(getThread(ACTA_ID), now));
     if (!written.length) throw new Error("empty");
     // another device's board came in meanwhile: the first one stays
     if (boardOf(getThread(ACTA_ID), today).length) return;
@@ -789,7 +798,9 @@ async function writeTodaysBoard(force: boolean): Promise<void> {
     const t = getThread(ACTA_ID);
     saveThread(merge(t, { ...t, messages: [...t.messages, ...posts] }));
     // the picture of the day, made like the people's pictures
-    makePictures(posts.map((m) => actaPicture(m, at)).filter((p): p is Pic => !!p));
+    makePictures(posts.map((m) => actaPicture(m, at, meta)).filter((p): p is Pic => !!p));
+    // what it told of the friends, they hear in the neighbourhood
+    remember({ memories: boardMemories(posts, meta) }, at);
   } catch (e) {
     actaError = (e as Error)?.message === "empty" ? "The scribe wrote nothing today." : errorText(e);
   } finally {
@@ -864,6 +875,11 @@ function madeToday(now: number): number {
 const picCache = new Map<string, Pic>();
 const picFollow = new Map<string, () => void>();
 const picLoading = new Set<string>();
+/** Pictures whose document could not be read, and when (tried again a minute later, not on every redraw). */
+const picFailed = new Map<string, number>();
+/** A picture still wanted after a day is given up on: the routine that should have made it never did. */
+const GIVE_UP = 86400_000;
+export const picGivenUp = (p: Pic | undefined, now = Date.now()) => p?.status === "wanted" && now - p.at > GIVE_UP;
 /** The learner's photos sent from this browser, as files (for Claude to look at). */
 const blobs = new Map<string, Blob>();
 
@@ -875,15 +891,16 @@ export function picOf(id: string): Pic | undefined {
 
 /** Loads a picture's document; one still being made is followed until it is done. */
 async function loadPic(id: string) {
-  if (picCache.get(id)?.status === "done" || picLoading.has(id) || picFollow.has(id) || !store) return;
+  if (picCache.get(id)?.status === "done" || picLoading.has(id) || picFollow.has(id) || !store || Date.now() - (picFailed.get(id) ?? 0) < 60_000) return;
   picLoading.add(id);
   const ref = store.pics.doc(id);
   try {
     const snap = await ref.get?.();
     const p = snap?.exists ? (snap.data() as unknown as Pic) : undefined;
     if (p) picCache.set(id, { ...p, id });
-    // still waiting after a quarter of an hour: the run that should have made it did not; ask again
-    if (p?.status === "wanted" && Date.now() - p.at > 15 * 60_000) void firePictures([id]);
+    // still waiting after a quarter of an hour: the run that should have made it did not; ask again (not for one given up on)
+    if (p?.status === "wanted" && Date.now() - p.at > 15 * 60_000 && !picGivenUp(p)) void firePictures([id]);
+    if (!p && !ref.onSnapshot) picFailed.set(id, Date.now());
     if ((!p || p.status === "wanted") && ref.onSnapshot) {
       picFollow.set(
         id,
@@ -903,7 +920,8 @@ async function loadPic(id: string) {
       );
     }
   } catch {
-    /* it shows as a picture that did not load */
+    // it shows as a picture that did not load (for a minute: then it is tried again)
+    picFailed.set(id, Date.now());
   } finally {
     picLoading.delete(id);
     emit();
@@ -925,6 +943,16 @@ function savePic(p: Pic) {
 function updatePic(id: string, patch: Partial<Pic>) {
   const p = picCache.get(id);
   if (p) savePic({ ...p, ...patch });
+}
+
+/** A picture or recording no longer wanted (its message never arrives): if it is not made yet, it is not made. */
+async function unwant(id: string) {
+  const got = async () => {
+    const snap = await store?.pics.doc(id).get?.();
+    return snap?.exists ? { ...(snap.data() as unknown as Pic), id } : undefined;
+  };
+  const p = picCache.get(id) ?? (await got().catch(() => undefined));
+  if (p?.status === "wanted") savePic({ ...p, status: "failed" });
 }
 
 /**

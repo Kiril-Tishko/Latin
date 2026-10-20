@@ -150,7 +150,7 @@ describe("one shared timeline, known as far as it is known", () => {
     expect(toIulia).not.toContain("bookmaker");
     // Gāius's own chat does not hear of himself as news
     expect(replyPrompt(dm("gaius", "Salvē!"), meta, ctxAt(T0), { at: T0, why: "free" })).not.toContain("WHAT EVERYONE AROUND KNOWS OF THE OTHERS NOW");
-    const acta = actaPrompt(meta, ctxAt(T0), []);
+    const acta = actaPrompt(meta, ctxAt(T0));
     expect(acta).toContain("hail destroyed the whole harvest");
     expect(acta).not.toContain("bookmaker");
   });

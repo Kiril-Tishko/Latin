@@ -267,3 +267,16 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
   voices reading the classical respelling; the device's voice until the
   recording comes); the Ācta has a picture of the day; each story has a Roman
   wall painting. Published as v44; both routines updated and checked.
+- 20 Oct, night: a round of checks with four helpers. An audit of the live data
+  found: the Ācta repeating itself (the bull on five boards of six, two boards
+  44 minutes apart), a second board written after the first, pictures made for
+  messages that were later dropped, and, worst, a device with an old copy able
+  to write it over the account's (a chat lost messages in a probe): writes now
+  wait for the account's copy and go up merged. Practice: odd sentences, a word
+  asked both ways in one round, translation mistakes that never came back,
+  garbled feedback, -ē adverbs flagged as wrong. UI: titles breaking at "-ī",
+  touch targets, focus, a ↓ back to the newest message, voice messages that
+  show their progress. Ask Claude now answers "how do I say" directly and puts
+  the Latin into the message with one tap. And a surprise the learner asked not
+  to be told about (the Sibyl's leaves, CLAUDE.md). Published as v46; both
+  routines updated and checked (the helper now picks a fresh picture's id).

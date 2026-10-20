@@ -213,24 +213,31 @@ function queueWrite(key: string, write: () => Promise<void>) {
   })();
 }
 
+/**
+ * Writes made before the account's copy has come in (this browser's copy may
+ * be days old, and a write replaces the whole document): they wait, and go up
+ * merged with the account's once it is in ("t:<chat>", "k:<mind>", "meta").
+ */
+const held = new Set<string>();
+
 function saveThread(t: T) {
   t.updatedAt = Date.now();
   threads[t.id] = t;
   saveLocal();
   emit();
-  if (store) {
-    const s = store;
-    queueWrite(`t:${t.id}`, () => s.threads.doc(t.id).set(toBody({ ...threads[t.id], messages: threads[t.id].messages.slice(-MAX_MESSAGES) })));
-  }
+  if (!store) return;
+  if (!gotChats) return void held.add(`t:${t.id}`);
+  const s = store;
+  queueWrite(`t:${t.id}`, () => s.threads.doc(t.id).set(toBody({ ...threads[t.id], messages: threads[t.id].messages.slice(-MAX_MESSAGES) })));
 }
 
 function saveMind(m: Mind) {
   minds[m.id] = m;
   saveLocal();
-  if (store) {
-    const s = store;
-    queueWrite(`k:${m.id}`, () => s.minds.doc(m.id).set(toBody(minds[m.id])));
-  }
+  if (!store) return;
+  if (!gotMinds) return void held.add(`k:${m.id}`);
+  const s = store;
+  queueWrite(`k:${m.id}`, () => s.minds.doc(m.id).set(toBody(minds[m.id])));
 }
 
 /** Messages that never reached the learner: what came with them is forgotten, and their pictures and recordings not made yet are not made. */
@@ -248,14 +255,27 @@ function remember(change: Parameters<typeof applyMinds>[1], now: number) {
 function saveMeta() {
   saveLocal();
   emit();
-  if (store) {
-    const s = store;
-    queueWrite("meta", () => s.meta.set(toBody(meta)));
+  if (!store) return;
+  if (!gotMetaIn) return void held.add("meta");
+  const s = store;
+  queueWrite("meta", () => s.meta.set(toBody(meta)));
+}
+
+/** The writes that waited for the account's copy, now that it is in (merged with it). */
+function flushHeld() {
+  for (const key of [...held]) {
+    const id = key.slice(2);
+    if (key === "meta" ? !gotMetaIn : key.startsWith("t:") ? !gotChats : !gotMinds) continue;
+    held.delete(key);
+    if (key === "meta") saveMeta();
+    else if (key.startsWith("t:") && threads[id]) saveThread(threads[id]);
+    else if (key.startsWith("k:") && minds[id]) saveMind(minds[id]);
   }
 }
 
 let connected = false;
 let gotChats = false;
+let gotMetaIn = false;
 let gotMinds = false;
 let movedIn = false;
 /** Once the account's chats and minds are in: the old facts and moments move into the minds (once; ids are steady, so two devices make one memory). */
@@ -282,9 +302,11 @@ export async function connectMessenger() {
   try {
     follow(s);
   } catch {
-    // a store that cannot follow live: this browser's copy still works
+    // a store that cannot follow live: this browser's copy still works (and is written as it is)
+    gotChats = gotMetaIn = gotMinds = true;
     gotThreads();
     gotMetaDoc();
+    flushHeld();
   }
   // the phone routine's brief, once the account is reachable
   void writeBrief();
@@ -295,8 +317,11 @@ function follow(s: NonNullable<typeof store>) {
     (snap) => {
       gotMetaDoc();
       const remote = snap.exists ? (snap.data() as Partial<Meta>) : null;
+      gotMetaIn = true;
       if (!remote) {
+        held.delete("meta");
         if (meta.seenAt || Object.keys(meta.strangers).length) saveMeta();
+        tidy();
         return;
       }
       meta = {
@@ -314,15 +339,19 @@ function follow(s: NonNullable<typeof store>) {
         // what they want from life: each goal the newer
         goals: mergeGoals(meta.goals, remote.goals),
       };
+      // what changed here before it came in goes up now, merged
+      flushHeld();
+      tidy();
       saveLocal();
       emit();
     },
-    () => gotMetaDoc(),
+    () => ((gotMetaIn = true), gotMetaDoc(), flushHeld(), tidy()),
   );
   let first = true;
   s.threads.onSnapshot(
     (snap) => {
       gotThreads();
+      gotChats = true;
       const seen = new Set<string>();
       for (const d of snap.docs) {
         const body = d.data() as T | undefined;
@@ -336,20 +365,13 @@ function follow(s: NonNullable<typeof store>) {
       }
       if (first) for (const t of Object.values(threads)) if (!seen.has(t.id) && t.messages.length) saveThread(t);
       first = false;
-      gotChats = true;
+      flushHeld();
       moveIn();
-      // once per page: what the people wrote beyond their pace, not seen yet, goes (like real people, they would have waited)
-      for (const t of Object.values(threads)) {
-        if (tidied.has(t.id) || t.kind === "channel") continue;
-        tidied.add(t.id);
-        const drop = overPace(t, meta, isGroupId(t.id, meta), (id) => natureOf(id, meta)?.burst ?? 4);
-        if (drop.length) saveThread({ ...t, messages: t.messages.filter((m) => !drop.includes(m.id)), dropped: [...(t.dropped ?? []), ...drop].slice(-400) });
-        unsaid(t.messages.filter((m) => drop.includes(m.id)));
-      }
+      tidy();
       saveLocal();
       emit();
     },
-    () => gotThreads(),
+    () => ((gotChats = true), gotThreads(), flushHeld()),
   );
   // each person's mind, followed live (every device and the phone routine's brief see the same memories)
   s.minds.onSnapshot(
@@ -360,12 +382,14 @@ function follow(s: NonNullable<typeof store>) {
         minds[d.id] = mergeMinds(minds[d.id], { ...body, id: d.id })!;
       }
       gotMinds = true;
+      flushHeld();
       saveLocal();
       emit();
       moveIn();
     },
     () => {
       gotMinds = true;
+      flushHeld();
       moveIn();
     },
   );
@@ -380,6 +404,24 @@ function follow(s: NonNullable<typeof store>) {
     },
     () => undefined,
   );
+}
+
+/**
+ * Once per page, for each chat: what the people wrote beyond their pace, not
+ * seen yet, goes (like real people, they would have waited). Only once the
+ * account's chats and meta are both in: with this browser's old copy of the
+ * meta (a stranger not met here yet, a group not known, feelings that make
+ * someone write more), their pace would be judged wrong.
+ */
+function tidy() {
+  if (!gotChats || !gotMetaIn) return;
+  for (const t of Object.values(threads)) {
+    if (tidied.has(t.id) || t.kind === "channel") continue;
+    tidied.add(t.id);
+    const drop = overPace(t, meta, isGroupId(t.id, meta), (id) => natureOf(id, meta)?.burst ?? 4);
+    if (drop.length) saveThread({ ...t, messages: t.messages.filter((m) => !drop.includes(m.id)), dropped: [...(t.dropped ?? []), ...drop].slice(-400) });
+    unsaid(t.messages.filter((m) => drop.includes(m.id)));
+  }
 }
 
 function takeFromInbox(d: DocSnap) {

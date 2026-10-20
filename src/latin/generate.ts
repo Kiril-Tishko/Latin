@@ -55,8 +55,8 @@ export interface Knowledge {
   richness?: number;
   /** Skills the sentence being built should show (set by generate). */
   focus?: string[];
-  /** Extras already in the sentence being built (set by generate). */
-  spent?: { n: number };
+  /** Extras already in the sentence being built, and whether it has its "of" phrase (set by generate). */
+  spent?: { n: number; gen?: boolean };
 }
 
 export interface NP {
@@ -137,6 +137,12 @@ export function makesSense(c: Clause): boolean {
   // a teacher doesn't learn to teach; nobody "cannot have the friend"
   if (c.inf?.verb.id === "doceo" && nps.some((np) => TEACHERS.has(np.noun.id))) return false;
   if (c.inf?.verb.id === "habeo" && c.inf.obj && isHuman(c.inf.obj.noun)) return false;
+  // a teacher or a poet already reads and writes: not "the teacher learns to read"
+  if (c.verb.id === "disco" && c.inf && (c.inf.verb.id === "lego" || c.inf.verb.id === "scribo") && nps.some((np) => TEACHERS.has(np.noun.id))) return false;
+  // one has a friend, not "the friend of the student" ("the farmer has the student's friend")
+  if (c.verb.id === "habeo" && c.obj?.poss && isHuman(c.obj.noun)) return false;
+  // said of someone, a noun is what they do or are to others: "the farmer is a poet, a friend"; not "the teacher is a girl"
+  if (c.pred?.np && c.subj.kind === "np" && !TRADES.has(c.pred.np.noun.id) && !FRIENDS.has(c.pred.np.noun.id)) return false;
   // well: works, writes, sleeps well; not "walks well", "drinks well"
   if (c.adv === "bene" && !WELL.has(c.verb.id)) return false;
   // places belong to no one: not "the poet's earth", "the student's forest"
@@ -256,12 +262,16 @@ const agent = (k: Knowledge) => (k.silly === 0 ? isHuman : isPerson);
 /** Whether a verb takes an object here: there is nothing sensible to "learn" among the nouns yet. */
 const takesObject = (k: Knowledge, v: VerbEntry) => !!v.trans && !(k.silly === 0 && v.id === "disco");
 
-/** An adjective that suits a noun with these tags (long road, timid girl; not a long girl). */
+/** What a god never is: timid, or new. */
+const NOT_GODLY = new Set(["timidus", "novus"]);
+
+/** An adjective that suits a noun with these tags (long road, timid girl; not a long girl, nor a timid god). */
 export const adjFits = (a: AdjEntry, tags: string[]) =>
-  !a.tags.length ||
-  (a.tags.some((t) => tags.includes(t)) &&
-    (!tags.includes("mass") || a.tags.includes("mass") || (tags.includes("abstract") && a.tags.includes("abstract"))) && // wine is not "long"; life can be beautiful
-    (!tags.includes("nature") || tags.includes("place") || a.tags.includes("nature") || a.tags.includes("plant"))); // nor is the wind
+  !(tags.includes("divine") && NOT_GODLY.has(a.id)) &&
+  (!a.tags.length ||
+    (a.tags.some((t) => tags.includes(t)) &&
+      (!tags.includes("mass") || a.tags.includes("mass") || (tags.includes("abstract") && a.tags.includes("abstract"))) && // wine is not "long"; life can be beautiful
+      (!tags.includes("nature") || tags.includes("place") || a.tags.includes("nature") || a.tags.includes("plant")))); // nor is the wind
 /** "I am alone", not "the alone girl". */
 const PREDICATE_ONLY = new Set(["solus", "vivus"]);
 /** "much water", not "the water is much". */
@@ -295,9 +305,8 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
         adjUsable(k, a, noun, o.case, o.num) &&
         !(noun.proper && a.id === "meus") &&
         !(k.silly === 0 && noun.proper && !fitsName(a)) &&
-        // "my friend", "my book"; not "my farmer"; and no timid gods
+        // "my friend", "my book"; not "my farmer" (and no timid gods: adjFits)
         !(k.silly === 0 && a.id === "meus" && !mine(noun)) &&
-        !(k.silly === 0 && a.id === "timidus" && divine(noun)) &&
         !PREDICATE_ONLY.has(a.id) &&
         !NEVER.has(a.id),
     );
@@ -318,9 +327,14 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
   // reads two ways to a beginner (the learner took «Dea amīcam discipulae nōn habet» for "the
   // student's goddess has no friends").
   const ofPractised = k.silly > 0 || GEN_SKILLS.some((s) => k.focus?.includes(s));
-  if (owned && ofPractised && np.adj?.id !== "meus" && k.skills.has("s.gen") && takeExtra(k, r, GEN_SKILLS, o.possChance ?? 0.2)) {
+  // one "of" phrase a sentence: two read as a chain («amīcus deī discipulī»)
+  if (owned && ofPractised && !k.spent?.gen && np.adj?.id !== "meus" && k.skills.has("s.gen") && takeExtra(k, r, GEN_SKILLS, o.possChance ?? 0.2)) {
     const owner = OWNERS[noun.id];
-    const allowed = k.silly === 0 && owner ? (n: NounEntry) => owner.includes(n.id) : undefined;
+    // whose it can be: not "the friend (f) of the friend (m)"; a god has no letter, book or drink of his own (gods don't read or write)
+    const allowed =
+      k.silly === 0
+        ? (n: NounEntry) => (!owner || owner.includes(n.id)) && n.en !== noun.en && !(divine(n) && noun.tags.some((t) => t === "writing" || t === "drink"))
+        : undefined;
     const someone = k.silly === 0 ? isHuman : isPerson;
     // an owner whose ending is the one being practised (amīcī for -ī), when there is one
     const wanted = (n: NounEntry) => someone(n) && !!k.focus?.includes(nounSkill(n.decl, "gen", "sg"));
@@ -336,6 +350,7 @@ function makeNP(k: Knowledge, r: Rand, o: NPOpts): NP | null {
     });
     if (poss && !poss.noun.proper) {
       np.poss = poss;
+      if (k.spent) k.spent.gen = true;
       // after its noun (amīca discipulī) until the hardest sentences: in front of it, a beginner
       // takes it for the subject («Discipulī amīca…»)
       np.possFirst = rich(k) >= 1 && chance(r, 0.3);
@@ -455,6 +470,8 @@ const WELL = new Set(["laboro", "scribo", "lego", "canto", "disco", "doceo", "do
 const HAD = new Set(["amicus", "amica", "familia"]);
 /** What people are by trade: "the poet is a student" sounds wrong, "the girl is a student" doesn't. */
 const TRADES = new Set(["poeta", "agricola", "magistra", "magister", "discipula", "discipulus", "nauta", "scriba"]);
+/** What someone is to others: "the farmer is a friend". */
+const FRIENDS = new Set(["amicus", "amica"]);
 
 const none = () => false;
 const OBJECTS: Record<string, (n: NounEntry) => boolean> = {
@@ -490,7 +507,7 @@ const OBJECTS: Record<string, (n: NounEntry) => boolean> = {
   voco: isHuman,
   moneo: isHuman,
   doceo: (n) => PUPILS.has(n.id) || ("own" in n.source && isHuman(n) && !divine(n)), // teaches the student, not the goddess
-  desidero: isHuman,
+  desidero: (n) => isHuman(n) || (isPlace(n) && !["terra", "olympus", "via"].includes(n.id) && !n.tags.includes("vague")), // a friend, the school, Crete; not the earth or the road
   transformo: isPerson,
   terreo: (n) => isPerson(n) && !n.tags.includes("divine"),
   cognosco: (n) => isHuman(n) || isPlace(n),
@@ -723,7 +740,8 @@ const TEMPLATES: Record<string, Template> = {
     if (!possum) return null;
     const s = makeSubject(k, r, { allowPlural: false, possChance: 0.1 });
     if (!s || !verbUsable(k, possum, pnOf(s.person, s.num))) return null;
-    const infs = k.verbs.filter((v) => !v.irregular && !NEVER.has(v.id) && (k.silly > 0 || (v.id !== "habito" && v.id !== "vivo")));
+    // not "can live", nor "can miss the god"
+    const infs = k.verbs.filter((v) => !v.irregular && !NEVER.has(v.id) && (k.silly > 0 || (v.id !== "habito" && v.id !== "vivo" && v.id !== "desidero")));
     if (!infs.length) return null;
     const inf = pick(r, infs);
     const c = base(k, r, s, possum, ["v.possum", "s.inf", "v.inf"]);
@@ -918,8 +936,9 @@ export function untangle(out: LToken[], plain = false): LToken[] {
     const right = groupOf(out[i + 1]);
     if (!left || !right || left === right) continue;
     if (plain && left === own && !out.some((x) => x.role === "inf")) {
+      // the other noun goes with its describing word and its own "of" word, which is never left behind
       let j = i + 1;
-      while (j < out.length && groupOf(out[j]) === right) j++;
+      while (j < out.length && (groupOf(out[j]) === right || out[j].role === `${right}-poss`)) j++;
       out.push(...out.splice(i + 1, j - i - 1));
       continue;
     }

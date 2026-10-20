@@ -93,7 +93,8 @@ export const CARDS: Card[] = [
     hook: "sedeō ~ сидеть / сидіти ~ sit. A president is the one who 'sits in front' (prae-sidet).",
   }),
   a("novus, nova, novum", "new", {
-    tags: ["thing", "place", "person"],
+    // a new book, school or student; not a new island or forest
+    tags: ["thing", "building", "person"],
     from: { en: ["novel", "novice", "renovate"], ru: ["новелла"], uk: ["новела"] },
     kin: { en: ["new"], ru: ["новый"], uk: ["новий"] },
     hook: "novus = новый / новий = new. A novice is new at something; a novel was once 'a new story'.",

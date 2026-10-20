@@ -42,7 +42,7 @@ function rolesOf(words: Analysis[]): Role[] {
   const hasSum = words.some(isSum);
   const verbAt = words.findIndex((a) => a.entry.kind === "verb");
   let subject = false;
-  return words.map((a, i) => {
+  const roles = words.map((a, i): Role => {
     const e = a.entry;
     if (e.kind === "verb") return a.key === "inf" ? "inf" : "verb";
     if (e.kind === "fixed") {
@@ -69,6 +69,18 @@ function rolesOf(words: Analysis[]): Role[] {
     if (!adj) subject = true;
     return adj ? "subj-adj" : "subj";
   });
+  // whose: a genitive goes with the noun before it (epistulam poētae), else the one after it (poētae epistulam),
+  // so a question about the object takes its genitive along («Quid poēta legit?», not «Quid poēta amīcae legit?»)
+  const owner = (r?: Role) => (r && /^(subj|obj|pp|dat|pred)(-adj)?$/.test(r) ? r.replace("-adj", "") : undefined);
+  const out = [...roles];
+  roles.forEach((r, i) => {
+    if (r !== "subj-poss") return;
+    // two genitive words together (amīcae meae) belong to the same noun
+    const prev = out[i - 1]?.endsWith("-poss") && roles[i - 1] === "subj-poss" ? out[i - 1].replace("-poss", "") : owner(out[i - 1]);
+    const next = roles.slice(i + 1).find((x) => x !== "subj-poss");
+    out[i] = `${prev ?? owner(next) ?? "subj"}-poss` as Role;
+  });
+  return out;
 }
 
 /** One sentence as exercise words, or null if any word is unknown. */

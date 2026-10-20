@@ -672,6 +672,8 @@ export async function opened() {
   }
   void writeBrief();
   void ensureActa();
+  // the account's chats and meta first (another device may have let them write a moment ago)
+  await accountReady;
   if (now - meta.plannedAt < PLAN_EVERY) return;
   const ctx = promptCtx(now);
   if (!ctx) return;

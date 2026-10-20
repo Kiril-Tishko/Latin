@@ -88,11 +88,24 @@ export function Modal({ onClose, children, label, wide, className = "", screen }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+  // with a keyboard, Tab and Enter work in the dialog, not behind it: the focus moves in (unless a
+  // field in it takes it) and goes back to where it was on close (a phone has no focus to keep)
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || touchScreen()) return;
+    const before = document.activeElement as HTMLElement | null;
+    if (!el.contains(before)) el.focus({ preventScroll: true });
+    return () => {
+      const now = document.activeElement;
+      if (before?.isConnected && (!now || now === document.body || el.contains(now))) before.focus({ preventScroll: true });
+    };
+  }, []);
   return (
     <>
       <div class="scrim" onClick={onClose} />
       <div class={`modal${wide ? " wide" : ""} ${className}`} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.target === e.currentTarget && onClose()}>
-        <div class="panel frame" data-ask={screen ?? label}>
+        <div class="panel frame" data-ask={screen ?? label} ref={box} tabIndex={-1}>
           {children}
         </div>
       </div>

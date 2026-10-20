@@ -24,7 +24,7 @@ import { derived, getProgress, useProgress } from "./store";
 import { knownWord, openAddWord } from "./addword";
 import { CHAT_WORD_LIST } from "../chat/words";
 import { bareWord, cardWord, newWordsIn } from "./answer-words";
-import { NO_CORRECTION } from "./keyboard";
+import { NO_CORRECTION, touchScreen } from "./keyboard";
 
 export interface AskContext {
   /** Short label shown in the drawer: "Exercise: Translate into Latin". */
@@ -507,6 +507,8 @@ export function AskDrawer() {
   useEffect(() => {
     document.body.classList.toggle("ask-open", state.open);
     if (!state.open) return;
+    // with a keyboard the box is ready to type in at once (on a phone the keyboard waits for a tap)
+    if (!touchScreen()) setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 30);
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();

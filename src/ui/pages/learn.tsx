@@ -311,7 +311,8 @@ function Question({ part, q, n, onNext, last, autoFocus }: { part: Part; q: Part
           </div>
           <div class="spread">
             {result.verdict === "partly" || result.verdict === "wrong" ? (
-              <button class="linkish" onClick={() => { setResult(null); setCompare(null); box.current?.focus(); }}>Try again</button>
+              // (the box is still disabled now: it takes the focus once it is open again)
+              <button class="linkish" onClick={() => { setResult(null); setCompare(null); setTimeout(() => box.current?.focus(), 0); }}>Try again</button>
             ) : (
               <span />
             )}

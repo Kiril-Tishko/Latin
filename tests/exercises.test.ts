@@ -72,6 +72,26 @@ describe("exercises", () => {
     }
   });
 
+  it("explains a wrong form in plain words (once: \"habet would be the the form for he / she / it\")", () => {
+    const bad: string[] = [];
+    let checked = 0;
+    for (let seed = 1; seed <= 150; seed++) {
+      for (const kind of ["ending", "identify", "form", "choose"] as const) {
+        const ex = makeExercise(kind, { k, lex, r: seeded(seed) }, kind === "form" ? ["v.3sg"] : ["v.1sg", "v.3sg"]);
+        if (!ex) continue;
+        const wrong = ex.answer === "choice" ? ex.choices!.filter((c) => c.id !== ex.correctChoice).map((c) => c.id) : ["t", "s", "ō", "et", "is", "legis", "discet"];
+        for (const answer of wrong) {
+          for (const issue of ex.check(answer).issues) {
+            checked++;
+            if (/\bthe the\b|\ba the\b/.test(issue.message) || /is (the form for [^.]+)\. Here (?:you need|it must be) \1/.test(issue.message)) bad.push(issue.message);
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(500);
+    expect(bad).toEqual([]);
+  });
+
   it("builds full sessions", () => {
     const p = newProgress();
     const ctx = { k, lex, r: seeded(42) };

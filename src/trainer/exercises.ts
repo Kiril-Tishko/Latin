@@ -1,7 +1,7 @@
 // Exercise factories. Each exercise carries its own checker and the skills
 // and words it practises, so the session can update mastery afterwards.
 import { Analysis, Lexicon } from "../latin/analyze";
-import { checkEnglish, checkLatin, CheckedToken, describe, hinted, Issue, slotsFor, Verdict } from "../latin/check";
+import { checkEnglish, checkLatin, CheckedToken, describe, hinted, Issue, slotsFor, Verdict, vowelSlip, whatForm } from "../latin/check";
 import { en3s, enIng, enPlural, normalizeEnglish, withParticle } from "../latin/english";
 import {
   chance, Clause, english, generate, Knowledge, latinText, latinTokens, LToken, NP, pick, Rand, shuffle, swapRoles, verbUsable,
@@ -417,7 +417,7 @@ export function endingOn(ctx: Ctx, tokens: LToken[], englishText: string, focus:
         issues.push({
           kind: "form",
           message: mine
-            ? `${hinted(attempt, mine)} would be the ${describe(mine)}. Here it must be the ${describe(a)}: ${hinted(full(a.form), a)}.`
+            ? vowelSlip(attempt, mine, a, full(a.form)) ?? `${hinted(attempt, mine)} would be ${whatForm(mine)}. Here it must be ${whatForm(a)}: ${hinted(full(a.form), a)}.`
             : `The ending is -${a.form.ending}: ${hinted(full(a.form), a)} (${describe(a)}).`,
           skill: target.skill,
         });
@@ -488,8 +488,6 @@ function wrongForms(k: Knowledge, t: LToken): LToken[] {
   const seen = new Set([latinKey(t.text)]);
   return out.filter((x) => !seen.has(latinKey(x.text)) && (seen.add(latinKey(x.text)), true));
 }
-
-const whatForm = (a: Analysis) => (a.entry.kind === "verb" ? describe(a) : `the ${describe(a)}`);
 
 /** Pick the right form for the gap out of two or three: the gentlest way to meet an ending. */
 function choose(ctx: Ctx, focus: string[]): Exercise | null {
@@ -617,7 +615,7 @@ function nounFormExercise(ctx: Ctx, skillId: string, focus: string[] = []): Exer
           issues.push({
             kind: "form",
             message: mine
-              ? `${hinted(mineWord!, mine)} is the ${describe(mine)}. The ${label} is ${hinted(t.text, t.analysis)}.`
+              ? `${hinted(mineWord!, mine)} is ${whatForm(mine)}. The ${label} is ${hinted(t.text, t.analysis)}.`
               : `The ${label} is ${hinted(t.text, t.analysis)}.`,
             skill: t.skill ?? skillId,
           });
@@ -696,7 +694,7 @@ function verbFormExercise(ctx: Ctx, skillId: string): Exercise | null {
         issues.push({
           kind: "form",
           message: mine
-            ? `${hinted(words(answer).at(-1)!)} is ${describe(mine)}. For ${label} it is ${hinted(expected)}.`
+            ? vowelSlip(words(answer).at(-1)!, mine, token.analysis!, expected) ?? `${hinted(words(answer).at(-1)!)} is ${whatForm(mine)}. For ${label} it is ${hinted(expected)}.`
             : `For ${label} the form is ${hinted(expected)}.`,
           skill: skillId,
         });
@@ -890,7 +888,7 @@ function identify(ctx: Ctx, focus: string[]): Exercise | null {
           const a: Analysis | undefined = chosen.analysis;
           issues.push({
             kind: "form",
-            message: `${hinted(chosen.text, a)}${a && a.entry.kind !== "fixed" ? ` is the ${describe(a)}` : ""}. The answer is ${hinted(target.text, target.analysis)}${target.analysis ? ` (${describe(target.analysis)})` : ""}.`,
+            message: `${hinted(chosen.text, a)}${a && a.entry.kind !== "fixed" ? ` is ${whatForm(a)}` : ""}. The answer is ${hinted(target.text, target.analysis)}${target.analysis ? ` (${describe(target.analysis)})` : ""}.`,
             skill: target.skill,
           });
         }

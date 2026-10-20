@@ -13,7 +13,7 @@ import { dueWords } from "../../trainer/srs";
 import { todayStep, WORD_ROUND, wordsGiven } from "../../trainer/today";
 import { Entry } from "../../latin/types";
 import { dayKey, Progress } from "../../trainer/progress";
-import { applyResult, buildSession, mistakesSession, nextExercise, partExercise } from "../../trainer/session";
+import { applyResult, buildSession, mistakesSession, nextExercise, partExercise, recallable } from "../../trainer/session";
 import { Line } from "../../trainer/lines";
 import { practiceLines } from "../../trainer/stories";
 import { closingQuestion, openExercise } from "../../trainer/answers";
@@ -126,7 +126,7 @@ export function startSession(mode: Mode): boolean {
   const p = getProgress();
   const c = ctx();
   const seen = seenSkills(p);
-  const vocab = derived().words.filter((w) => w.kind !== "fixed");
+  const vocab = derived().words.filter(recallable);
   const adaptive = { adaptive: true, focusLesson: p.focusLesson, kinds: STEPWISE };
   const unseen = (skills: string[]) => {
     const parts = partsTeaching(skills.filter((s) => !seen.has(s)));
@@ -222,8 +222,8 @@ function NoRound() {
   return null;
 }
 
-/** The words practised and reviewed: all but the fixed ones (names, little words). */
-export const vocabIds = () => derived().words.filter((w) => w.kind !== "fixed").map((w) => w.id);
+/** The words practised and reviewed: all but the little fixed ones and those with nothing to recall (recallable). */
+export const vocabIds = () => derived().words.filter(recallable).map((w) => w.id);
 
 /**
  * Continue: the one button for everything (todayStep). A new rule opens its

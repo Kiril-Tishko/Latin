@@ -9,10 +9,11 @@ import { latinKey } from "../latin/text";
 import { Entry } from "../latin/types";
 import { Ctx, deriveExercise, Exercise, ExerciseKind, MadeKind, makeExercise, Result, rightAnswer, vocabExercise } from "./exercises";
 import { quizWords, wordInEnglish } from "../content/english";
+import { STORY_ONLY } from "../content/words";
 import { mastery, Mistake, Phase, phaseOf, Progress, recordDay, recordMistake, recordSkill } from "./progress";
 import { countsFor, partPhase, updatePath } from "./path";
 import { Part } from "../content/parts";
-import { kindsFor, Line, lineExercise, LineKind } from "./lines";
+import { kindsFor, Line, lineExercise, LineKind, lineSkills, readLine } from "./lines";
 import { dueWords, exposeWord, reviewWord } from "./srs";
 
 export const KIND_WEIGHTS: [ExerciseKind, number][] = [
@@ -87,6 +88,8 @@ export interface SessionOpts {
   focusLesson?: number;
   /** Restrict focus to these skills (e.g. one part, one rule or one lesson). */
   skills?: string[];
+  /** Aim at all of these at once (a mistake's rules: a sentence like the one missed). */
+  focus?: string[];
   /**
    * Share of exercises aimed at the other rules the learner knows, once the
    * focus is past its simple phase (a part's practice keeps earlier parts alive).
@@ -94,6 +97,21 @@ export interface SessionOpts {
   review?: number;
   /** Words available for recall exercises (default: all known words). */
   vocab?: Entry[];
+}
+
+/** How a word recalled in a round is kept among the round's exercises (`seen`). */
+const wordKey = (id: string) => `word:${id}`;
+
+/**
+ * Words to recall in a review: not the little fixed words, nor a story's own
+ * word (as on the Words page), nor one spelled as in English (Olympus, Europa),
+ * with nothing to recall.
+ */
+export function recallable(e: Entry): boolean {
+  if (e.kind === "fixed" || STORY_ONLY.has(e.id)) return false;
+  const plain = (s: string) => latinKey(s).replace(/[^a-z]/g, "");
+  const latin = e.kind === "verb" ? e.pp[0] : e.lemma;
+  return plain(latin) !== plain(e.en);
 }
 
 /** The average mastery of some skills (0 for none). */
@@ -120,18 +138,20 @@ export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set
     if (!kind) return null;
     let ex: Exercise | null;
     if (kind === "vocab") {
-      const pool = opts.vocab ?? [];
+      // a word once a round, in one direction (Jupiter → Iuppiter came right after Iuppiter → Jupiter)
+      const pool = (opts.vocab ?? []).filter((e) => !seen.has(wordKey(e.id)));
       if (!pool.length) continue;
       const due = dueWords(p, pool.map((e) => e.id));
       const id = due.length && ctx.r() < 0.8 ? due[0] : pick(ctx.r, pool).id;
       const entry = pool.find((e) => e.id === id)!;
       ex = vocabExercise(ctx, entry, ctx.r() < 0.5 ? "la2en" : "en2la");
+      seen.add(wordKey(id));
     } else if (kind === "derive") {
       ex = deriveFrom(ctx, opts.vocab ?? []);
     } else if (kind === "answer") {
       continue; // open questions come from their own round (answers.ts)
     } else {
-      ex = makeExercise(kind, c, focus ?? pickFocus(p, ctx.k, ctx.r, opts.skills, opts.focusLesson));
+      ex = makeExercise(kind, c, focus ?? opts.focus ?? pickFocus(p, ctx.k, ctx.r, opts.skills, opts.focusLesson));
     }
     if (!ex || seen.has(ex.context)) continue;
     seen.add(ex.context);
@@ -141,9 +161,26 @@ export function nextExercise(p: Progress, ctx: Ctx, opts: SessionOpts, seen: Set
   return null;
 }
 
+/**
+ * The rules a mistake is about: those it got wrong, or, for a sentence misread
+ * as a whole with nothing in particular blamed («Amīcus discipulam docet» as
+ * "friends teach a student"), every rule of that sentence. Older saves kept no
+ * rules for these: they are read again from the sentence in the prompt.
+ */
+export function mistakeSkills(m: Mistake, lex?: Lexicon): string[] {
+  if (m.skills.length || !lex) return m.skills;
+  const latin = /^Translate into English: (.+?) Model answer:/.exec(m.prompt)?.[1];
+  const tokens = latin ? readLine(latin, lex) : null;
+  return tokens ? lineSkills(tokens) : [];
+}
+
 /** Mistakes that can come back now: not fixed yet, and about rules of the step (or about a word). */
-export function mistakesToFix(p: Progress, k: Knowledge): Mistake[] {
-  return p.mistakes.filter((m) => !m.fixed && (m.skills.length ? m.skills.every((s) => k.skills.has(s)) : !!m.words?.length));
+export function mistakesToFix(p: Progress, k: Knowledge, lex?: Lexicon): Mistake[] {
+  return p.mistakes.filter((m) => {
+    if (m.fixed) return false;
+    const skills = mistakeSkills(m, lex);
+    return skills.length ? skills.every((s) => k.skills.has(s)) : !!m.words?.length;
+  });
 }
 
 /** Gentle exercise kinds close to the one a mistake was made in. */
@@ -163,22 +200,23 @@ export function mistakesSession(p: Progress, ctx: Ctx, vocab: Entry[], size = 10
   const out: Exercise[] = [];
   const seen = new Set<string>();
   // the mistakes on the rule in hand first, then the ones that have waited longest
-  const near = (m: Mistake) => (m.skills.some((s) => prefer.includes(s)) ? 0 : 1);
-  const order = [...mistakesToFix(p, ctx.k)].sort((a, b) => near(a) - near(b) || a.at - b.at);
+  const near = (m: Mistake) => (mistakeSkills(m, ctx.lex).some((s) => prefer.includes(s)) ? 0 : 1);
+  const order = [...mistakesToFix(p, ctx.k, ctx.lex)].sort((a, b) => near(a) - near(b) || a.at - b.at);
   for (const m of order) {
     if (out.length >= size) break;
     const words = vocab.filter((w) => m.words?.includes(w.id));
+    const skills = mistakeSkills(m, ctx.lex);
     let ex: Exercise | null = null;
     if ((m.kind === "vocab" || m.kind === "derive") && words.length) {
       ex = m.kind === "vocab" ? vocabExercise(c, words[0], c.r() < 0.5 ? "la2en" : "en2la") : deriveFrom(c, words);
       if (ex && seen.has(ex.context)) continue;
       if (ex) seen.add(ex.context);
-    } else if (m.skills.length) {
+    } else if (skills.length) {
       // the same kind of exercise first, then a close one (nextExercise keeps `seen` itself)
       const kinds = sameFamily(m.kind);
       ex =
-        nextExercise(p, c, { size: 1, skills: m.skills, kinds: [m.kind as ExerciseKind], vocab }, seen) ??
-        nextExercise(p, c, { size: 1, skills: m.skills, kinds: kinds.length ? kinds : undefined, vocab }, seen);
+        nextExercise(p, c, { size: 1, skills, focus: skills, kinds: [m.kind as ExerciseKind], vocab }, seen) ??
+        nextExercise(p, c, { size: 1, skills, kinds: kinds.length ? kinds : undefined, vocab }, seen);
     }
     if (!ex) continue;
     ex.fixes = m.at;
@@ -289,6 +327,9 @@ export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], k
   const allowed = kinds.filter((kind) => kind !== "vocab" && kind !== "derive" && (kind !== "listen" || !!ctx.audio)) as MadeKind[];
   const phaseKinds = kindWeights(level).filter(([kind]) => allowed.includes(kind as MadeKind));
   const fixed = lines.filter((l) => l.skills.some((s) => part.skills.includes(s)) && l.skills.every((s) => ctx.k.skills.has(s)));
+  // a sentence of the videos and stories once a round (the one sentence of -ī came three times in a row)
+  const used = new Set(prev.map((e) => e.line).filter(Boolean));
+  const fresh = fixed.filter((l) => !used.has(l.la));
   // after a wrong answer the sentence is plainer too (a phase back), until an answer is right again
   const styleLevel = missed > 0 ? PHASE_LEVEL[phase === "hard" ? "mixed" : "simple"] : level;
   const c: Ctx = { ...ctx, k: { ...ctx.k, ...sentenceStyle(styleLevel, ctx.k.silly) } };
@@ -326,8 +367,8 @@ export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], k
     const linesNow = kindsNow === blockKinds ? lineKinds : kindsFor(level).filter(([k]) => otherKinds.some(([o]) => o === k));
     for (let attempt = 0; attempt < 12 && kindsNow.length; attempt++) {
       const ex =
-        fixed.length && linesNow.length && ctx.r() < 1 / 3
-          ? lineExercise(c, pick(ctx.r, fixed), weighted(ctx.r, linesNow)!, lines)
+        fresh.length && linesNow.length && ctx.r() < 1 / 3
+          ? lineExercise(c, pick(ctx.r, fresh), weighted(ctx.r, linesNow)!, lines)
           : makeExercise(weighted(ctx.r, kindsNow) as MadeKind, c, focus);
       if (fits(ex, focus)) return done(ex);
     }
@@ -340,8 +381,8 @@ export function partExercise(p: Progress, ctx: Ctx, part: Part, lines: Line[], k
       if (fits(ex, focus)) return done(ex);
     }
   }
-  // any piece of the rule: the fixed sentences (et between two verbs), then new ones
-  for (const line of shuffle(ctx.r, fixed)) {
+  // any piece of the rule: the fixed sentences (et between two verbs), those not met in the round first, then new ones
+  for (const line of [...shuffle(ctx.r, fresh), ...shuffle(ctx.r, fixed.filter((l) => used.has(l.la)))]) {
     for (const [kind] of shuffle(ctx.r, notHarder(kindsFor(level)))) {
       const ex = lineExercise(c, line, kind, lines);
       if (fits(ex, part.skills)) return done(ex);
@@ -387,6 +428,8 @@ export function applyResult(p: Progress, ex: Exercise, res: Result, answer: stri
   if (old) {
     if (res.verdict !== "wrong") old.fixed = true;
   } else if (res.verdict !== "correct" && ex.kind !== "answer") {
+    // the rules it got wrong; a sentence misread with nothing in particular blamed is about all of its rules
+    const blamed = Object.entries(res.credit).filter(([, v]) => v < 0.5).map(([s]) => s);
     recordMistake(p, {
       at: now,
       kind: ex.kind,
@@ -394,7 +437,7 @@ export function applyResult(p: Progress, ex: Exercise, res: Result, answer: stri
       // a choice is kept as the word chosen, not its number
       answer: ex.choices?.find((c) => c.id === answer)?.label ?? answer,
       expected: res.expected,
-      skills: Object.entries(res.credit).filter(([, v]) => v < 0.5).map(([s]) => s),
+      skills: blamed.length || res.verdict !== "wrong" ? blamed : Object.keys(res.credit),
       notes: res.issues.filter((i) => i.message).map((i) => i.message.replace(/«|»/g, "").replace(/#[a-z0-9]+(?:\.[a-z0-9]+)*/g, "")),
       words: ex.words,
     });

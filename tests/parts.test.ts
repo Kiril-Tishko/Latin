@@ -389,6 +389,16 @@ describe("practice of each part", () => {
     expect(down).toBeGreaterThan(10);
   }, 30_000);
 
+  it("brings a sentence of the videos or stories once a round (-ī's one sentence came three times in a row)", () => {
+    for (const id of ["2.3", "3.2", "4.1"]) {
+      const part = PARTS.find((x) => x.id === id)!;
+      for (let seed = 1; seed <= 12; seed++) {
+        const lines = playRound(part, seed * 13, 12).out.map((x) => x.ex.line).filter(Boolean);
+        expect(lines.length, `${id}: ${lines.join(" | ")}`).toBe(new Set(lines).size);
+      }
+    }
+  });
+
   it("rule 3.2: the -ī of an -us word is in every exercise (it once was in none)", () => {
     const part = PARTS.find((x) => x.id === "3.2")!;
     const { out } = playRound(part, 5, 5);

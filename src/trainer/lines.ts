@@ -186,6 +186,7 @@ export function lineExercise(ctx: Ctx, line: Line, kind: LineKind, lines: Line[]
     : kind === "meaning" ? meaningOn(ctx, line.tokens, en, line.skills, others())
     : writeOn(ctx, line.tokens, en, line.skills);
   if (!ex) return null;
+  ex.line = line.la;
   if (line.from.kind === "video") ex.video = line.from.lesson;
   else ex.story = line.from.title;
   ex.retry = () => {

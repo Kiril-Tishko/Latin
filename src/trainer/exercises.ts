@@ -2,7 +2,7 @@
 // and words it practises, so the session can update mastery afterwards.
 import { Analysis, Lexicon } from "../latin/analyze";
 import { checkEnglish, checkLatin, CheckedToken, describe, hinted, Issue, slotsFor, Verdict } from "../latin/check";
-import { en3s, enIng, enPlural, normalizeEnglish } from "../latin/english";
+import { en3s, enIng, enPlural, normalizeEnglish, withParticle } from "../latin/english";
 import {
   chance, Clause, english, generate, Knowledge, latinText, latinTokens, LToken, NP, pick, Rand, shuffle, swapRoles, verbUsable,
   nounUsable, adjUsable, adjFits, makesSense, sensibleObject,
@@ -98,6 +98,8 @@ export interface Exercise {
   video?: number;
   /** A sentence from this story (its title). */
   story?: string;
+  /** The fixed sentence it is made on (its Latin as written), so a round does not bring it again and again. */
+  line?: string;
   /** The mistake (its time) this exercise brings back in "Fix my mistakes". */
   fixes?: number;
   /** Another exercise on the same material, for a wrong answer to come back to. */
@@ -911,7 +913,9 @@ function identify(ctx: Ctx, focus: string[]): Exercise | null {
 const stripArticle = (s: string) => s.replace(/^(the|a|an|to) /, "");
 
 export function vocabExercise(_ctx: Ctx, entry: Entry, direction: "la2en" | "en2la"): Exercise {
-  const meanings = [entry.en, ...(entry.alt ?? [])].map((m) => stripArticle(normalizeEnglish(m)));
+  // a verb's meanings with their little word too: "look at", "run away"
+  const withParticles = entry.kind === "verb" ? [entry.env, ...(entry.altv ?? [])].map((v) => withParticle(v, v.base)) : [];
+  const meanings = [entry.en, ...(entry.alt ?? []), ...withParticles].map((m) => stripArticle(normalizeEnglish(m)));
   const latinForms = new Set<string>();
   if (entry.kind === "noun") latinForms.add(latinKey(entry.lemma));
   else if (entry.kind === "adj") latinForms.add(latinKey(entry.lemma)).add(latinKey(entry.fem));

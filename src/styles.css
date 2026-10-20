@@ -1893,7 +1893,7 @@ main.page.msgr-page { padding-block: 14px; }
   .words-bar { flex-wrap: wrap; }
   .words-bar > .btn { width: 100%; }
 }
-.recap-go { justify-content: flex-end; margin-top: 4px; }
+.recap-go { justify-content: flex-start; }
 
 /* ---------------------------------------------- Verba: the words and their origins */
 /* the two halves of Verba, as two big tabs */

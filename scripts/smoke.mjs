@@ -135,6 +135,9 @@ async function run(name, viewport, colorScheme) {
   await p.locator("#continue").click();
   await p.waitForTimeout(200);
   await p.screenshot({ path: `${out}/${name}-rules-first.png`, fullPage: true });
+  // the reminder's Start is in sight without scrolling (the learner once stopped there, the button below the fold)
+  const startBox = await p.locator("button", { hasText: "Start exercises" }).boundingBox();
+  if (!startBox || startBox.y + startBox.height > (await p.evaluate(() => innerHeight))) errors.push(`${name}: the reminder's Start is below the fold`);
   await p.locator("button", { hasText: "Start exercises" }).click();
   if (!((await p.locator(".part-count").textContent()) ?? "").includes("/ 10 right")) errors.push(`${name}: the round does not show the rule's count`);
   for (let i = 0; i < 4; i++) {

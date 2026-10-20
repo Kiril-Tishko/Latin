@@ -1456,6 +1456,12 @@ main.page.msgr-page { padding-block: 14px; }
 
 .chat-msgs { flex: 1; overflow-y: auto; padding: 16px 28px 14px; display: flex; flex-direction: column; }
 .chat-flow { flex: 1 0 auto; display: flex; flex-direction: column; gap: 6px; }
+/* reading further up: a round ↓ at the bottom corner of the messages, with what has come in since */
+.chat-down-wrap { position: sticky; bottom: 0; height: 0; align-self: flex-end; z-index: 3; }
+.chat-down { position: absolute; right: 0; bottom: 6px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--m-line); background: var(--m-field); color: var(--ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 6px 14px -6px rgba(40, 25, 10, 0.55); animation: tip-in 0.15s ease-out; }
+.chat-down:hover { border-color: var(--gold-soft); }
+.chat-down svg { width: 22px; height: 22px; transform: rotate(90deg); }
+.chat-down .unread-badge { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); }
 .chat-intro { align-items: center; text-align: center; margin: auto; max-width: 440px; padding: 20px 0; --av: 96px; }
 .chat-day { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 14px 0 10px; }
 .chat-day::before, .chat-day::after { content: ""; flex: 1; max-width: 240px; height: 1px; background: var(--m-line); }
@@ -1482,16 +1488,19 @@ main.page.msgr-page { padding-block: 14px; }
 .voice-play.off { background: var(--m-line); color: var(--ink-2); cursor: default; }
 .voice-wave { flex: 1; display: flex; align-items: center; gap: 2px; height: 28px; min-width: 80px; }
 .voice-wave i { flex: 1; min-width: 2px; max-width: 4px; border-radius: 2px; background: color-mix(in srgb, var(--ink-2) 55%, transparent); }
-.voice-note.playing .voice-wave i { background: var(--gold); animation: voice-bar 0.9s ease-in-out infinite alternate; }
+/* playing: the bars move, and light up one by one as the message goes on */
+.voice-note.playing .voice-wave i { background: var(--gold); opacity: 0.35; animation: voice-bar 0.9s ease-in-out infinite alternate, voice-lit 0.15s linear forwards; }
 @keyframes voice-bar { from { transform: scaleY(0.45); } to { transform: scaleY(1); } }
-@media (prefers-reduced-motion: reduce) { .voice-note.playing .voice-wave i { animation: none; } }
+@keyframes voice-lit { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .voice-note.playing .voice-wave i { animation-name: none, voice-lit; } }
 .voice-time { font-family: var(--f-ui); font-size: 0.8rem; color: var(--ink-2); }
 .voice-text { flex: none; padding: 3px 8px; border-radius: 8px; border: 1px solid var(--m-line); background: none; color: var(--ink-2); font-family: var(--f-ui); font-size: 0.8rem; font-weight: 700; cursor: pointer; }
 .voice-text[aria-pressed="true"] { background: var(--gold-soft); color: var(--ink); }
 
 /* a photo in a message, and opened large */
 .bubble-photo { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; margin: -4px -10px 2px; }
-.bubble-photo img { display: block; width: min(300px, 62vw); max-height: 320px; object-fit: cover; border-radius: 8px; border: 1px solid var(--m-line); }
+/* (square until it has loaded: the chat does not jump when it comes in) */
+.bubble-photo img { display: block; width: min(300px, 62vw); max-height: 320px; aspect-ratio: auto 1 / 1; object-fit: cover; border-radius: 8px; border: 1px solid var(--m-line); }
 .photo-view img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; background: var(--panel-2); }
 .chat-new { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; color: var(--gold); }
 .chat-new::before, .chat-new::after { content: ""; flex: 1; height: 1px; background: var(--gold-soft); }

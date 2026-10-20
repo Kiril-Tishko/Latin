@@ -1109,6 +1109,15 @@ async function messenger() {
   await other.p.locator("#composer").blur();
   await other.p.waitForTimeout(150);
   await other.p.screenshot({ path: `${out}/messenger-phone-chat.png` });
+  // on a phone an emoji from the ＋ goes in without bringing the keyboard back up
+  await other.p.click(".plus-btn");
+  await other.p.locator(".emoji-pop .emoji-btn").first().click();
+  await other.p.waitForTimeout(100);
+  if ((await other.p.evaluate(() => document.activeElement?.id)) === "composer") errors.push("messenger: on a phone an emoji from the ＋ brings the keyboard back up");
+  if (!(await other.p.inputValue("#composer"))) errors.push("messenger: on a phone the ＋ does not add an emoji");
+  await other.p.click(".plus-btn");
+  await other.p.fill("#composer", "");
+  await other.p.locator("#composer").blur();
   await other.p.click(".chat-back");
   await other.p.screenshot({ path: `${out}/messenger-phone-list.png` });
   await other.ctx.close();

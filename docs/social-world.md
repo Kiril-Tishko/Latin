@@ -280,3 +280,11 @@ Status: `[x]` done and tested · `[~]` partly · `[ ]` not yet.
   the Latin into the message with one tap. And a surprise the learner asked not
   to be told about (the Sibyl's leaves, CLAUDE.md). Published as v46; both
   routines updated and checked (the helper now picks a fresh picture's id).
+- 5 Nov: the phone routine stopped: the data tool began refusing to save the
+  page's documents to files ("documents that other people may have written"),
+  and every hourly run sent a notification about it. The routine now reads the
+  brief, a new digest (brief/digest, chat/digest.ts) and the inbox into its
+  conversation, and copies only the digest's small summary (times, ids, word
+  fingerprints, allowed spellings; 5-10 KB, with a checksum) and the inbox into
+  its helper's files, which the learner agreed to. Published as v47; both
+  routines updated and checked against the files.

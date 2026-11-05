@@ -1,8 +1,15 @@
 # Helper for the phone routine of the messenger (scripts/messenger-routine.md
 # carries the same code, since a routine's session may not have this repo).
-# The routine saves the messenger's documents with ArtifactData (out_dir) into
-# one folder, then:
-#   python3 nuntii.py state  DIR             who is awake, moods, the chats
+# The data tool keeps the page's documents out of files, so the routine reads
+# them into its conversation and copies two small things into DIR:
+#   digest.json  the "data" of messenger/brief/digest: what the page summed up for
+#                this helper (src/chat/digest.ts: times as minutes from t0, ids,
+#                flags, fingerprints of the words said lately, the allowed spellings)
+#   inbox.json   the messages earlier runs wrote that the page has not taken in yet
+#                ([{"id", "chat", "from", "la", "en", "at", "photo", "pic", "voice"}]):
+#                they count as sent
+# Then:
+#   python3 nuntii.py state  DIR             who is awake now, who may write where (and whether the copy is right)
 #   python3 nuntii.py check  DIR "msg" ...   every word allowed?
 #   python3 nuntii.py vet    DIR DRAFT.json OUT.json   each planned message allowed (words, pace, repeats,
 #                                            photos, blocked, asleep)? OUT gets the inbox documents to save
@@ -10,10 +17,6 @@
 #   python3 nuntii.py picture ID FROM "what it shows" OUT.json [DIR]   a fresh picture someone sends (DIR: drawn as they look)
 #   python3 nuntii.py looks  DIR FROM "what it shows"            the prompt a picture is made from
 #   python3 nuntii.py pictures WANTED.json OUTDIR                every picture (and voice message) waiting to be made
-# DIR holds data/users/me/messenger.json, data/users/me/messenger/brief/now.json,
-# data/users/me/messenger/threads/*.json and data/users/me/messenger/inbox/*.json
-# (as ArtifactData saves them). Messages still waiting in the inbox count as
-# sent: the page moves them into their chats when it opens.
 # The pacing rules (like real people: when the learner goes quiet, a message or
 # two, then they wait) are the same as in src/chat/pace.ts.
 import base64, glob, json, os, random, re, subprocess, sys, tempfile, time, unicodedata, urllib.request
@@ -35,21 +38,90 @@ def load(path, default=None):
         return default
 
 
+def fnv(text):
+    """FNV-1a over the UTF-8 bytes (src/chat/digest.ts has the same)"""
+    h = 2166136261
+    for b in text.encode("utf-8"):
+        h = ((h ^ b) * 16777619) % 4294967296
+    return h
+
+
+def b36(n):
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    while n:
+        n, r = divmod(n, 36)
+        out = digits[r] + out
+    return out or "0"
+
+
+def canonical(x):
+    return json.dumps(x, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def digest_ok(data):
+    """the copy is the page's own: its sum still fits (a digit copied wrong changes it)"""
+    rest = {k: v for k, v in data.items() if k != "sum"}
+    return isinstance(data, dict) and data.get("sum") == b36(fnv(canonical(rest)))
+
+
+SRC = ["own", "reply", "routine"]
+
+
 def docs(d):
-    base = os.path.join(d, "data/users/me/messenger")
-    meta = load(base + ".json", {}) or {}
-    brief = load(os.path.join(base, "brief/now.json"))
-    threads = {os.path.basename(p)[:-5]: load(p, {}) for p in glob.glob(os.path.join(base, "threads/*.json"))}
+    """the digest and the inbox the routine copied into D, as the messenger's meta, its brief and its chats"""
+    data = load(os.path.join(d, "digest.json"))
+    if not isinstance(data, dict) or "t0" not in data:
+        return {}, None, {}
+    t0 = data["t0"]
+    at = lambda m: t0 + m * 60_000
+    meta = {
+        "seenAt": at(data.get("seen", 0)),
+        "world": {"blocked": {pid: 1 for pid in data.get("blockedMe", [])}},
+        "bonds": {pid: {"silentUntil": at(m)} for pid, m in (data.get("silent") or {}).items()},
+        "ok": digest_ok(data),
+    }
+    people = []
+    for pid, p in (data.get("people") or {}).items():
+        patience, wait, nudges = p.get("pace", [1, 2880, 0])
+        people.append({"id": pid, "name": p.get("n", pid), "g": p.get("g", "m"), "tz": p.get("tz", "Europe/Rome"), "wake": p.get("wake", 7), "sleep": p.get("sleep", 23),
+                       "busy": [[a, b, "busy"] for a, b in p.get("busy", [])], "pace": {"patience": patience, "wait": wait / 60, "nudges": nudges},
+                       "burst": p.get("burst", BURST_MAX), "photoRate": p.get("rate"), "look": p.get("look")})
+    brief = {
+        "me": {"name": data.get("me", "the learner")},
+        "people": people,
+        "groups": {cid: {"members": ms} for cid, ms in (data.get("groups") or {}).items()},
+        "muted": data.get("muted", []),
+        "blocked": data.get("blocked", []),
+        "forms": data.get("forms", []),
+    }
+    up = {(c, who, m): (la, en) for c, who, m, la, en in data.get("up", [])}
+    threads = {}
+    for cid, c in (data.get("chats") or {}).items():
+        msgs = []
+        for i, e in enumerate(c.get("m", [])):
+            m, who, src, flags = e[:4]
+            x = {"id": f"d{i}", "at": at(m), "from": who, "src": SRC[src] if 0 <= src < 3 else "reply", "w": set(e[4].split(".")) if len(e) > 4 and e[4] else set()}
+            if flags & 1:
+                x["photo"] = e[5] if len(e) > 5 else True
+            if flags & 2:
+                x["pic"] = True
+            if flags & 4:
+                x["voice"] = True
+            if flags & 8:
+                x["deletedAt"] = x["at"]
+            if (cid, who, m) in up:
+                x["la"], x["en"] = up[(cid, who, m)]
+            msgs.append(x)
+        threads[cid] = {"readAt": at(c["read"]) if c.get("read") is not None else 0, "messages": msgs}
     # messages waiting in the inbox are already sent: they count for the pace, the repeats and the notification
-    for p in sorted(glob.glob(os.path.join(base, "inbox/*.json"))):
-        x = load(p, {}) or {}
+    for x in load(os.path.join(d, "inbox.json"), []) or []:
         chat = x.get("chat")
-        if not chat or not x.get("from"):
+        if not isinstance(x, dict) or not chat or not x.get("from"):
             continue
         t = threads.setdefault(chat, {"messages": [], "readAt": 0})
-        doc_id = os.path.basename(p)[:-5]
-        if not any(m.get("id") == doc_id for m in t.get("messages", [])):
-            t.setdefault("messages", []).append(dict(x, id=doc_id, src="routine"))
+        if not any(m.get("id") == x.get("id") for m in t["messages"]):
+            t["messages"].append(dict(x, src="routine"))
     for t in threads.values():
         t["messages"] = sorted(t.get("messages", []), key=lambda m: m.get("at", 0))
     return meta, brief, threads
@@ -73,17 +145,6 @@ def status(p, now):
         if inside(h, a, b):
             return "busy: " + what
     return "free"
-
-
-def life_now(brief, pid, now):
-    cur = None
-    for x in brief.get("lives", {}).get(pid, []):
-        if x.get("from", 0) <= now:
-            cur = x
-    if not cur:
-        return "no current mood: choose one that fits"
-    level = (cur.get("level") or "") + " " if cur.get("level") else ""
-    return f"mood {level}{cur.get('mood')}; " + (f"going on: {cur['event']}" if cur.get("event") else "nothing special going on")
 
 
 def names(brief):
@@ -127,41 +188,26 @@ def state(d):
     meta, brief, threads = docs(d)
     now = now_ms()
     if not brief:
-        print("NO BRIEF")
+        print("NO DIGEST")
         return
-    print(f"now: {now} ms; Kyiv {hours(now, 'Europe/Kyiv')[1]}; learner last in the messenger {round((now - meta.get('seenAt', 0)) / 60000)} minutes ago")
-    print("\nPEOPLE (local time, now, life):")
+    if not meta.get("ok"):
+        print('THE COPY IS NOT EXACT: write the "data" of messenger/brief/digest into digest.json again, exactly as it is')
+        return
+    print(f"now: Kyiv {hours(now, 'Europe/Kyiv')[1]}, Rome {hours(now, 'Europe/Rome')[1]}; learner last in the messenger {round((now - meta.get('seenAt', 0)) / 60000)} minutes ago")
+    print("\nPEOPLE (their local time now; asleep, busy or free):")
     for p in brief["people"]:
-        print(f"- {p['id']} ({p['name']}): {hours(now, p['tz'])[1]} {p['tz']}; {status(p, now)}; {life_now(brief, p['id'], now)}")
-    today = datetime.fromtimestamp(now / 1000, ZoneInfo("Europe/Rome")).strftime("%Y-%m-%d")
-    day = next((c for c in brief.get("calendar", []) if c.get("day") == today), None)
-    if day:
-        print("\n" + day["text"])
-    if brief.get("world"):
-        print("\n" + brief["world"])
+        print(f"- {p['id']} ({p['name']}): {hours(now, p['tz'])[1]} {p['tz']}; {status(p, now)}")
     if brief.get("blocked"):
         print("\nTHE LEARNER HAS BLOCKED (nothing they send in private arrives; do not write to the learner as them, in private): " + ", ".join(brief["blocked"]))
     if brief.get("muted"):
         print("MUTED BY THE LEARNER (fine to write; no notification): " + ", ".join(brief["muted"]))
-    if brief.get("photos"):
-        # a photo sent anywhere lately is not offered again
-        sent = {m.get("photo") for t in threads.values() for m in t.get("messages", []) if m.get("photo") and now - m.get("at", 0) < PHOTO_DAYS * 24 * HOUR}
-        print("\nPHOTOS (id: what it shows; who may send it; none sent lately):")
-        for ph in brief["photos"]:
-            if ph["id"] in sent:
-                continue
-            who = "anyone" if ph.get("who") == "any" else ", ".join(ph.get("who", []))
-            print(f"- {ph['id']}: {ph['en']} ({who})")
+    # a photo sent anywhere lately is not sent again
+    sent = sorted({m["photo"] for t in threads.values() for m in t.get("messages", []) if isinstance(m.get("photo"), str) and now - m.get("at", 0) < PHOTO_DAYS * 24 * HOUR})
+    if sent:
+        print("\nPHOTOS SENT LATELY (not again): " + ", ".join(sent))
     n = names(brief)
-    print("\nWHAT EACH OF THEM SAID LATELY (never say it again; bring something new or write nothing):")
-    for p in brief["people"]:
-        said = sorted([m for t in threads.values() for m in t.get("messages", []) if m.get("from") == p["id"] and now - m.get("at", 0) < REPEAT_DAYS * 24 * HOUR], key=lambda m: m["at"])[-8:]
-        if said:
-            print(f"- {p['name']}: " + " | ".join(m.get("la", "") for m in said))
-    print("\nCHATS (oldest first; times in Rome; [WHO MAY WRITE]):")
+    print("\nWHO MAY WRITE WHERE NOW (what was said is in the digest's text):")
     for cid, t in sorted(threads.items()):
-        if t.get("gone") or cid == "acta":
-            continue
         msgs = [m for m in t.get("messages", []) if m.get("at", 0) <= now]
         waiting = [m for m in t.get("messages", []) if m.get("at", 0) > now]
         new = [m for m in msgs if m.get("from") not in ("me", "sys") and m.get("at", 0) > t.get("readAt", 0)]
@@ -171,12 +217,6 @@ def state(d):
         elif cid in n:
             tz = next((p["tz"] for p in brief["people"] if p["id"] == cid), "Europe/Rome")
             print(f"  [{pace_line(n, brief, meta, t, cid, now, tz)}]")
-        for m in msgs[-10:]:
-            if m.get("from") == "sys":
-                print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] ({m.get('en')})")
-            else:
-                what = f"[photo: {m.get('picEn') or m.get('photo') or 'a photo'}] " if m.get("pic") or m.get("photo") else "[voice] " if m.get("voice") else ""
-                print(f"    [{hours(m['at'], 'Europe/Rome')[1]}] {n.get(m.get('from'), m.get('from'))}: {what}{m.get('la')}" + (" (deleted)" if m.get("deletedAt") else ""))
 
 
 def plain(w):
@@ -292,8 +332,21 @@ def plain_words(text):
     return re.findall(r"[^\W\d_]+", plain(CODE.sub(" ", text or "")))
 
 
-def similar(a, b):
-    A, B = set(plain_words(a)), set(plain_words(b))
+def print_of(word):
+    """a word's fingerprint (src/chat/digest.ts printOf): the digest carries what was said as these"""
+    return b36(fnv(word) % 1679616)
+
+
+def prints(text):
+    return {print_of(w) for w in plain_words(text)}
+
+
+def words_of(m):
+    return m["w"] if "w" in m else prints(m.get("la", ""))
+
+
+def similar(A, B):
+    """two messages that say the same thing, by the fingerprints of their words (one-word ones may come back)"""
     if len(A) < 2 or len(B) < 2:
         return False
     both = len(A & B)
@@ -301,7 +354,8 @@ def similar(a, b):
 
 
 def repeats(t, who, la, now):
-    return any(m.get("from") == who and m.get("at", 0) <= now and now - m.get("at", 0) < REPEAT_DAYS * 24 * HOUR and not m.get("deletedAt") and similar(m.get("la", ""), la) for m in t.get("messages", []))
+    said = prints(la)
+    return any(m.get("from") == who and m.get("at", 0) <= now and now - m.get("at", 0) < REPEAT_DAYS * 24 * HOUR and not m.get("deletedAt") and similar(words_of(m), said) for m in t.get("messages", []))
 
 
 def photo_sent_lately(t, photo, now):
@@ -407,19 +461,15 @@ def is_group(brief, cid):
     return cid == "amici" or cid in (brief or {}).get("groups", {})
 
 
-def b36(n):
-    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
-    out = ""
-    while n:
-        n, r = divmod(n, 36)
-        out = digits[r] + out
-    return out or "0"
-
-
 def vet(d, draft_path, out_path):
     """Checks each planned message in order; OUT gets the allowed ones as inbox documents (id, chat, from, la, en, at, ...)."""
     meta, brief, threads = docs(d)
     now = now_ms()
+    if not brief or not meta.get("ok"):
+        print('NOTHING CHECKED: the digest is missing or not copied exactly; write the "data" of messenger/brief/digest into digest.json again')
+        with open(out_path, "w") as f:
+            json.dump([], f)
+        return
     forms = set(brief.get("forms", [])) if brief else set()
     people = {p["id"]: p for p in (brief or {}).get("people", [])}
     photos = {ph["id"] for ph in (brief or {}).get("photos", [])}
@@ -449,7 +499,7 @@ def vet(d, draft_path, out_path):
                 bad.append("they are giving the learner the silent treatment")
         if not (la or photo or x.get("pic")):
             bad.append("empty")
-        if photo and photo not in photos:
+        if photo and photos and photo not in photos:
             bad.append(f"no such photo: {photo}")
         if (photo or x.get("pic")) and who in people and photo_room(brief, threads, who, when) <= 0:
             bad.append(f"{who} has sent enough photos lately (their habit): send it without the photo")
@@ -483,10 +533,12 @@ def vet(d, draft_path, out_path):
 def notify(d, new_path=None):
     meta, brief, threads = docs(d)
     now = now_ms()
-    if not brief:
-        print("Open Nūntiī once, and your Roman friends will start writing to you.")
-        return
     extra = load(new_path, []) if new_path else []
+    if not brief:
+        # no digest yet (the learner has not opened the messenger since it came): only what this run wrote
+        brief = {"people": [], "me": {}}
+    if not meta.get("ok"):
+        threads = {}
     muted = set(brief.get("muted", []))
     # what the people wrote on their own since the last run (the page plans a few hours ahead), and what this run wrote;
     # a run starts a minute or two after its time and tells of what arrives within a minute of it

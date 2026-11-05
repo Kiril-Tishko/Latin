@@ -192,8 +192,10 @@ Runtime capabilities used:
   people's lives, the strangers met), `…/messenger/threads/<chat>` (one doc per
   chat, merged by message id with `dropped` tombstones, followed live),
   `…/messenger/inbox/<id>` (messages the phone routine wrote; the page moves them
-  into their chats and deletes them) and `…/messenger/brief/now` (what the
-  routine needs, written by the page). The Ācta Diurna is the thread
+  into their chats and deletes them), `…/messenger/brief/now` (what the
+  routine reads, written by the page) and `…/messenger/brief/digest` (what its
+  helper checks with, rewritten a few seconds after the chats change:
+  chat/digest.ts, Phone notifications below). The Ācta Diurna is the thread
   `…/messenger/threads/acta` (kind "channel"; `meta.actaAt` marks a board being
   written, so two devices do not both write it). Pictures (the people's fresh
   ones and the learner's photos) are documents of their own,
@@ -957,12 +959,22 @@ learner is there, also when something below grows (fonts, a card, Check's note).
   notifications, CRON_TZ=Europe/Kyiv every hour from 7:51 to 23:51, as the learner asked for much more texting) follows scripts/messenger-routine.md (with
   its helper scripts/nuntii-routine.py embedded, as a routine's session may not
   have this repo: who is awake, moods, the chats; the word check; the
-  notification line): it reads the brief (src/chat/brief.ts: the learner, the language block, every
-  allowed spelling, everyone's sheet and their lives rolled 48 h ahead, the day
-  in Rome for today and the next two days, the photos, the groups, whom the
-  learner blocked and muted, each person's pace, the groups' members), and the
-  inbox (messages it wrote earlier that the page has not moved in yet count as
-  sent), makes the pictures still wanted, plans 0-3 messages (a voice message,
+  notification line). Since November 2026 the data tool refuses to save the
+  page's documents to files ("documents that other people may have written";
+  out_dir), so the routine reads everything into its conversation: the brief
+  (src/chat/brief.ts: the learner, the language block, everyone's sheet, their
+  lives rolled 48 h ahead and the same as text in Rome time, `ahead`, the day in
+  Rome for today and the next two days, the photos, the groups, whom the
+  learner blocked and muted, each person's pace), the digest (`makeDigest`,
+  `digestText` in src/chat/digest.ts: the chats as text, and a small summary for
+  the helper, nearly all numbers: times as minutes from `t0`, ids, flags, the
+  words said lately as fingerprints, `printOf`, the allowed spellings, the
+  people's pace and looks, 5-10 KB, with a `sum` so the helper sees a copy that
+  came out wrong) and the inbox (messages it wrote earlier that the page has not
+  moved in yet count as sent). The learner agreed (5 Nov) that the routine
+  copies the digest's data and the inbox into the helper's files
+  (digest.json, inbox.json; the helper's `docs` builds the old meta, brief and
+  chats from them). It makes the pictures still wanted, plans 0-3 messages (a voice message,
   a photo or a fresh picture now and then), and passes them through
   `nuntii.py vet`: words, pace, repeats, a photo sent lately, asleep, blocked
   or giving the silent treatment; only what passes is saved, as the inbox

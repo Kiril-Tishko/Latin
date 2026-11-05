@@ -3,7 +3,7 @@
 // the page with the same functions it uses itself: the learner, the words and
 // rules, who everyone is, and their moods for the next two days, rolled ahead.
 import { PEOPLE } from "../content/people";
-import { Life, LifeSpec, lifeNow, Rand } from "./life";
+import { Life, LifeSpec, lifeNow, moodText, Rand } from "./life";
 import { Meta, Who, whoOf } from "./model";
 import { bondBlock, dramaBlock, knownPeople, languageBlock, learnerBlock, natureLines, PromptCtx, worldLine } from "./prompts";
 import { groupIds, groupMembers, groupName } from "./model";
@@ -32,6 +32,8 @@ export interface Brief {
   people: { id: string; name: string; g: "m" | "f"; tz: string; wake: number; sleep: number; busy: [number, number, string][]; sheet: string; pace: Pace; burst: number; look?: string; photoRate?: string }[];
   /** Moods and happenings rolled ahead: each from its time on. */
   lives: Record<string, (Life & { from: number })[]>;
+  /** The same, as the routine reads it: each person's moods and happenings from their time on, in Rome time. */
+  ahead: string;
   /** The day in Rome for today and the next two days (date in Rome, YYYY-MM-DD): festivals, birthdays, news. */
   calendar: { day: string; text: string }[];
   /** The photos the people may send: id, what it shows, who would send it ("any": anyone). */
@@ -44,6 +46,9 @@ export interface Brief {
   muted: string[];
   blocked: string[];
 }
+
+/** A moment as the routine reads it: the weekday and the time in Rome ("Thu 14:05"). */
+export const romeTime = (t: number) => new Date(t).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).replace(",", "");
 
 /** Their lives for the next hours, rolled ahead at random. */
 export function rollAhead(spec: LifeSpec, life: Life | undefined, now: number, hours: number, r: Rand): (Life & { from: number })[] {
@@ -101,6 +106,10 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
     // what the Sibyl foretold for them is their life at its hour (chat/sibyl.ts)
     if (spec) lives[id] = withFates(rollAhead(spec, meta.life[id], ctx.now, 48, r), id, meta, ctx.now, 48);
   }
+  const ahead = people
+    .filter((p) => lives[p.id])
+    .map((p) => `- ${p.name} (${p.id}): ${lives[p.id].map((l) => `from ${romeTime(l.from)}: ${moodText(l)}${l.event && (l.eventUntil ?? 0) > l.from ? `; going on: ${l.event}` : ""}`).join(" · ")}`)
+    .join("\n");
   // the next days in Rome, and the names they bring (allowed while they are near)
   const days = [0, 1, 2].map((n) => ctx.now + n * 86400000);
   const calendar = days.map((t) => {
@@ -118,6 +127,7 @@ export function makeBrief(meta: Meta, ctx: PromptCtx, strangerIds: string[], r: 
     forms: [...forms].sort(),
     people,
     lives,
+    ahead,
     calendar,
     photos: PHOTOS.map((p) => ({ id: p.id, en: p.en, who: p.who })),
     world: [

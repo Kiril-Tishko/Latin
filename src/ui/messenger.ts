@@ -9,6 +9,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { GROUP, PEOPLE } from "../content/people";
 import { makeBrief } from "../chat/brief";
+import { digestText, makeDigest } from "../chat/digest";
 import { ACTA_ID, actaKey, actaPicture, boardDue, boardMemories, boardOf, firstEditions, pastBoards, writeActa } from "../chat/acta";
 import { applyFeelings, checkDraft, Deps, glossOf, meetFromStory, meetStranger, picId, refreshLives, routineMinds, timingFor, vetAll, writeOwn, writeReply } from "../chat/engine";
 import { applyDeeds, Deeds, welcome } from "../chat/world";
@@ -53,7 +54,7 @@ let meta: Meta = newMeta();
 let threads: Record<string, T> = {};
 /** Each person's mind: what they remember and how they know it (chat/mind.ts). */
 let minds: Record<string, Mind> = {};
-let store: { meta: LiveDoc; brief: DocRef; threads: DocCollection; inbox: DocCollection; pics: DocCollection; minds: DocCollection } | null = null;
+let store: { meta: LiveDoc; brief: DocRef; digest: DocRef; threads: DocCollection; inbox: DocCollection; pics: DocCollection; minds: DocCollection } | null = null;
 const listeners = new Set<() => void>();
 /** Threads whose people are writing an answer right now (Claude is working), with any error. */
 const writing = new Map<string, { ctl: AbortController; error?: string }>();
@@ -231,6 +232,7 @@ function saveThread(t: T) {
   if (!gotChats) return void held.add(`t:${t.id}`);
   const s = store;
   queueWrite(`t:${t.id}`, () => s.threads.doc(t.id).set(toBody({ ...threads[t.id], messages: threads[t.id].messages.slice(-MAX_MESSAGES) })));
+  writeDigest();
 }
 
 function saveMind(m: Mind) {
@@ -261,6 +263,7 @@ function saveMeta() {
   if (!gotMetaIn) return void held.add("meta");
   const s = store;
   queueWrite("meta", () => s.meta.set(toBody(meta)));
+  writeDigest();
 }
 
 /** The writes that waited for the account's copy, now that it is in (merged with it). */
@@ -346,6 +349,7 @@ function follow(s: NonNullable<typeof store>) {
       tidy();
       saveLocal();
       emit();
+      writeDigest();
     },
     () => ((gotMetaIn = true), gotMetaDoc(), flushHeld(), tidy()),
   );
@@ -372,6 +376,7 @@ function follow(s: NonNullable<typeof store>) {
       tidy();
       saveLocal();
       emit();
+      writeDigest();
     },
     () => ((gotChats = true), gotThreads(), flushHeld()),
   );
@@ -960,14 +965,17 @@ export function touchLives(ids: string[]) {
   if (rollLives(ids, Date.now())) saveMeta();
 }
 
+/** The strangers the phone routine may write as: the ones the learner has met. */
+const routineStrangers = () => allThreads().filter((t) => t.kind === "stranger" && (t.messages.length || meta.strangers[t.id]?.story)).map((t) => t.id);
+
 let briefKey = "";
 /** Writes the brief for the phone routine when what it says has changed (`force`: the learner changed something it carries). */
 async function writeBrief(force = false) {
   if (force) briefKey = "";
   const ctx = promptCtx();
   if (!ctx || !store) return;
-  const strangers = allThreads().filter((t) => t.kind === "stranger" && (t.messages.length || meta.strangers[t.id]?.story)).map((t) => t.id);
-  const brief = makeBrief(meta, ctx, strangers);
+  writeDigest();
+  const brief = makeBrief(meta, ctx, routineStrangers());
   const key = JSON.stringify([brief.me, brief.language, brief.people.map((p) => p.sheet)]);
   // the moods rolled ahead age too: write again at least twice a day
   if (key === briefKey && Date.now() - lastBrief < 12 * 3600_000) return;
@@ -977,6 +985,30 @@ async function writeBrief(force = false) {
   queueWrite("brief", () => s.brief.set(toBody(brief)));
 }
 let lastBrief = 0;
+
+let digestTimer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * Writes, a few seconds after the chats or the meta change, what the phone
+ * routine's helper checks its messages with (chat/digest.ts): the data tool
+ * keeps the page's documents out of files, so the routine copies this small
+ * summary into the helper's file, and reads the chats as text beside it.
+ */
+function writeDigest() {
+  if (!store) return;
+  if (digestTimer) clearTimeout(digestTimer);
+  digestTimer = setTimeout(() => {
+    digestTimer = null;
+    const ctx = promptCtx();
+    // only from the account's own copy: one written from an old copy would let the people write too much
+    if (!ctx || !store || !gotChats || !gotMetaIn) return;
+    const now = Date.now();
+    const chats = allThreads(true);
+    const data = makeDigest(makeBrief(meta, ctx, routineStrangers()), meta, chats, now);
+    const text = digestText(meta, chats, now, (id) => (id === "me" ? ctx.me.name : id));
+    const s = store;
+    queueWrite("digest", () => s.digest.set(toBody({ data, text, updatedAt: now })));
+  }, 4000);
+}
 
 /** "online", "typing…", "last seen 14:20": how present someone looks. */
 export function presence(who: { id: string; day: import("../content/people").Day; tz: string }, t: Thread, now: number, status: { state: string }): string {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { allowOwn, BURST_MAX, groupMayWrite, mayWrite, overPace, paceNow, paceOf, paceLine, similar, strangerPace } from "../src/chat/pace";
@@ -12,6 +12,8 @@ import { allowedWords, chatEntries, chatLexicon, nameEntry } from "../src/chat/w
 import { LESSONS } from "../src/content/lessons";
 import { PARTS } from "../src/content/parts";
 import { seeded } from "../src/latin/generate";
+import { Brief } from "../src/chat/brief";
+import { makeDigest } from "../src/chat/digest";
 
 const H = 3600_000;
 const M = 60_000;
@@ -20,6 +22,15 @@ const T0 = Date.UTC(2026, 9, 19, 11, 0);
 let n = 0;
 const msg = (from: string, at: number, la = `Nūntius ${++n}`, extra: Partial<Msg> = {}): Msg => ({ id: `m${++n}`, from, la, at, src: from === "me" ? undefined : "own", ...extra });
 const chat = (id: string, msgs: Msg[], readAt = 0): Thread => ({ ...newThread(id, id === GROUP.id ? "group" : "dm"), messages: msgs, readAt });
+
+/** What the phone routine copies for its helper: the digest the page wrote at `at`, and the inbox of earlier runs. */
+function routineDir(brief: Partial<Brief>, meta: Meta, threads: Record<string, Thread>, at: number, inbox: unknown[] = [], dir = mkdtempSync(join(tmpdir(), "nuntii-"))): string {
+  const full = { me: { name: "Cyrillus", g: "m", tz: "Europe/Kyiv" }, forms: [], people: [], groups: {}, muted: [], blocked: [], photos: [], ...brief } as unknown as Brief;
+  writeFileSync(join(dir, "digest.json"), JSON.stringify(makeDigest(full, meta, Object.values(threads), at)));
+  writeFileSync(join(dir, "inbox.json"), JSON.stringify(inbox));
+  return dir;
+}
+const briefPeople = () => PEOPLE.map((p) => ({ id: p.id, name: p.name, g: p.g, tz: p.tz, wake: p.day.wake, sleep: p.day.sleep, busy: p.day.busy, sheet: "", pace: p.pace, burst: p.nature.burst }));
 
 describe("pacing like real people: a message or two, then they wait", () => {
   it("counts the bursts someone sent since the learner last wrote, not their answer to it", () => {
@@ -155,11 +166,6 @@ describe("pacing like real people: a message or two, then they wait", () => {
 
 describe("the phone routine's helper paces exactly like the page", () => {
   it("allows and refuses the same messages as allowOwn, counting the inbox as sent", () => {
-    const dir = mkdtempSync(join(tmpdir(), "nuntii-"));
-    const base = join(dir, "data/users/me/messenger");
-    mkdirSync(join(base, "threads"), { recursive: true });
-    mkdirSync(join(base, "inbox"), { recursive: true });
-    mkdirSync(join(base, "brief"), { recursive: true });
     const meta = newMeta();
     const threads: Record<string, Thread> = {
       iulia: chat("iulia", [msg("me", T0 - 50 * H), msg("iulia", T0 - 50 * H + M, "Salvē Cyrille", { src: "reply" }), msg("iulia", T0 - 30 * H, "Ubi tū")]),
@@ -167,21 +173,17 @@ describe("the phone routine's helper paces exactly like the page", () => {
       claudia: chat("claudia", [msg("me", T0 - 3 * H), msg("claudia", T0 - 3 * H + M, "Valē Cyrille", { src: "reply" })]),
       [GROUP.id]: chat(GROUP.id, [msg("me", T0 - 5 * 24 * H), msg("marcus", T0 - 16 * H, "Hodiē Mārs")]),
     };
-    for (const [id, t] of Object.entries(threads)) writeFileSync(join(base, "threads", `${id}.json`), JSON.stringify(t));
     // Iūlia's second try is still in the inbox: it counts
     const inboxAt = T0 - 20 * H;
-    writeFileSync(join(base, "inbox", "rinbox1.json"), JSON.stringify({ chat: "iulia", from: "iulia", la: "Cyrille tū labōrās", en: "x", at: inboxAt }));
-    writeFileSync(join(base + ".json"), JSON.stringify(meta));
     const words = ["salve", "cyrille", "ubi", "tu", "bene", "vale", "hodie", "mars", "laboras", "specto", "et", "aquam", "bibo", "puella", "ecce", "nunc", "scribo", "non", "dormio"];
-    const brief = {
-      v: 1,
-      me: { name: "Cyrillus", g: "m", tz: "Europe/Kyiv" },
-      forms: words,
-      people: PEOPLE.map((p) => ({ id: p.id, name: p.name, tz: p.tz, wake: p.day.wake, sleep: p.day.sleep, busy: p.day.busy, sheet: "", pace: p.pace, burst: p.nature.burst })),
-      photos: [{ id: "claudia-books", en: "books", who: ["claudia"] }],
-      groups: { [GROUP.id]: { name: "Amīcī", members: PEOPLE.map((p) => p.id) } },
-    };
-    writeFileSync(join(base, "brief/now.json"), JSON.stringify(brief));
+    // the page wrote its digest an hour ago; the routine copied it, and the inbox
+    const dir = routineDir(
+      { forms: words, people: briefPeople(), photos: [{ id: "claudia-books", en: "books", who: ["claudia"] }], groups: { [GROUP.id]: { name: "Amīcī", members: PEOPLE.map((p) => p.id) } } },
+      meta,
+      threads,
+      T0 - H,
+      [{ id: "rinbox1", chat: "iulia", from: "iulia", la: "Cyrille tū labōrās", en: "x", at: inboxAt }],
+    );
     const drafts = [
       { chat: "iulia", from: "iulia", la: "Cyrille, nunc scrībō", en: "x" },
       { chat: "gaius", from: "gaius", la: "Aquam bibō", en: "x", remember: [{ who: "gaius", text: "I told Kiril I drink only water now", kind: "fact", weight: 2 }], tell: [{ from: "gaius", to: "claudia", what: "Kiril is quiet again" }] },
@@ -235,11 +237,6 @@ describe("the phone routine's helper paces exactly like the page", () => {
 
 describe("the phone is told of each message once", () => {
   it("tells of what arrived since the routine's last run, not of everything still unread", () => {
-    const dir = mkdtempSync(join(tmpdir(), "nuntii-"));
-    const base = join(dir, "data/users/me/messenger");
-    mkdirSync(join(base, "threads"), { recursive: true });
-    mkdirSync(join(base, "inbox"), { recursive: true });
-    mkdirSync(join(base, "brief"), { recursive: true });
     // the run of 12:51 in Kyiv (09:51 UTC), a minute late; the one before was at 11:51
     const now = Date.UTC(2026, 9, 19, 9, 52);
     const threads: Record<string, Thread> = {
@@ -251,12 +248,9 @@ describe("the phone is told of each message once", () => {
       claudia: chat("claudia", [msg("claudia", now - 20 * M, "Salvē!")]),
       marcus: chat("marcus", []),
     };
-    for (const [id, t] of Object.entries(threads)) writeFileSync(join(base, "threads", `${id}.json`), JSON.stringify(t));
-    // what the last run wrote, still in the inbox: it was told of then
-    writeFileSync(join(base, "inbox", "rprev.json"), JSON.stringify({ chat: "marcus", from: "marcus", la: "Hodiē Mārs!", en: "x", at: now - 59 * M }));
-    writeFileSync(base + ".json", JSON.stringify(newMeta()));
-    const brief = { v: 1, me: { name: "Cyrillus", g: "m", tz: "Europe/Kyiv" }, forms: [], muted: ["claudia"], people: PEOPLE.map((p) => ({ id: p.id, name: p.name, tz: p.tz, wake: p.day.wake, sleep: p.day.sleep, busy: p.day.busy, sheet: "" })) };
-    writeFileSync(join(base, "brief/now.json"), JSON.stringify(brief));
+    // the page wrote its digest while the learner was there, before Gāius's answer arrived; what the last run wrote is still in the inbox: it was told of then
+    const brief = { muted: ["claudia"], people: briefPeople() };
+    const dir = routineDir(brief, newMeta(), threads, now - 3 * H + M, [{ id: "rprev", chat: "marcus", from: "marcus", la: "Hodiē Mārs!", en: "x", at: now - 59 * M }]);
     writeFileSync(join(dir, "new.json"), JSON.stringify([{ chat: "lucius", from: "lucius", la: "Carmen novum!", en: "A new poem!", at: now + 5000 }]));
     const env = (globalThis as unknown as { process: { env: Record<string, string> } }).process.env;
     const helper = new URL("../scripts/nuntii-routine.py", import.meta.url).pathname;
@@ -273,8 +267,13 @@ describe("the phone is told of each message once", () => {
     expect(line).toBe("Lūcius: Carmen novum! (A new poem!) · and 2 more from Iūlia, Gāius");
     // the next run, with nothing new: no notification about the same messages again
     expect(notify(now + H)).toBe("No new messages.");
-    // the first run of the morning tells of the night
-    writeFileSync(join(base, "threads", "iulia.json"), JSON.stringify(chat("iulia", [msg("iulia", Date.UTC(2026, 9, 19, 23, 0), "Nōn dormiō...")])));
+    // the first run of the morning tells of the night (the page had planned it in the evening)
+    routineDir(brief, newMeta(), { ...threads, iulia: chat("iulia", [msg("iulia", Date.UTC(2026, 9, 19, 23, 0), "Nōn dormiō...")]) }, Date.UTC(2026, 9, 19, 20, 0), [], dir);
     expect(notify(Date.UTC(2026, 9, 20, 4, 52))).toBe("Iūlia: Nōn dormiō...");
+    // a copy that came out wrong is seen, and nothing is checked with it
+    const data = JSON.parse(readFileSync(join(dir, "digest.json"), "utf8"));
+    writeFileSync(join(dir, "digest.json"), JSON.stringify({ ...data, seen: data.seen + 1 }));
+    const helperState = execFileSync("python3", ["-I", helper, "state", dir], { env: { ...env, NUNTII_NOW: String(now) }, encoding: "utf8" });
+    expect(helperState).toContain("THE COPY IS NOT EXACT");
   });
 });

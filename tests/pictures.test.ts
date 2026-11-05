@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { photoHabits, photoRoom, withLooks } from "../src/chat/pictures";
 import { writeReply } from "../src/chat/engine";
 import { makeBrief } from "../src/chat/brief";
+import { makeDigest } from "../src/chat/digest";
 import { Msg, newMeta, newThread, Thread } from "../src/chat/model";
 import { GROUP, PEOPLE, PERSON_BY_ID } from "../src/content/people";
 import { allowedWords, chatEntries, chatLexicon, nameEntry } from "../src/chat/words";
@@ -62,14 +63,12 @@ describe("photos by each one's habit", () => {
   });
 
   it("keeps the phone routine to the same habits and looks (its helper agrees)", () => {
+    // what the routine copies for its helper: the page's digest (with the looks), and an empty inbox
     const dir = mkdtempSync(join(tmpdir(), "nuntii-pics-"));
-    const base = join(dir, "data/users/me/messenger");
-    mkdirSync(join(base, "threads"), { recursive: true });
-    mkdirSync(join(base, "brief"), { recursive: true });
-    writeFileSync(base + ".json", JSON.stringify(newMeta()));
     const ctx = { ...ctxAt(T0), words: allowedWords(entries, seen) };
-    writeFileSync(join(base, "brief/now.json"), JSON.stringify(makeBrief(newMeta(), ctx, [], seeded(1))));
-    writeFileSync(join(base, "threads/gaius.json"), JSON.stringify({ ...newThread("gaius", "dm"), messages: [{ id: "x", from: "me", la: "Salvē", at: T0 - 40 * H }, photoMsg("gaius", T0 - 30 * H, { src: "reply" })] }));
+    const gaius = { ...newThread("gaius", "dm"), messages: [{ id: "x", from: "me", la: "Salvē", at: T0 - 40 * H }, photoMsg("gaius", T0 - 30 * H, { src: "reply" })] };
+    writeFileSync(join(dir, "digest.json"), JSON.stringify(makeDigest(makeBrief(newMeta(), ctx, [], seeded(1)), newMeta(), [gaius], T0 - H)));
+    writeFileSync(join(dir, "inbox.json"), "[]");
     writeFileSync(join(dir, "draft.json"), JSON.stringify([{ chat: "gaius", from: "gaius", la: "Ecce!", en: "Look!", photo: "gaius-goat" }]));
     const env = (globalThis as unknown as { process: { env: Record<string, string> } }).process.env;
     const helper = new URL("../scripts/nuntii-routine.py", import.meta.url).pathname;

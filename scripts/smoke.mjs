@@ -1208,6 +1208,12 @@ async function messenger() {
       await sib.p.click(".sibyl-told");
       await sib.p.waitForTimeout(700);
       if (!(await sib.p.locator("#msg-rtaurus1 .leaf-mark").count())) errors.push("sibyl: the message that tells of it has no leaf");
+      // what the phone routine's helper checks with: written beside the brief, small, with Gāius's new message in it
+      await sib.ctx.clock.runFor(5000);
+      await sib.p.waitForTimeout(300);
+      const digest = shared.get("data/users/u1/messenger/brief/digest");
+      if (!digest?.data?.sum || !digest.data.chats?.gaius?.m?.length || !/Taurus vīnum meum/.test(digest.text ?? "")) errors.push("messenger: no digest for the phone routine, or without the chats");
+      else if (JSON.stringify(digest.data).length > 20_000) errors.push(`messenger: the routine's digest is too big to copy (${JSON.stringify(digest.data).length})`);
       // opening the chat rolls their lives on: the fate is Gāius's life now
       const meta = shared.get("data/users/u1/messenger") ?? {};
       if (!meta.world?.fates?.[0]?.done || meta.life?.gaius?.event !== fates[0].en) errors.push("sibyl: the fate did not become Gāius's life");

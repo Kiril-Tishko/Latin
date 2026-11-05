@@ -116,9 +116,9 @@ def docs(d):
         threads[cid] = {"readAt": at(c["read"]) if c.get("read") is not None else 0, "messages": msgs}
     # messages waiting in the inbox are already sent: they count for the pace, the repeats and the notification
     for x in load(os.path.join(d, "inbox.json"), []) or []:
-        chat = x.get("chat")
-        if not isinstance(x, dict) or not chat or not x.get("from"):
+        if not isinstance(x, dict) or not x.get("chat") or not x.get("from"):
             continue
+        chat = x["chat"]
         t = threads.setdefault(chat, {"messages": [], "readAt": 0})
         if not any(m.get("id") == x.get("id") for m in t["messages"]):
             t["messages"].append(dict(x, src="routine"))
